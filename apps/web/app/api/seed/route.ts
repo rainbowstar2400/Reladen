@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
-import { v4 as uuid } from 'uuid';
+import { newId } from '@/lib/newId';
 
 export async function POST() {
   const now = new Date().toISOString();
   const residents = [
-    { id: uuid(), name: 'アカリ', mbti: 'INFP', traits: { likes: ['紅茶'], hobby: '散歩' }, updated_at: now, deleted: false },
-    { id: uuid(), name: 'リク', mbti: 'ENTJ', traits: { likes: ['バトル'], hobby: 'トレーニング' }, updated_at: now, deleted: false },
+    { id: newId(), name: 'アカリ', mbti: 'INFP', traits: { likes: ['紅茶'], hobby: '散歩' }, updated_at: now, deleted: false },
+    { id: newId(), name: 'リク', mbti: 'ENTJ', traits: { likes: ['バトル'], hobby: 'トレーニング' }, updated_at: now, deleted: false },
   ];
 
   const relations = [
     {
-      id: uuid(),
+      id: newId(),
       a_id: residents[0].id < residents[1].id ? residents[0].id : residents[1].id,
       b_id: residents[0].id < residents[1].id ? residents[1].id : residents[0].id,
       type: 'friend',
@@ -20,13 +20,13 @@ export async function POST() {
   ];
 
   const feelings = [
-    { id: uuid(), from_id: residents[0].id, to_id: residents[1].id, label: 'curious', updated_at: now, deleted: false },
-    { id: uuid(), from_id: residents[1].id, to_id: residents[0].id, label: 'like', updated_at: now, deleted: false },
+    { id: newId(), from_id: residents[0].id, to_id: residents[1].id, label: 'curious', updated_at: now, deleted: false },
+    { id: newId(), from_id: residents[1].id, to_id: residents[0].id, label: 'like', updated_at: now, deleted: false },
   ];
 
   const events = [
     {
-      id: uuid(),
+      id: newId(),
       kind: 'seed_created',
       payload: { residents: residents.map((r) => r.name) },
       updated_at: now,

@@ -1,8 +1,8 @@
 'use client';
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import { v4 as uuid } from 'uuid';
 import { EventLog, Feeling, Relation, Resident } from '@reladen/types';
+import { newId } from '@/lib/newId';
 
 export type LocalTableName = 'residents' | 'relations' | 'feelings' | 'events';
 
@@ -85,7 +85,7 @@ async function getTauriState() {
 }
 
 export async function putLocal<T extends Entity>(table: LocalTableName, entity: Partial<T>) {
-  const id = (entity as Resident).id ?? uuid();
+  const id = (entity as Resident).id ?? newId();
   const now = new Date().toISOString();
   const value = {
     ...entity,
