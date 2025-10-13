@@ -6,7 +6,7 @@
     "tauri": "tauri"
   },
   "devDependencies": {
+    "@sentry/nextjs": "8",
     "@tauri-apps/cli": "^1.5.9"
-  },
-  "dependencies": {}
+  }
 }
