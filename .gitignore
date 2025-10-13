@@ -1,2 +1,4 @@
 .env*
-node_modules/
+node_modules
+apps/desktop/node_modules
+apps/web/node_modules
