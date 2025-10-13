@@ -9,7 +9,7 @@
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "noEmit": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
@@ -20,6 +20,7 @@
       "@/components/*": ["./components/*"],
       "@/app/*": ["./app/*"],
       "@/lib/*": ["./lib/*"],
+      "@/types": ["../../packages/shared/types/index.ts"],   // ← 追加
       "@/types/*": ["../../packages/shared/types/*"]
     }
   },

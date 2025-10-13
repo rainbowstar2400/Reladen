@@ -3,8 +3,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { supabaseClient } from '@/lib/db-cloud/supabase';
 import { bulkUpsert, since } from '@/lib/db-local';
-import { SyncPayload, syncPayloadSchema } from '@reladen/types';
-
+import { SyncPayload, syncPayloadSchema } from '@/types';
 export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
 
 const TABLES: SyncPayload['table'][] = ['residents', 'relations', 'feelings', 'events'];
@@ -72,25 +71,26 @@ function useSyncInternal() {
   }, [syncAll]);
 
   useEffect(() => {
-    if (!supabaseClient) return;
+    // null 警告回避：ローカル変数に退避してガード
+    const client = supabaseClient;
+    if (!client) return;
+
     const channels = TABLES.map((table) =>
-      supabaseClient
+      client
         .channel(`public:${table}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table },
-          () => {
-            void syncAll();
-          }
-        )
+        .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
+          void syncAll();
+        })
         .subscribe()
     );
+
     return () => {
-      channels.forEach((channel) => {
-        void supabaseClient.removeChannel(channel);
+      channels.forEach((ch) => {
+        void client.removeChannel(ch);
       });
     };
   }, [syncAll]);
+
 
   return useMemo(
     () => ({
