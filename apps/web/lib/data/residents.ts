@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Resident } from '@reladen/types';
 import { listLocal, putLocal, markDeleted } from '@/lib/db-local';
-import { v4 as uuid } from 'uuid';
+import { newId } from '@/lib/newId';
 
 const KEY = ['residents'];
 
@@ -24,7 +24,7 @@ export function useUpsertResident() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: Partial<Resident>) => {
-      const id = input.id ?? uuid();
+      const id = input.id ?? newId();
       const record = await putLocal('residents', {
         ...input,
         id,

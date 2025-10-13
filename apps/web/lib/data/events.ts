@@ -3,7 +3,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { EventLog } from '@reladen/types';
 import { listLocal, putLocal } from '@/lib/db-local';
-import { v4 as uuid } from 'uuid';
+import { newId } from '@/lib/newId';
 
 const PAGE_SIZE = 20;
 
@@ -31,7 +31,7 @@ export function useAddEvent() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: Partial<EventLog>) => {
-      const id = input.id ?? uuid();
+      const id = input.id ?? newId();
       return putLocal('events', {
         ...input,
         id,
