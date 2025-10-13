@@ -18,6 +18,7 @@
     "baseUrl": ".",
     "paths": {
       "@/components/*": ["./components/*"],
+      "@/*": ["*"],
       "@/app/*": ["./app/*"],
       "@/lib/*": ["./lib/*"],
       "@/types": ["../../packages/shared/types/index.ts"],   // ← 追加

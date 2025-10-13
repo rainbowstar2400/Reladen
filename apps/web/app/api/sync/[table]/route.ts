@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { syncPayloadSchema } from '@reladen/types';
+import { syncPayloadSchema } from '@/types';
 
 const store = (() => {
   if (!(globalThis as any).__reladenSyncStore) {
