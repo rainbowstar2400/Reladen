@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "package": {
+    "productName": "Reladen",
+    "version": "0.1.0"
+  },
+  "build": {
+    "beforeDevCommand": "pnpm --dir ../../web dev",
+    "beforeBuildCommand": "pnpm --dir ../../web build",
+    "devPath": "http://localhost:3000",
+    "distDir": "../../web/.next"
+  },
+  "tauri": {
+    "windows": [
+      {
+        "title": "Reladen",
+        "width": 1280,
+        "height": 800,
+        "resizable": true
+      }
+    ],
+    "bundle": {
+      "identifier": "com.reladen.app",
+      "targets": "all"
+    }
+  }
+}
