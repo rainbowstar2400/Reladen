@@ -14,7 +14,7 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "incremental": true,
-    "types": ["node", "vite/client", "@types/node"],
+    "types": ["node", "@types/node", "react", "react-dom"],
     "baseUrl": ".",
     "paths": {
       "@/components/*": ["./components/*"],
