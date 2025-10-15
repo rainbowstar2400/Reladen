@@ -56,3 +56,36 @@ export async function POST() {
     },
   });
 }
+
+// app/api/hello/route.ts
+const ALLOW_LIST = [
+  'https://reladen.vercel.app', // 本番
+  'http://localhost:3000',       // 開発
+  'tauri://localhost',           // Tauri
+];
+
+function corsHeaders(origin: string | null) {
+  const allowed = origin && ALLOW_LIST.includes(origin) ? origin : 'https://reladen.vercel.app';
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    // 認証Cookieを使う場合は↓も（今回は不要なら付けない）
+    // 'Access-Control-Allow-Credentials': 'true',
+  };
+}
+
+export async function OPTIONS(req: Request) {
+  const origin = req.headers.get('origin');
+  return new Response(null, { headers: corsHeaders(origin) });
+}
+
+export async function GET(req: Request) {
+  const origin = req.headers.get('origin');
+  return new Response(JSON.stringify({ ok: true }), {
+    headers: {
+      'Content-Type': 'application/json',
+      ...corsHeaders(origin),
+    },
+  });
+}
