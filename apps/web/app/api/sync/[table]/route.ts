@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { syncPayloadSchema } from '@/types';
+import { SyncStore, type SyncEntity } from '../store';
 
 const store = (() => {
-  if (!(globalThis as any).__reladenSyncStore) {
-    (globalThis as any).__reladenSyncStore = new Map<string, Map<string, any>>([
-      ['residents', new Map()],
-      ['relations', new Map()],
-      ['feelings', new Map()],
-      ['events', new Map()],
-    ]);
+  const globalScope = globalThis as typeof globalThis & {
+    __reladenSyncStore?: SyncStore;
+  };
+
+  if (!globalScope.__reladenSyncStore) {
+    globalScope.__reladenSyncStore = new SyncStore();
   }
-  return (globalThis as any).__reladenSyncStore as Map<string, Map<string, any>>;
+
+  return globalScope.__reladenSyncStore;
 })();
 
 function compareTimestamps(local: string, remote?: string) {
@@ -35,13 +36,22 @@ export async function POST(request: NextRequest, { params }: { params: { table: 
     return NextResponse.json({ error: parsed.error.message }, { status: 400 });
   }
   const payload = parsed.data;
-  const tableStore = store.get(table)!;
+  const tableStore = store.get(table);
 
   for (const change of payload.changes) {
     const { data, updated_at } = change;
-    const current = tableStore.get(data.id);
+    if (typeof data.id !== 'string') {
+      continue;
+    }
+    const current = tableStore.get(data.id) as SyncEntity | undefined;
     if (!current || compareTimestamps(updated_at, current.updated_at)) {
-      tableStore.set(data.id, { ...current, ...data, updated_at });
+      const next: SyncEntity = {
+        ...(current ?? {}),
+        ...data,
+        id: data.id,
+        updated_at,
+      };
+      tableStore.set(data.id, next);
     }
   }
 
