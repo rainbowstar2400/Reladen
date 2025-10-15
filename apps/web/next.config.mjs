@@ -8,9 +8,6 @@ const withPwa = withPWA({
 });
 
 const nextConfig = {
-  experimental: {
-    serverActions: true,
-  },
   eslint: {
     dirs: ['app', 'components', 'lib'],
   },
