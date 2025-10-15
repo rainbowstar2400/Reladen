@@ -1,7 +1,7 @@
 'use client';
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import { EventLog, Feeling, Relation, Resident } from '@reladen/types';
+import { EventLog, Feeling, Relation, Resident } from '@/types';
 import { newId } from '@/lib/newId';
 
 export type LocalTableName = 'residents' | 'relations' | 'feelings' | 'events';
