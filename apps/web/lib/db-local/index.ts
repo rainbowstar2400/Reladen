@@ -85,7 +85,7 @@ async function getTauriState() {
 }
 
 export async function putLocal<T extends Entity>(table: LocalTableName, entity: Partial<T>) {
-  const id = (entity as Resident).id ?? newId();
+  const id = ((entity as unknown) as Resident).id ?? newId();
   const now = new Date().toISOString();
   const value = {
     ...entity,
