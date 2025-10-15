@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["dom", "es2022"],
+    "lib": [
+      "dom",
+      "es2022"
+    ],
     "allowJs": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -9,22 +12,52 @@
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "react-jsx",
+    "jsx": "preserve",
     "noEmit": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "incremental": true,
-    "types": ["node", "@types/node", "react", "react-dom"],
+    "types": [
+      "node",
+      "@types/node",
+      "react",
+      "react-dom"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@/components/*": ["./components/*"],
-      "@/*": ["*"],
-      "@/app/*": ["./app/*"],
-      "@/lib/*": ["./lib/*"],
-      "@/types": ["../../packages/shared/types/index.ts"],   // ← 追加
-      "@/types/*": ["../../packages/shared/types/*"]
-    }
+      "@/components/*": [
+        "./components/*"
+      ],
+      "@/*": [
+        "*"
+      ],
+      "@/app/*": [
+        "./app/*"
+      ],
+      "@/lib/*": [
+        "./lib/*"
+      ],
+      "@/types": [
+        "../../packages/shared/types/index.ts"
+      ], // ← 追加
+      "@/types/*": [
+        "../../packages/shared/types/*"
+      ]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "types/**/*.d.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    "types/**/*.d.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
