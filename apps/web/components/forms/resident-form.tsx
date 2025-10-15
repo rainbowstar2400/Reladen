@@ -60,7 +60,7 @@ export function ResidentForm({
     const saved = await upsert.mutateAsync({
       ...values,
       mbti: normalizedMbti ?? null,
-      traits: parsedTraits ?? null,
+      traits: typeof parsedTraits === 'string' ? null : parsedTraits ?? null,
     });
     form.reset({
       id: saved.id,
