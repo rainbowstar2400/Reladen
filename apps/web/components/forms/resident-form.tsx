@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Resident } from '@reladen/types';
+import { Resident } from '@/types';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,7 +97,7 @@ export function ResidentForm({
             <FormItem className="space-y-2">
               <FormLabel>MBTI</FormLabel>
               <FormControl>
-                <Input placeholder="例：INFP" {...field} />
+                <Input placeholder="例：INFP" {...field} value={field.value ?? ''} />
               </FormControl>
             </FormItem>
           )}
@@ -109,7 +109,11 @@ export function ResidentForm({
             <FormItem className="space-y-2">
               <FormLabel>特徴(JSON)</FormLabel>
               <FormControl>
-                <Textarea placeholder={traitsPlaceholder} {...field} />
+                <Textarea
+                  placeholder={traitsPlaceholder}
+                  {...field}
+                  value={field.value ?? ''}
+                />
               </FormControl>
               <FormMessage>{form.formState.errors.traits?.message as string}</FormMessage>
             </FormItem>
