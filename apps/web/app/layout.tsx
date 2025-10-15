@@ -6,12 +6,22 @@ import { QueryClientProvider } from '@/components/query-client-provider';
 import { SyncProvider } from '@/lib/sync/use-sync';
 import { fontSans } from '@/styles/fonts';
 import clsx from 'clsx';
+import * as Sentry from '@sentry/nextjs'
 
 export const metadata: Metadata = {
   title: 'Reladen Sync Dashboard',
   description: 'Residents relationship tracker with offline-first sync.',
   manifest: '/manifest.json',
 };
+
+export function generateMetadata(): Metadata {
+  return {
+    // 既存のメタデータをここに足してもOK
+    other: {
+      ...Sentry.getTraceData(),
+    },
+  }
+}
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

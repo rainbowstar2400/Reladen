@@ -43,7 +43,8 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@sentry/nextjs": "8",
+    "@sentry/nextjs": "^10.19.0",
+    "@sentry/wizard": "^6.6.0",
     "@testing-library/jest-dom": "^6.4.4",
     "@types/node": "20.11.30",
     "@types/react": "18.2.79",
