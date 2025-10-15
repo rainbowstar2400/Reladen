@@ -1,7 +1,7 @@
 'use client';
 
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { EventLog } from '@reladen/types';
+import { EventLog } from '@/types';
 import { listLocal, putLocal } from '@/lib/db-local';
 import { newId } from '@/lib/newId';
 
