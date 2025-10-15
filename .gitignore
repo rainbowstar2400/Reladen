@@ -3,3 +3,4 @@
 /apps/desktop/node_modules/
 /apps/web/node_modules/
 node_modules
+.env.sentry-build-plugin
