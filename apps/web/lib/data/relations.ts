@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Relation } from '@reladen/types';
+import { Relation } from '@/types';
 import { listLocal, putLocal, markDeleted } from '@/lib/db-local';
 import { newId } from '@/lib/newId';
 
