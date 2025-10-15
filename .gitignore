@@ -4,3 +4,5 @@
 /apps/web/node_modules/
 node_modules
 .env.sentry-build-plugin
+/apps/web/.next/cache/
+/apps/web/.next/trace/
