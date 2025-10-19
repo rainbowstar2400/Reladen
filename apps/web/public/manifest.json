@@ -2,6 +2,7 @@
   "name": "Reladen",
   "short_name": "Reladen",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#111827",

@@ -14,6 +14,15 @@ const nextConfig = {
   },
   reactStrictMode: true,
   transpilePackages: ['drizzle-orm'],
+  async headers() {
+    return [
+      {
+        source: '/sw.js',
+        headers: [{ key: 'Cache-Control', value: 'no-store, max-age=0' }]
+      }
+    ];
+  },
+
 };
 
 export default withSentryConfig(withPwa(nextConfig), {
