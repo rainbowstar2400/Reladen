@@ -5,10 +5,10 @@
     "version": "0.1.0"
   },
   "build": {
-    "beforeDevCommand": "pnpm --dir ../../web dev",
-    "beforeBuildCommand": "pnpm --dir ../../web build",
+    "beforeDevCommand": "pnpm --dir ../web dev",
+    "beforeBuildCommand": "pnpm --dir ../web build",
     "devPath": "http://localhost:3000",
-    "distDir": "../../web/.next"
+    "distDir": "../web/.next"
   },
   "tauri": {
     "windows": [
@@ -22,6 +22,23 @@
     "bundle": {
       "identifier": "com.reladen.app",
       "targets": "all"
+    },
+        "allowlist": {
+      "fs": {
+        "readFile": true,
+        "writeFile": true,
+        "scope": ["$APPDATA/*", "$RESOURCE/*", "$APPCACHE/*"]
+      },
+      "path": {
+        "all": true
+      },
+      "shell": {
+        "all": false
+      },
+      "dialog": {
+        "open": true,
+        "save": true
+      }
     }
   }
 }
