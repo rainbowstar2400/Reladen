@@ -11,7 +11,8 @@
     "db:push": "pnpm --filter web db:push",
     "seed": "pnpm --filter web seed",
     "tauri:dev": "pnpm --filter desktop tauri dev",
-    "tauri:build": "pnpm --filter desktop tauri build"
+    "tauri:build": "pnpm --filter desktop tauri build",
+    "tsx": "apps/web/node_modules/.bin/tsx"
   },
   "devDependencies": {
     "turbo": "^1.13.3"
