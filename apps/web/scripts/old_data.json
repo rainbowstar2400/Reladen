@@ -1,0 +1,12 @@
+{
+  "characters": [
+    { "id": "a1", "name": "碧", "mbti": "ISTJ", "traits": {} },
+    { "id": "b1", "name": "彩花", "mbti": "ENFP", "traits": {} },
+    { "id": "c1", "name": "詠翔", "mbti": "INFP", "traits": {} },
+    { "id": "d1", "name": "響", "mbti": "ISTJ", "traits": {} },
+    { "id": "e1", "name": "志音", "mbti": "ESFP", "traits": {} }
+  ],
+  "relations": [],
+  "feelings": [],
+  "events": []
+}
