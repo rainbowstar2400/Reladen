@@ -1,0 +1,47 @@
+{
+  "residents": [
+    {
+      "id": "a1",
+      "name": "碧",
+      "mbti": "ISTJ",
+      "traits": {},
+      "updated_at": "2025-10-21T02:29:08.269Z",
+      "deleted": false
+    },
+    {
+      "id": "b1",
+      "name": "彩花",
+      "mbti": "ENFP",
+      "traits": {},
+      "updated_at": "2025-10-21T02:29:08.270Z",
+      "deleted": false
+    },
+    {
+      "id": "c1",
+      "name": "詠翔",
+      "mbti": "INFP",
+      "traits": {},
+      "updated_at": "2025-10-21T02:29:08.270Z",
+      "deleted": false
+    },
+    {
+      "id": "d1",
+      "name": "響",
+      "mbti": "ISTJ",
+      "traits": {},
+      "updated_at": "2025-10-21T02:29:08.270Z",
+      "deleted": false
+    },
+    {
+      "id": "e1",
+      "name": "志音",
+      "mbti": "ESFP",
+      "traits": {},
+      "updated_at": "2025-10-21T02:29:08.270Z",
+      "deleted": false
+    }
+  ],
+  "relations": [],
+  "feelings": [],
+  "events": []
+}
