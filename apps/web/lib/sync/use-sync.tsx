@@ -8,6 +8,11 @@ export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
 
 const TABLES: SyncPayload['table'][] = ['residents', 'relations', 'feelings', 'events'];
 
+type SyncResult =
+  | { ok: true }
+  | { ok: false; reason: 'offline' }
+  | { ok: false; reason: 'error'; message: string };
+
 async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 'table'>) {
   const res = await fetch(`/app/api/sync/${table}`, {
     method: 'POST',
@@ -24,10 +29,10 @@ function useSyncInternal() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const syncAll = useCallback(async () => {
+  const syncAll = useCallback(async (): Promise<SyncResult> => {
     if (!navigator.onLine) {
       setPhase('offline');
-      return;
+      return { ok: false, reason: 'offline' };
     }
     setPhase('syncing');
     setError(null);
@@ -45,10 +50,13 @@ function useSyncInternal() {
       }
       setLastSyncedAt(new Date().toISOString());
       setPhase('online');
+      return { ok: true };
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'unknown');
+      const message = err instanceof Error ? err.message : 'unknown';
+      setError(message);
       setPhase('error');
+      return { ok: false, reason: 'error', message };
     }
   }, [lastSyncedAt]);
 

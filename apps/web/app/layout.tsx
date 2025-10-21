@@ -7,6 +7,7 @@ import { SyncProvider } from '@/lib/sync/use-sync'
 import { fontSans } from '@/styles/fonts'
 import clsx from 'clsx'
 import * as Sentry from '@sentry/nextjs'
+import { SonnerToaster } from '@/components/sonner-toaster'
 
 const baseMetadata: Metadata = {
   title: 'Reladen Sync Dashboard',
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <QueryClientProvider>
             <SyncProvider>{children}</SyncProvider>
+            <SonnerToaster />
           </QueryClientProvider>
         </ThemeProvider>
       </body>
