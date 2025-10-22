@@ -8,6 +8,7 @@ import { fontSans } from '@/styles/fonts'
 import clsx from 'clsx'
 import * as Sentry from '@sentry/nextjs'
 import { SonnerToaster } from '@/components/sonner-toaster'
+import { MainNav } from '@/components/main-nav'
 
 const baseMetadata: Metadata = {
   title: 'Reladen Sync Dashboard',
@@ -36,13 +37,20 @@ export function generateMetadata(): Metadata {
   }
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ja" suppressHydrationWarning>
       <body className={clsx('min-h-screen bg-background font-sans antialiased', fontSans.variable)}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <QueryClientProvider>
-            <SyncProvider>{children}</SyncProvider>
+            <SyncProvider>
+              <div className="flex min-h-screen flex-col bg-background md:flex-row">
+                <MainNav />
+                <div className="flex-1">
+                  <main className="min-h-screen px-4 py-6 md:px-8 md:py-8">{children}</main>
+                </div>
+              </div>
+            </SyncProvider>
             <SonnerToaster />
           </QueryClientProvider>
         </ThemeProvider>
