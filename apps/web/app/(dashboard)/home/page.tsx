@@ -21,13 +21,13 @@ type ResidentLite = { id: string; name: string; status?: 'sleep' | 'active' }
 function ResidentTile({ r }: { r: ResidentLite }) {
   const disabled = r.status === 'sleep'
   return (
-    <div className="relative rounded-lg border p-4">
+    <div className="relative flex aspect-square flex-col items-center justify-center gap-4 rounded-lg border p-4 text-center">
       {r.status === 'sleep' && (
         <span className="absolute right-2 top-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
           <Moon className="h-3 w-3" /> Zzz…
         </span>
       )}
-      <div className="mb-3 font-medium">{r.name}</div>
+      <div className="font-medium">{r.name}</div>
       <Button size="sm" disabled={disabled} className="min-w-20">
         話す
       </Button>
