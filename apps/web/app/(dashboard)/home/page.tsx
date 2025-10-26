@@ -21,7 +21,7 @@ type ResidentLite = { id: string; name: string; status?: 'sleep' | 'active' }
 function ResidentTile({ r }: { r: ResidentLite }) {
   const disabled = r.status === 'sleep'
   return (
-    <div className="relative flex aspect-square w-full max-w-[10rem] flex-col items-center justify-center gap-3 rounded-lg border p-3 text-center">
+    <div className="relative flex h-32 w-32 flex-shrink-0 flex-col items-center justify-center gap-3 rounded-lg border p-3 text-center">
       {r.status === 'sleep' && (
         <span className="absolute right-2 top-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
           <Moon className="h-3 w-3" /> Zzz…
@@ -86,10 +86,12 @@ export default function HomePage() {
 
       {/* みんなの様子（将来は resident 全件を map） */}
       <SectionTitle>みんなの様子</SectionTitle>
-      <div className="grid justify-items-center gap-4 sm:grid-cols-2 md:grid-cols-3">
-        {residents.map((r) => (
-          <ResidentTile key={r.id} r={r} />
-        ))}
+      <div className="overflow-x-auto">
+        <div className="flex gap-4 pb-2">
+          {residents.map((r) => (
+            <ResidentTile key={r.id} r={r} />
+          ))}
+        </div>
       </div>
 
       {/* 今日の新聞（プレースホルダ） */}
