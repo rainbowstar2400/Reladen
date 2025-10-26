@@ -1,6 +1,7 @@
 'use client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import Link from 'next/link'
 import { MessageSquare, Cloud, AlertTriangle, Moon } from 'lucide-react'
 import React from 'react'
 
@@ -42,26 +43,46 @@ export default function HomePage() {
     { id: 'C', name: 'C', status: 'active' },
   ]
 
+  const notifications = [
+    {
+      id: 'chat',
+      icon: MessageSquare,
+      text: 'A と B が雑談しているようです…',
+      href: '#',
+      iconClass: 'text-emerald-500',
+    },
+    {
+      id: 'advice',
+      icon: Cloud,
+      text: 'C から相談があるようです…',
+      href: '#',
+      iconClass: 'text-sky-500',
+    },
+    {
+      id: 'event',
+      icon: AlertTriangle,
+      text: 'イベントが開催されます！',
+      href: '#',
+      iconClass: 'text-amber-500',
+    },
+  ] as const
+
   return (
     <div className="space-y-6">
-      {/* おしらせ（ダミー行。将来クリックで遷移可能に） */}
+      {/* おしらせ（ダミー行。カードごとにリンク化） */}
       <SectionTitle>おしらせ</SectionTitle>
-      <Card>
-        <CardContent className="space-y-3 py-4">
-          <div className="flex items-center gap-3 text-sm">
-            <MessageSquare className="h-4 w-4 text-emerald-500" />
-            <span>A と B が雑談しているようです…</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <Cloud className="h-4 w-4 text-sky-500" />
-            <span>C から相談があるようです…</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <span>イベントが開催されます！</span>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid gap-3">
+        {notifications.map(({ id, icon: Icon, text, href, iconClass }) => (
+          <Link key={id} href={href} className="block">
+            <Card className="transition hover:bg-muted">
+              <CardContent className="flex items-center gap-3 py-4 text-sm">
+                <Icon className={`h-4 w-4 ${iconClass}`} />
+                <span>{text}</span>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
 
       {/* みんなの様子（将来は resident 全件を map） */}
       <SectionTitle>みんなの様子</SectionTitle>
