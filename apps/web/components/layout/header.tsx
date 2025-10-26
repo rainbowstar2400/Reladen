@@ -16,7 +16,6 @@ export function Header() {
           </Link>
         </motion.div>
         <div className="flex items-center gap-4">
-          <span className="hidden text-sm text-muted-foreground sm:inline">オンライン</span>
           <SyncIndicator />
           <ModeToggle />
           <Clock />
