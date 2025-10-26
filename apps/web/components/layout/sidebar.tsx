@@ -5,13 +5,13 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { UserRound, HeartHandshake, Sparkle, NotebookPen } from 'lucide-react';
+import { Home, Building2, ClipboardList, Cog } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { href: '/residents', label: '住人', icon: UserRound },
-  { href: '/relations', label: '関係', icon: HeartHandshake },
-  { href: '/feelings', label: '感情', icon: Sparkle },
-  { href: '/events', label: 'イベント', icon: NotebookPen },
+  { href: '/home', label: 'ホーム', icon: Home },
+  { href: '/office', label: '管理室', icon: Building2 },
+  { href: '/reports', label: '日報', icon: ClipboardList },
+  { href: '/settings', label: '設定', icon: Cog },
 ];
 
 export function Sidebar() {
