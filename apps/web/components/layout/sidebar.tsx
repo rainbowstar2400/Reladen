@@ -20,6 +20,12 @@ const OFFICE_SUB = [
   { href: '/office/presets', label: 'プリセット管理' },
 ];
 
+const SETTINGS_SUB = [
+  { href: '/settings#data', label: 'データ管理' },
+  { href: '/settings#a11y', label: 'アクセシビリティ' },
+  { href: '/settings#about', label: 'ゲームについて' },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
   const startsWith = (href: string) => pathname?.startsWith(href);
@@ -60,6 +66,23 @@ export function Sidebar() {
                           <Dot className="h-4 w-4" />
                           {sub.label}
                         </Link>
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
+              {item.href === '/settings' && active && (
+                <div className="mt-1 space-y-1 pl-8">
+                  {SETTINGS_SUB.map((sub) => {
+                    const subActive = pathname === sub.href;
+                    return (
+                      <Button
+                        key={sub.href}
+                        variant={subActive ? 'secondary' : 'ghost'}
+                        className="h-8 w-full justify-start gap-2 text-sm"
+                        asChild
+                      >
+                        <Link href={sub.href}>• {sub.label}</Link>
                       </Button>
                     );
                   })}
