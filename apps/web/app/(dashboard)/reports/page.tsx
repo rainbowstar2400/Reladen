@@ -18,10 +18,10 @@ const KINDS: ChangeKind[] = ['好感度', '印象', '関係', '信頼度']
 
 // 変化種別ごとの色（Tailwind）
 const CHIP_CLASS: Record<ChangeKind, string> = {
-  '好感度': 'bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
-  '印象':   'bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300',
-  '関係':   'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-  '信頼度': 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+  '好感度': 'bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 dark:bg-rose-900/30 dark:text-rose-300 dark:hover:bg-rose-900/60 dark:hover:text-rose-200',
+  '印象':   'bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-800 dark:bg-sky-900/30 dark:text-sky-300 dark:hover:bg-sky-900/60 dark:hover:text-sky-200',
+  '関係':   'bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/60 dark:hover:text-amber-200',
+  '信頼度': 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/60 dark:hover:text-emerald-200',
 }
 
 function fmtDate(d: Date) {
@@ -147,7 +147,11 @@ export default function ReportsPage() {
                   {it.chips
                     .filter(c => c.kind === kind || KINDS.includes(kind)) // 今は全表示でもOK。必要なら ===kind に変更
                     .map((c, idx) => (
-                      <Badge key={idx} className={CHIP_CLASS[c.kind] + ' text-[11px] font-medium'}>
+                      <Badge
+                        key={idx}
+                        variant="outline"
+                        className={CHIP_CLASS[c.kind] + ' text-[11px] font-medium transition-colors'}
+                      >
                         {c.kind}{c.label}
                       </Badge>
                     ))
