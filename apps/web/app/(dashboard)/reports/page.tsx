@@ -47,6 +47,12 @@ export default function ReportsPage() {
   const [charA, setCharA] = useState<string>('') // 任意
   const [charB, setCharB] = useState<string>('') // 任意
   const [kind, setKind] = useState<ChangeKind>('好感度')
+  const resetFilters = () => {
+    setDate(today)
+    setCharA('')
+    setCharB('')
+    setKind('好感度')
+  }
 
   // ---- ダミーデータ（将来 useEvents() に置換）----
   const allCharacters = ['A','B','C']
@@ -121,6 +127,11 @@ export default function ReportsPage() {
             <select value={kind} onChange={e=>setKind(e.target.value as ChangeKind)} className="rounded-md border px-2 py-1 text-sm bg-background">
               {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
             </select>
+          </div>
+          <div className="ml-auto flex items-center">
+            <Button variant="outline" size="sm" onClick={resetFilters}>
+              リセット
+            </Button>
           </div>
         </CardContent>
       </Card>
