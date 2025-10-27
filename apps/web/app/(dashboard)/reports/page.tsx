@@ -138,63 +138,65 @@ export default function ReportsPage() {
         </CardContent>
       </Card>
 
-      <div className="relative space-y-6">
-        {/* 日付見出し */}
-        <div>
-          <h2 className="text-2xl font-semibold">{y}/{m}/{dd} <span className="text-muted-foreground text-lg">{wd}</span></h2>
-          <div className="mt-2 h-px w-full bg-border" />
-        </div>
+      <div className="relative">
+        <div className="space-y-6">
+          {/* 日付見出し */}
+          <div>
+            <h2 className="text-2xl font-semibold">{y}/{m}/{dd} <span className="text-muted-foreground text-lg">{wd}</span></h2>
+            <div className="mt-2 h-px w-full bg-border" />
+          </div>
 
-        {/* リスト（カードは同じ高さ。チップが無い行も高さ確保） */}
-        <div className="space-y-4">
-          {pageItems.length === 0 && !loading && (
-            <p className="py-16 text-center text-sm text-muted-foreground">この条件に一致する記録はありません。</p>
-          )}
+          {/* リスト（カードは同じ高さ。チップが無い行も高さ確保） */}
+          <div className="space-y-4">
+            {pageItems.length === 0 && !loading && (
+              <p className="py-16 text-center text-sm text-muted-foreground">この条件に一致する記録はありません。</p>
+            )}
 
-          {pageItems.map(it => (
-            <div key={it.id} className="flex items-start justify-between rounded-2xl border px-4 py-3">
-              <div className="space-y-2">
-                <p>{it.text}</p>
-                <div className="min-h-6 flex flex-wrap gap-2">
-                  {/* 変化種別で色分け／選択中の種別だけ強調する等は将来対応 */}
-                  {it.chips
-                    .filter(c => (kind ? c.kind === kind : true))
-                    .map((c, idx) => (
-                      <Badge
-                        key={idx}
-                        variant="outline"
-                        className={CHIP_CLASS[c.kind] + ' text-[11px] font-medium transition-colors'}
-                      >
-                        {c.kind}{c.label}
-                      </Badge>
-                    ))
-                  }
+            {pageItems.map(it => (
+              <div key={it.id} className="flex items-start justify-between rounded-2xl border px-4 py-3">
+                <div className="space-y-2">
+                  <p>{it.text}</p>
+                  <div className="min-h-6 flex flex-wrap gap-2">
+                    {/* 変化種別で色分け／選択中の種別だけ強調する等は将来対応 */}
+                    {it.chips
+                      .filter(c => (kind ? c.kind === kind : true))
+                      .map((c, idx) => (
+                        <Badge
+                          key={idx}
+                          variant="outline"
+                          className={CHIP_CLASS[c.kind] + ' text-[11px] font-medium transition-colors'}
+                        >
+                          {c.kind}{c.label}
+                        </Badge>
+                      ))
+                    }
+                  </div>
+                </div>
+                <div className="ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
+                  {fmtTime(it.at)}
                 </div>
               </div>
-              <div className="ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
-                {fmtTime(it.at)}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
 
-        {/* ページネーション */}
-        <div className="flex items-center justify-center gap-2 pt-4">
-          {page > 1 && (
-            <Button variant="outline" size="icon" onClick={()=>setPage(page-1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          )}
-          {Array.from({length: totalPages}).map((_,i)=>(
-            <Button key={i} variant={page===i+1?'secondary':'outline'} size="icon" onClick={()=>setPage(i+1)}>
-              {i+1}
-            </Button>
-          ))}
-          {page < totalPages && (
-            <Button variant="outline" size="icon" onClick={()=>setPage(page+1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          )}
+          {/* ページネーション */}
+          <div className="flex items-center justify-center gap-2 pt-4">
+            {page > 1 && (
+              <Button variant="outline" size="icon" onClick={()=>setPage(page-1)}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            )}
+            {Array.from({length: totalPages}).map((_,i)=>(
+              <Button key={i} variant={page===i+1?'secondary':'outline'} size="icon" onClick={()=>setPage(i+1)}>
+                {i+1}
+              </Button>
+            ))}
+            {page < totalPages && (
+              <Button variant="outline" size="icon" onClick={()=>setPage(page+1)}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* ローディングオーバーレイ */}
