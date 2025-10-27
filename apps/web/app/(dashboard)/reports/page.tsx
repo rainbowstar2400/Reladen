@@ -59,8 +59,8 @@ export default function ReportsPage() {
   const allCharacters = ['A','B','C']
   const ALL: ReportItem[] = [
     { id:'1', at:`${date}T23:15:00+09:00`, text:'A と C がなにやら話している。', chips:[
-      { kind:'信頼度', label:'A→C：↑' },
-      { kind:'信頼度', label:'C→A：↑' },
+      { kind:'好感度', label:'A→C：↑' },
+      { kind:'好感度', label:'C→A：↑' },
       { kind:'印象', label:'A→C：「好きかも」' },
       { kind:'関係', label:'A-C：「友達」' },
     ], a:'A', b:'C' },
@@ -68,8 +68,8 @@ export default function ReportsPage() {
       { kind:'信頼度', label:'C：↑' },
     ], a:'C' },
     { id:'3', at:`${date}T22:30:00+09:00`, text:'A と B が雑談している。', chips:[
-      { kind:'信頼度', label:'A→B：↑' },
-      { kind:'信頼度', label:'B→A：↑' },
+      { kind:'好感度', label:'A→B：↑' },
+      { kind:'好感度', label:'B→A：↑' },
       { kind:'印象', label:'A→B：「なし」' },
     ], a:'A', b:'B' },
   ]
@@ -80,9 +80,10 @@ export default function ReportsPage() {
       .filter(it => it.at.startsWith(date))
       .filter(it => (charA ? (it.a===charA || it.b===charA) : true))
       .filter(it => (charB ? (it.a===charB || it.b===charB) : true))
+      .filter(it => (kind === '' ? true : it.chips?.some(chip => chip.kind === kind)))
       .sort((a,b) => (a.at < b.at ? 1 : -1)) // 新しい→古い
     return items
-  }, [ALL, date, charA, charB])
+  }, [ALL, date, charA, charB, kind])
 
   // ---- 疑似ローディング（フィルタ変更時）----
   const [loading, setLoading] = useState(false)
@@ -158,18 +159,19 @@ export default function ReportsPage() {
                   <p>{it.text}</p>
                   <div className="min-h-6 flex flex-wrap gap-2">
                     {/* 変化種別で色分け／選択中の種別だけ強調する等は将来対応 */}
-                    {it.chips
-                      .filter(c => (kind ? c.kind === kind : true))
-                      .map((c, idx) => (
-                        <Badge
-                          key={idx}
-                          variant="outline"
-                          className={CHIP_CLASS[c.kind] + ' text-[11px] font-medium transition-colors'}
-                        >
-                          {c.kind}{c.label}
-                        </Badge>
-                      ))
-                    }
+                    {it.chips?.map((c, idx) => (
+                      <Badge
+                        key={idx}
+                        variant="outline"
+                        className={
+                          CHIP_CLASS[c.kind] +
+                          ' text-[11px] font-medium transition-colors ' +
+                          (kind && c.kind === kind ? 'ring-1 ring-current' : '')
+                        }
+                      >
+                        {c.kind}{c.label}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
                 <div className="ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
