@@ -59,8 +59,8 @@ export default function ReportsPage() {
   const allCharacters = ['A','B','C']
   const ALL: ReportItem[] = [
     { id:'1', at:`${date}T23:15:00+09:00`, text:'A と C がなにやら話している。', chips:[
-      { kind:'信頼度', label:'A→C：↑' },
-      { kind:'信頼度', label:'C→A：↑' },
+      { kind:'好感度', label:'A→C：↑' },
+      { kind:'好感度', label:'C→A：↑' },
       { kind:'印象', label:'A→C：「好きかも」' },
       { kind:'関係', label:'A-C：「友達」' },
     ], a:'A', b:'C' },
@@ -68,8 +68,8 @@ export default function ReportsPage() {
       { kind:'信頼度', label:'C：↑' },
     ], a:'C' },
     { id:'3', at:`${date}T22:30:00+09:00`, text:'A と B が雑談している。', chips:[
-      { kind:'信頼度', label:'A→B：↑' },
-      { kind:'信頼度', label:'B→A：↑' },
+      { kind:'好感度', label:'A→B：↑' },
+      { kind:'好感度', label:'B→A：↑' },
       { kind:'印象', label:'A→B：「なし」' },
     ], a:'A', b:'B' },
   ]
