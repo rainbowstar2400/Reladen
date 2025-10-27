@@ -8,7 +8,7 @@ export default function DashboardLayout({
   detail,
 }: {
   children: ReactNode
-  detail?: ReactNode
+  detail: ReactNode
 }) {
   return (
     <div className="flex min-h-screen flex-col">
