@@ -11,8 +11,8 @@ type LogDetail = {
   date: string            // 例: "2025/10/22"
   weekday: string         // 例: "Wed"
   time: string            // 例: "23:15"
-  lines: Line[]
-  system: string[]        // SYSTEM文
+  lines: ReadonlyArray<Line>
+  system: ReadonlyArray<string> // SYSTEM文
 }
 
 export function LogDetailPanel({
