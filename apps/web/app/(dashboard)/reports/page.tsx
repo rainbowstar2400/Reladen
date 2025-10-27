@@ -52,13 +52,18 @@ export default function ReportsPage() {
   const allCharacters = ['A','B','C']
   const ALL: ReportItem[] = [
     { id:'1', at:`${date}T23:15:00+09:00`, text:'A と C がなにやら話している。', chips:[
-      { kind:'信頼度', label:'A→C : +1' }, { kind:'信頼度', label:'C→A : +1' }, { kind:'印象', label:'A→C :「好きかも」' }, { kind:'関係', label:'A・C : 友達' },
+      { kind:'信頼度', label:'A→C：↑' },
+      { kind:'信頼度', label:'C→A：↑' },
+      { kind:'印象', label:'A→C：「好きかも」' },
+      { kind:'関係', label:'A-C：「友達」' },
     ], a:'A', b:'C' },
     { id:'2', at:`${date}T22:50:00+09:00`, text:'C から相談を受けた。', chips:[
-      { kind:'信頼度', label:'C : +1' },
+      { kind:'信頼度', label:'C：↑' },
     ], a:'C' },
     { id:'3', at:`${date}T22:30:00+09:00`, text:'A と B が雑談している。', chips:[
-      { kind:'信頼度', label:'A→B : +1' }, { kind:'信頼度', label:'B→A : +1' }, { kind:'印象', label:'A↔B :「なし」' },
+      { kind:'信頼度', label:'A→B：↑' },
+      { kind:'信頼度', label:'B→A：↑' },
+      { kind:'印象', label:'A→B：「なし」' },
     ], a:'A', b:'B' },
   ]
 
@@ -92,7 +97,7 @@ export default function ReportsPage() {
   const { y,m,d:dd, wd } = fmtDate(d)
 
   return (
-    <div className="space-y-6 relative">
+    <div className="space-y-6">
       {/* フィルタバー */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-3 py-3">
@@ -120,66 +125,68 @@ export default function ReportsPage() {
         </CardContent>
       </Card>
 
-      {/* 日付見出し */}
-      <div>
-        <h2 className="text-2xl font-semibold">{y}/{m}/{dd} <span className="text-muted-foreground text-lg">{wd}</span></h2>
-        <div className="mt-2 h-px w-full bg-border" />
-      </div>
+      <div className="relative space-y-6">
+        {/* 日付見出し */}
+        <div>
+          <h2 className="text-2xl font-semibold">{y}/{m}/{dd} <span className="text-muted-foreground text-lg">{wd}</span></h2>
+          <div className="mt-2 h-px w-full bg-border" />
+        </div>
 
-      {/* リスト（カードは同じ高さ。チップが無い行も高さ確保） */}
-      <div className="space-y-4">
-        {pageItems.length === 0 && !loading && (
-          <p className="py-16 text-center text-sm text-muted-foreground">この条件に一致する記録はありません。</p>
-        )}
+        {/* リスト（カードは同じ高さ。チップが無い行も高さ確保） */}
+        <div className="space-y-4">
+          {pageItems.length === 0 && !loading && (
+            <p className="py-16 text-center text-sm text-muted-foreground">この条件に一致する記録はありません。</p>
+          )}
 
-        {pageItems.map(it => (
-          <div key={it.id} className="flex items-start justify-between rounded-2xl border px-4 py-3">
-            <div className="space-y-2">
-              <p>{it.text}</p>
-              <div className="min-h-6 flex flex-wrap gap-2">
-                {/* 変化種別で色分け／選択中の種別だけ強調する等は将来対応 */}
-                {it.chips
-                  .filter(c => c.kind === kind || KINDS.includes(kind)) // 今は全表示でもOK。必要なら ===kind に変更
-                  .map((c, idx) => (
-                    <Badge key={idx} className={CHIP_CLASS[c.kind] + ' text-[11px] font-medium'}>
-                      {c.label}
-                    </Badge>
-                  ))
-                }
+          {pageItems.map(it => (
+            <div key={it.id} className="flex items-start justify-between rounded-2xl border px-4 py-3">
+              <div className="space-y-2">
+                <p>{it.text}</p>
+                <div className="min-h-6 flex flex-wrap gap-2">
+                  {/* 変化種別で色分け／選択中の種別だけ強調する等は将来対応 */}
+                  {it.chips
+                    .filter(c => c.kind === kind || KINDS.includes(kind)) // 今は全表示でもOK。必要なら ===kind に変更
+                    .map((c, idx) => (
+                      <Badge key={idx} className={CHIP_CLASS[c.kind] + ' text-[11px] font-medium'}>
+                        {c.kind}{c.label}
+                      </Badge>
+                    ))
+                  }
+                </div>
+              </div>
+              <div className="ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
+                {fmtTime(it.at)}
               </div>
             </div>
-            <div className="ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
-              {fmtTime(it.at)}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* ページネーション */}
-      <div className="flex items-center justify-center gap-2 pt-4">
-        {page > 1 && (
-          <Button variant="outline" size="icon" onClick={()=>setPage(page-1)}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        )}
-        {Array.from({length: totalPages}).map((_,i)=>(
-          <Button key={i} variant={page===i+1?'secondary':'outline'} size="icon" onClick={()=>setPage(i+1)}>
-            {i+1}
-          </Button>
-        ))}
-        {page < totalPages && (
-          <Button variant="outline" size="icon" onClick={()=>setPage(page+1)}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-
-      {/* ローディングオーバーレイ */}
-      {loading && (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-background/60 backdrop-blur-sm">
-          <p className="text-sm text-muted-foreground">読み込み中…</p>
+          ))}
         </div>
-      )}
+
+        {/* ページネーション */}
+        <div className="flex items-center justify-center gap-2 pt-4">
+          {page > 1 && (
+            <Button variant="outline" size="icon" onClick={()=>setPage(page-1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          )}
+          {Array.from({length: totalPages}).map((_,i)=>(
+            <Button key={i} variant={page===i+1?'secondary':'outline'} size="icon" onClick={()=>setPage(i+1)}>
+              {i+1}
+            </Button>
+          ))}
+          {page < totalPages && (
+            <Button variant="outline" size="icon" onClick={()=>setPage(page+1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
+        {/* ローディングオーバーレイ */}
+        {loading && (
+          <div className="absolute inset-0 z-10 grid place-items-center bg-background/60 backdrop-blur-sm">
+            <p className="text-sm text-muted-foreground">読み込み中…</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
