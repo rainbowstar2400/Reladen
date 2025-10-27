@@ -31,7 +31,7 @@ export function Sidebar() {
   const startsWith = (href: string) => pathname?.startsWith(href);
 
   return (
-    <aside className="hidden w-64 border-r bg-muted/40 p-4 md:block">
+    <aside className="hidden h-[calc(100vh-4rem)] w-64 shrink-0 overflow-y-auto border-r bg-muted/40 p-4 md:block md:sticky md:top-16">
       <nav className="space-y-2">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
