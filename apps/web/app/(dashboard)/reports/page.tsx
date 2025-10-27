@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度'
+type ChangeKindFilter = ChangeKind | ''
 type ReportItem = {
   id: string
   at: string // ISO (Asia/Tokyo想定)
@@ -46,12 +47,12 @@ export default function ReportsPage() {
   const [date, setDate] = useState(today)
   const [charA, setCharA] = useState<string>('') // 任意
   const [charB, setCharB] = useState<string>('') // 任意
-  const [kind, setKind] = useState<ChangeKind>('好感度')
+  const [kind, setKind] = useState<ChangeKindFilter>('')
   const resetFilters = () => {
     setDate(today)
     setCharA('')
     setCharB('')
-    setKind('好感度')
+    setKind('')
   }
 
   // ---- ダミーデータ（将来 useEvents() に置換）----
@@ -124,7 +125,8 @@ export default function ReportsPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">変化種別：</span>
-            <select value={kind} onChange={e=>setKind(e.target.value as ChangeKind)} className="rounded-md border px-2 py-1 text-sm bg-background">
+            <select value={kind} onChange={e=>setKind(e.target.value as ChangeKindFilter)} className="rounded-md border px-2 py-1 text-sm bg-background">
+              <option value="">—</option>
               {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
             </select>
           </div>
@@ -156,7 +158,7 @@ export default function ReportsPage() {
                 <div className="min-h-6 flex flex-wrap gap-2">
                   {/* 変化種別で色分け／選択中の種別だけ強調する等は将来対応 */}
                   {it.chips
-                    .filter(c => c.kind === kind || KINDS.includes(kind)) // 今は全表示でもOK。必要なら ===kind に変更
+                    .filter(c => (kind ? c.kind === kind : true))
                     .map((c, idx) => (
                       <Badge
                         key={idx}
