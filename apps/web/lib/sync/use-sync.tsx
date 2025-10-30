@@ -14,7 +14,7 @@ type SyncResult =
   | { ok: false; reason: 'error'; message: string };
 
 async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 'table'>) {
-  const res = await fetch(`/app/api/sync/${table}`, {
+  const res = await fetch(`/api/sync/${table}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...body, table }),
