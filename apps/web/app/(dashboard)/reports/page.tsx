@@ -1,5 +1,6 @@
 'use client'
 import React, { useMemo, useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,6 +39,16 @@ function fmtTime(iso: string) {
 }
 
 export default function ReportsPage() {
+  const router = useRouter()
+
+  function openLog(id: string) {
+    const params = new URLSearchParams(
+      typeof window !== 'undefined' ? window.location.search : ''
+    )
+    params.set('log', id)
+    router.push(`?${params.toString()}`, { scroll: false })
+  }
+
   // ---- フィルタ状態（即時反映） ----
   const today = useMemo(() => {
     const d = new Date()
@@ -154,30 +165,38 @@ export default function ReportsPage() {
             )}
 
             {pageItems.map(it => (
-              <div key={it.id} className="flex items-start justify-between rounded-2xl border px-4 py-3">
-                <div className="space-y-2">
-                  <p>{it.text}</p>
-                  <div className="min-h-6 flex flex-wrap gap-2">
-                    {/* 変化種別で色分け／選択中の種別だけ強調する等は将来対応 */}
-                    {it.chips?.map((c, idx) => (
-                      <Badge
-                        key={idx}
-                        variant="outline"
-                        className={
-                          CHIP_CLASS[c.kind] +
-                          ' text-[11px] font-medium transition-colors ' +
-                          (kind && c.kind === kind ? 'ring-1 ring-current' : '')
-                        }
-                      >
-                        {c.kind}{c.label}
-                      </Badge>
-                    ))}
+              <button
+                key={it.id}
+                type="button"
+                className="w-full text-left"
+                onClick={() => openLog(it.id)}
+              >
+                <div className="flex items-start justify-between rounded-2xl border px-4 py-3 hover:bg-muted/50">
+                  <div className="space-y-2">
+                    <p>{it.text}</p>
+                    <div className="min-h-6 flex flex-wrap gap-2">
+                      {/* 変化種別で色分け／選択中の種別だけ強調する等は将来対応 */}
+                      {it.chips?.map((c, idx) => (
+                        <Badge
+                          key={idx}
+                          variant="outline"
+                          className={
+                            CHIP_CLASS[c.kind] +
+                            ' text-[11px] font-medium transition-colors ' +
+                            (kind && c.kind === kind ? 'ring-1 ring-current' : '')
+                          }
+                        >
+                          {c.kind}
+                          {c.label}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
+                    {fmtTime(it.at)}
                   </div>
                 </div>
-                <div className="ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
-                  {fmtTime(it.at)}
-                </div>
-              </div>
+              </button>
             ))}
           </div>
 
