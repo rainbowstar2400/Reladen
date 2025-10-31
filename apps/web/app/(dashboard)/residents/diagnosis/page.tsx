@@ -11,7 +11,7 @@ import { useUpsertResident } from '@/lib/data/residents';
 
 export default function Page() {
   const router = useRouter();
-  const upsert = useResidentUpsert();
+  const upsert = useUpsertResident();
 
   // 画面遷移で id がある前提 or 選択式にする？
   // ここでは簡易に「名前だけ指定→新規作成 or 更新」とする例
