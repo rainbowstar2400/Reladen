@@ -1,6 +1,6 @@
 'use client'
 import React, { useMemo, useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -40,10 +40,11 @@ function fmtTime(iso: string) {
 
 export default function ReportsPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
 
   function openLog(id: string) {
-    const params = new URLSearchParams(searchParams.toString())
+    const params = new URLSearchParams(
+      typeof window !== 'undefined' ? window.location.search : ''
+    )
     params.set('log', id)
     router.push(`?${params.toString()}`, { scroll: false })
   }
