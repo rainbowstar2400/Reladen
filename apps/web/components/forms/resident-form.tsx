@@ -11,6 +11,30 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useUpsertResident } from '@/lib/data/residents';
 import { useMemo } from 'react';
 
+// === フォーム内で使う選択肢（まずは固定配列で運用） ===
+const MBTI_TYPES = [
+  'INTJ','INTP','ENTJ','ENTP',
+  'INFJ','INFP','ENFJ','ENFP',
+  'ISTJ','ISFJ','ESTJ','ESFJ',
+  'ISTP','ISFP','ESTP','ESFP',
+] as const;
+
+const SPEECH_PRESETS = [
+  { value: 'polite', label: 'ていねい' },
+  { value: 'casual', label: 'くだけた' },
+  { value: 'blunt',  label: '素っ気ない' },
+  { value: 'soft',   label: 'やわらかい' },
+] as const;
+
+// traits の初期値（未設定でも落ちないように）
+const DEFAULT_TRAITS = {
+  sociability: 3,    // 社交性
+  empathy: 3,        // 気配り
+  stubbornness: 3,   // 頑固さ
+  activity: 3,       // 行動力
+  expressiveness: 3, // 表現力
+} as const;
+
 const traitsPlaceholder = '{"likes": ["カフェ"], "hobby": "散歩"}';
 
 const residentFormSchema = z.object({
