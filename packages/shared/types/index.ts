@@ -24,7 +24,6 @@ export const baseEntitySchema = z.object({
 
 export const residentSchema = baseEntitySchema.extend({
   name: z.string().min(1),
-  traits: z.record(z.any()).nullable().optional(),
   mbti: MbtiEnum.optional(),
 
   // 5つの性格スライダーは 1〜5（未設定はデフォルト3）
