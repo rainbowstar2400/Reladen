@@ -87,24 +87,35 @@ export function ResidentForm({
   const upsert = useUpsertResident();
 
   async function handleSubmit(values: ResidentFormValues) {
+    // MBTI: 空文字は undefined、非空は MBTI列挙に合わせる
     const normalizedMbti: (typeof MBTI_TYPES)[number] | undefined =
       values.mbti && values.mbti.trim().length > 0
         ? (values.mbti as (typeof MBTI_TYPES)[number])
         : undefined;
-
-    const saved = await upsert.mutateAsync({
-      ...values,
+  
+    // speechPreset: 空/null は undefined、非空は union に合わせる
+    const normalizedSpeech: (typeof SPEECH_PRESETS)[number]['value'] | undefined =
+      typeof values.speechPreset === 'string' && values.speechPreset.trim().length > 0
+        ? (values.speechPreset as (typeof SPEECH_PRESETS)[number]['value'])
+        : undefined;
+  
+    // ↑ 正規化済みの値だけを使って payload を明示的に組む（...values は使わない）
+    const payload = {
+      id: values.id,
+      name: values.name,
       mbti: normalizedMbti,
-      // traits は既にオブジェクト
-      traits: values.traits,
-      // trustToPlayer は表示専用だが、サーバ側に既定があるならここで送らなくてもOK
-    });
+      traits: values.traits,                 // 既にオブジェクト
+      ...(normalizedSpeech !== undefined ? { speechPreset: normalizedSpeech } : {}),
+      // trustToPlayer は表示専用なので送らなくてOK（サーバ側で既定が入る想定）
+    };
+  
+    const saved = await upsert.mutateAsync(payload);
   
     form.reset({
       id: saved.id,
       name: saved.name,
       mbti: saved.mbti ?? '',
-      traits: saved.traits ?? { ...DEFAULT_TRAITS },
+      traits: saved.traits ?? { sociability: 3, empathy: 3, stubbornness: 3, activity: 3, expressiveness: 3 },
       speechPreset: saved.speechPreset ?? '',
       trustToPlayer: saved.trustToPlayer ?? 50,
     });
@@ -135,8 +146,19 @@ export function ResidentForm({
             <FormItem className="space-y-2">
               <FormLabel>MBTI</FormLabel>
               <FormControl>
-                <Input placeholder="例：INFP" {...field} value={field.value ?? ''} />
+                <select className="w-full rounded border px-3 py-2" {...field}>
+                  <option value="">（未設定）</option>
+                  {[
+                    'INTJ','INTP','ENTJ','ENTP',
+                    'INFJ','INFP','ENFJ','ENFP',
+                    'ISTJ','ISFJ','ESTJ','ESFJ',
+                    'ISTP','ISFP','ESTP','ESFP',
+                  ].map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
               </FormControl>
+              <FormMessage />
             </FormItem>
           )}
         />
