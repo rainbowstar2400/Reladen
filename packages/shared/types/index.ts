@@ -1,5 +1,20 @@
 import { z } from 'zod';
 
+// === Resident の拡張で使う列挙 ===
+export const MbtiEnum = z.enum([
+  'INTJ','INTP','ENTJ','ENTP',
+  'INFJ','INFP','ENFJ','ENFP',
+  'ISTJ','ISFJ','ESTJ','ESFJ',
+  'ISTP','ISFP','ESTP','ESFP',
+]);
+
+export const SpeechPresetEnum = z.enum([
+  'polite',     // ていねい
+  'casual',     // くだけた
+  'blunt',      // 素っ気ない
+  'soft',       // やわらかい
+]);
+
 export const baseEntitySchema = z.object({
   id: z.string().uuid(),
   updated_at: z.string().datetime(),
@@ -9,8 +24,25 @@ export const baseEntitySchema = z.object({
 
 export const residentSchema = baseEntitySchema.extend({
   name: z.string().min(1),
-  mbti: z.string().nullable().optional(),
-  traits: z.record(z.any()).nullable().optional(),
+  traits: z.record(z.any()).nullable().optional()
+  mbti: MbtiEnum.optional(),
+
+  // 5つの性格スライダーは 1〜5（未設定はデフォルト3）
+  // 保存時は未指定でも zod.parse 時に既定値が入りやすいよう .default を付けています
+  traits: z.object({
+    sociability:    z.number().int().min(1).max(5).default(3), // 社交性
+    empathy:        z.number().int().min(1).max(5).default(3), // 気配り傾向
+    stubbornness:   z.number().int().min(1).max(5).default(3), // 頑固さ
+    activity:       z.number().int().min(1).max(5).default(3), // 行動力
+    expressiveness: z.number().int().min(1).max(5).default(3), // 表現力
+  }).partial().default({}),
+  
+  speechPreset: SpeechPresetEnum.optional(),       // 話し方プリセット
+  
+  // プレイヤーへの信頼度（UI編集不可。後続ロジックで上げ下げ）
+  // 0〜100、既定50（中立）
+  trustToPlayer: z.number().int().min(0).max(100).default(50),
+
 });
 
 export const relationSchema = baseEntitySchema.extend({
