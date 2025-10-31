@@ -87,18 +87,11 @@ export function ResidentForm({
   const upsert = useUpsertResident();
 
   async function handleSubmit(values: ResidentFormValues) {
-  const normalizedMbti: (typeof MBTI_TYPES)[number] | undefined =
-    values.mbti && values.mbti.trim().length > 0
-      ? (values.mbti as (typeof MBTI_TYPES)[number])
-      : undefined;
-  
-  const saved = await upsert.mutateAsync({
-    ...values,
-    mbti: normalizedMbti,          // ← null ではなく undefined か MBTI列挙
-    traits: values.traits,         // ここはそのまま
-    // trustToPlayer は表示専用なら送らなくてもOK
-  });
-  
+    const normalizedMbti: (typeof MBTI_TYPES)[number] | undefined =
+      values.mbti && values.mbti.trim().length > 0
+        ? (values.mbti as (typeof MBTI_TYPES)[number])
+        : undefined;
+
     const saved = await upsert.mutateAsync({
       ...values,
       mbti: normalizedMbti,
