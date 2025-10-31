@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useUpsertResident } from '@/lib/data/residents';
 import { useMemo } from 'react';
++ import { useRouter } from 'next/navigation';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
 const MBTI_TYPES = [
@@ -58,12 +59,14 @@ const residentFormSchema = z.object({
 type ResidentFormValues = z.infer<typeof residentFormSchema>;
 
 export function ResidentForm({
+  
   defaultValues,
   onSubmitted,
 }: {
   defaultValues?: Partial<Resident>;
   onSubmitted?: () => void;
 }) {
+  const router = useRouter();
   const form = useForm<ResidentFormValues>({
     resolver: zodResolver(residentFormSchema),
     defaultValues: useMemo(() => {
@@ -253,11 +256,18 @@ export function ResidentForm({
           />
         </div>
       </div>
-        <div className="flex justify-end gap-2">
-          <Button type="submit" disabled={upsert.isPending}>
-            {upsert.isPending ? '保存中…' : '保存'}
-          </Button>
-        </div>
+      <div className="flex justify-end gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => router.push('/residents/diagnosis')}
+        >
+          MBTIを診断する
+        </Button>
+        <Button type="submit" disabled={upsert.isPending}>
+          {upsert.isPending ? '保存中…' : '保存'}
+        </Button>
+      </div>
       </form>
     </Form>
   );
