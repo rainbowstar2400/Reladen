@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 // 住人に結果を保存する API/ドメイン呼び出し（既存の upsert パスに合わせて調整）
-import { useResidentUpsert } from '@/lib/domain/residents'; // 仮: 実際のパスに合わせて
+import { useUpsertResident } from '@/lib/data/residents';
 
 export default function Page() {
   const router = useRouter();
