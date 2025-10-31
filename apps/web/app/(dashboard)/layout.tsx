@@ -1,36 +1,14 @@
-'use client'
 import { ReactNode } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { Sidebar } from '@/components/layout/sidebar'
 import { Header } from '@/components/layout/header'
 import { MotionMain } from '@/components/layout/motion-main'
-import LogDetailPanel, { LogDetail } from '@/components/logs/log-detail-panel'
+import DetailLayer from '@/components/logs/detail-layer'
 
-function makeDummy(id: string): LogDetail {
-  return {
-    id,
-    title: 'AとBが雑談している。',
-    date: '2025/10/22',
-    weekday: 'Wed',
-    time: '23:15',
-    lines: [
-      { speaker: 'A', text: 'フキダシ' },
-      { speaker: 'B', text: 'フキダシ' },
-      { speaker: 'A', text: 'フキダシ' },
-    ],
-    system: [
-      'A→Bの好感度が上昇した！',
-      'B→Aの好感度が上昇した！',
-      'A→Bの印象が「なし」に変化した。',
-    ],
-  }
-}
-
-export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const searchParams = useSearchParams()
-  const logId = searchParams.get('log')
-  const data = logId ? makeDummy(logId) : null
-
+export default function DashboardLayout({
+  children,
+}: {
+  children: ReactNode
+}) {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -38,7 +16,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <Sidebar />
         <MotionMain>{children}</MotionMain>
       </div>
-      <LogDetailPanel open={!!logId} data={data} />
+      <DetailLayer />
     </div>
   )
 }
