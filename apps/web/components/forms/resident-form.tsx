@@ -142,43 +142,64 @@ export function ResidentForm({
         <FormField
           control={form.control}
           name="mbti"
-          render={({ field }) => (
-            <FormItem className="space-y-2">
-              <FormLabel>MBTI</FormLabel>
-              <FormControl>
-                <select className="w-full rounded border px-3 py-2" {...field}>
-                  <option value="">（未設定）</option>
-                  {[
-                    'INTJ','INTP','ENTJ','ENTP',
-                    'INFJ','INFP','ENFJ','ENFP',
-                    'ISTJ','ISFJ','ESTJ','ESFJ',
-                    'ISTP','ISFP','ESTP','ESFP',
-                  ].map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => {
+            const v = field.value ?? ''; // ← null/undefined を空文字に
+            return (
+              <FormItem className="space-y-2">
+                <FormLabel>MBTI</FormLabel>
+                <FormControl>
+                  <select
+                    className="w-full rounded border px-3 py-2"
+                    name={field.name}
+                    ref={field.ref}
+                    value={v}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    onBlur={field.onBlur}
+                  >
+                    <option value="">（未設定）</option>
+                    {[
+                      'INTJ','INTP','ENTJ','ENTP',
+                      'INFJ','INFP','ENFJ','ENFP',
+                      'ISTJ','ISFJ','ESTJ','ESFJ',
+                      'ISTP','ISFP','ESTP','ESFP',
+                    ].map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
         />
         <FormField
           control={form.control}
           name="speechPreset"
-          render={({ field }) => (
-            <FormItem className="space-y-2">
-              <FormLabel>話し方プリセット</FormLabel>
-              <FormControl>
-                <select className="w-full rounded border px-3 py-2" {...field}>
-                  <option value="">（未設定）</option>
-                  {SPEECH_PRESETS.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          render={({ field }) => {
+            const v = field.value ?? ''; // ← ここがポイント
+            return (
+              <FormItem className="space-y-2">
+                <FormLabel>話し方プリセット</FormLabel>
+                <FormControl>
+                  <select
+                    className="w-full rounded border px-3 py-2"
+                    name={field.name}
+                    ref={field.ref}
+                    value={v}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    onBlur={field.onBlur}
+                  >
+                    <option value="">（未設定）</option>
+                    <option value="polite">ていねい</option>
+                    <option value="casual">くだけた</option>
+                    <option value="blunt">素っ気ない</option>
+                    <option value="soft">やわらかい</option>
+                  </select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
         />
         <div className="space-y-4">
           <h3 className="text-sm font-semibold">性格（1〜5）</h3>
