@@ -1,0 +1,9 @@
+# Domain API (Data access boundary)
+
+このディレクトリの関数だけを UI から呼ぶルールにします。
+保存先（IndexedDB / Supabase）は、後で差し替え可能にします。
+
+- residents.ts: 住人の list/create/update など
+- relations.ts: 関係の list/upsert（双方向整合）
+- feelings.ts: 感情（片方向）の list/upsert
+- events.ts: イベントログの append/list（保存は必ず1行）
