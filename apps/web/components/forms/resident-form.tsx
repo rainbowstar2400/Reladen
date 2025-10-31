@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useUpsertResident } from '@/lib/data/residents';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
+import { QUESTIONS, calculateMbti, type Answer } from '@/lib/mbti'; // ← apps/web/lib/mbti.ts
 import { useRouter } from 'next/navigation';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
@@ -87,6 +88,29 @@ export function ResidentForm({
     }, [defaultValues]),
 
   });
+
+ // 診断パネルの開閉と、各設問のスコア（1〜5、初期値は中立3）
+ const [showDiagnosis, setShowDiagnosis] = useState(false);
+ const [diagScores, setDiagScores] = useState<Record<string, number>>(
+   () => Object.fromEntries(QUESTIONS.map(q => [q.id, 3]))
+ );
+ useEffect(() => {
+    if (!showDiagnosis) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowDiagnosis(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showDiagnosis]);
+
+
+ const answers: Answer[] = useMemo(
+   () => Object.entries(diagScores).map(([id, score]) => ({ id, score })),
+   [diagScores]
+ );
+ const onDiagScoreChange = (id: string, score: number) =>
+   setDiagScores(prev => ({ ...prev, [id]: score }));
+  
   const upsert = useUpsertResident();
 
   async function handleSubmit(values: ResidentFormValues) {
@@ -146,29 +170,36 @@ export function ResidentForm({
           control={form.control}
           name="mbti"
           render={({ field }) => {
-            const v = field.value ?? ''; // ← null/undefined を空文字に
+            const v = field.value ?? ''; // null/undefined→空文字
             return (
               <FormItem className="space-y-2">
                 <FormLabel>MBTI</FormLabel>
                 <FormControl>
-                  <select
-                    className="w-full rounded border px-3 py-2"
-                    name={field.name}
-                    ref={field.ref}
-                    value={v}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    onBlur={field.onBlur}
-                  >
-                    <option value="">（未設定）</option>
-                    {[
-                      'INTJ','INTP','ENTJ','ENTP',
-                      'INFJ','INFP','ENFJ','ENFP',
-                      'ISTJ','ISFJ','ESTJ','ESFJ',
-                      'ISTP','ISFP','ESTP','ESFP',
-                    ].map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      className="w-full rounded border px-3 py-2"
+                      name={field.name}
+                      ref={field.ref}
+                      value={v}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      onBlur={field.onBlur}
+                    >
+                      <option value="">（未設定）</option>
+                      {[
+                        'INTJ','INTP','ENTJ','ENTP',
+                        'INFJ','INFP','ENFJ','ENFP',
+                        'ISTJ','ISFJ','ESTJ','ESFJ',
+                        'ISTP','ISFP','ESTP','ESFP',
+                      ].map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+        
+                    {/* ← これが診断パネルのトグル */}
+                    <Button type="button" variant="secondary" onClick={() => setShowDiagnosis(true)}>
+                      診断
+                    </Button>
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -269,6 +300,83 @@ export function ResidentForm({
         </Button>
       </div>
       </form>
+      {showDiagnosis && (
+      <>
+        {/* Backdrop（背景クリックで閉じる） */}
+        <div
+          className="fixed inset-0 z-40 bg-black/40"
+          onClick={() => setShowDiagnosis(false)}
+          aria-hidden="true"
+        />
+    
+        {/* 右側スライドのサイドパネル */}
+        <aside
+          className="fixed right-0 top-0 z-50 h-svh w-[420px] max-w-[88vw] bg-white shadow-xl border-l outline-none
+                     animate-in slide-in-from-right duration-200"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex items-center justify-between border-b px-4 py-3">
+            <h3 className="text-sm font-semibold">MBTI 診断</h3>
+            <button
+              type="button"
+              className="text-sm text-muted-foreground hover:underline"
+              onClick={() => setShowDiagnosis(false)}
+            >
+              閉じる（Esc）
+            </button>
+          </div>
+    
+          <div className="flex h-[calc(100svh-48px-64px)] flex-col gap-4 overflow-y-auto px-4 py-4">
+            {/* 質問リスト（スライダー） */}
+            {QUESTIONS.map(q => (
+              <div key={q.id} className="grid grid-cols-5 items-center gap-3">
+                <div className="col-span-3 text-sm">{q.text}</div>
+                <input
+                  className="col-span-1 w-full"
+                  type="range"
+                  min={1}
+                  max={5}
+                  step={1}
+                  value={diagScores[q.id]}
+                  onChange={(e) => onDiagScoreChange(q.id, Number(e.target.value))}
+                />
+                <div className="col-span-1 text-right text-sm tabular-nums">
+                  {diagScores[q.id]}
+                </div>
+              </div>
+            ))}
+          </div>
+    
+          {/* フッター操作 */}
+          <div className="flex justify-end gap-2 border-t px-4 py-3">
+            <Button
+              type="button"
+              onClick={() => {
+                const mbti = calculateMbti(answers);
+                // ← MBTI セレクトにだけ結果を反映（保存は元の「保存」ボタン）
+                form.setValue('mbti', mbti, {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                  shouldValidate: true,
+                });
+                setShowDiagnosis(false);
+              }}
+            >
+              診断して反映
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowDiagnosis(false)}
+            >
+              反映せず閉じる
+            </Button>
+          </div>
+        </aside>
+      </>
+    )}
+
     </Form>
   );
 }
