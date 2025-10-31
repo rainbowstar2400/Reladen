@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useUpsertResident } from '@/lib/data/residents';
 import { useMemo } from 'react';
-+ import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
 const MBTI_TYPES = [
