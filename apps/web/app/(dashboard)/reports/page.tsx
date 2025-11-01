@@ -12,6 +12,8 @@ type ReportItem = {
   id: string
   at: string // ISO (Asia/Tokyo想定)
   text: string
+  /** イベント種別：会話・相談・その他（将来拡張可） */
+  category: 'conversation' | 'consult' | 'other'
   chips: { kind: ChangeKind; label: string }[] // 空でもOK
   a?: string; b?: string // キャラ関与（任意）
 }
@@ -81,20 +83,41 @@ export default function ReportsPage() {
   // ---- ダミーデータ（将来 useEvents() に置換）----
   const allCharacters = ['A','B','C']
   const ALL: ReportItem[] = [
-    { id:'1', at:`${date}T23:15:00+09:00`, text:'A と C がなにやら話している。', chips:[
-      { kind:'好感度', label:'A→C：↑' },
-      { kind:'好感度', label:'C→A：↑' },
-      { kind:'印象', label:'A→C：「好きかも」' },
-      { kind:'関係', label:'A-C：「友達」' },
-    ], a:'A', b:'C' },
-    { id:'2', at:`${date}T22:50:00+09:00`, text:'C から相談を受けた。', chips:[
-      { kind:'信頼度', label:'C：↑' },
-    ], a:'C' },
-    { id:'3', at:`${date}T22:30:00+09:00`, text:'A と B が雑談している。', chips:[
-      { kind:'好感度', label:'A→B：↑' },
-      { kind:'好感度', label:'B→A：↑' },
-      { kind:'印象', label:'A→B：「なし」' },
-    ], a:'A', b:'B' },
+    {
+      id:'1',
+      at:`${date}T23:15:00+09:00`,
+      text:'A と C がなにやら話している。',
+      category: 'conversation',
+      chips:[
+        { kind:'好感度', label:'A→C：↑' },
+        { kind:'好感度', label:'C→A：↑' },
+        { kind:'印象',   label:'A→C：「好きかも」' },
+        { kind:'関係',   label:'A-C：「友達」' },
+      ],
+      a:'A', b:'C'
+    },
+    {
+      id:'2',
+      at:`${date}T22:50:00+09:00`,
+      text:'C から相談を受けた。',
+      category: 'consult',
+      chips:[
+        { kind:'信頼度', label:'C：↑' },
+      ],
+      a:'C'
+    },
+    {
+      id:'3',
+      at:`${date}T22:30:00+09:00`,
+      text:'A と B が雑談している。',
+      category: 'conversation',
+      chips:[
+        { kind:'好感度', label:'A→B：↑' },
+        { kind:'好感度', label:'B→A：↑' },
+        { kind:'印象',   label:'A→B：「なし」' },
+      ],
+      a:'A', b:'B'
+    },
   ]
 
   // ---- フィルタ＆ソート ----
@@ -182,17 +205,12 @@ export default function ReportsPage() {
                 type="button"
                 className="w-full text-left"
                 onClick={() => {
-                  // 相談イベントの判定ロジック（どちらか片方を採用）
-                  // ① テキストベース（暫定・手軽）
-                  // const isConsult = it.text.includes('相談')
-
-                  // ② チップベース（より厳密にしたい場合はこっち）
-                  const isConsult = it.chips?.some(c => c.kind === '信頼度')
-
-                  if (isConsult) {
-                    openConsult(it.id)  // ?consult=<id> を付けて相談モーダルを開く
+                  if (it.category === 'consult') {
+                    openConsult(it.id)  // ?consult=<id> で相談モーダル
+                  } else if (it.category === 'conversation') {
+                    openLog(it.id)      // ?log=<id> で会話モーダル（既存）
                   } else {
-                    openLog(it.id)      // 既存の会話ログモーダル
+                    // other：今は何もしない / 将来の拡張（例：systemイベント詳細など）
                   }
                 }}
               >
