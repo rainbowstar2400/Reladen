@@ -1,3 +1,7 @@
+// apps/web/lib/client/consult-storage.ts
+// ブラウザの localStorage を使った簡易な回答保持。
+// 後で DB に差し替えるときは、このファイルの load/save を置き換えるだけで UI 側は不変。
+
 const KEY = (id: string) => `consult:${id}`
 
 export type StoredConsultAnswer = {
