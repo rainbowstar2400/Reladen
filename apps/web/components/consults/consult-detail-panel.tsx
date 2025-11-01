@@ -172,16 +172,8 @@ export default function ConsultDetailPanel({
 
           {/* フッタ（前/閉じる/次） */}
           <div className="mt-auto flex items-center justify-between gap-2 border-t p-3">
-            <button className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-              <ChevronLeft className="h-4 w-4" />
-              前の相談
-            </button>
             <button className="rounded-md border px-3 py-1.5 text-sm" onClick={() => router.back()}>
               閉じる
-            </button>
-            <button className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-              次の相談
-              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </motion.aside>
