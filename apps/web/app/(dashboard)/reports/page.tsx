@@ -38,8 +38,20 @@ function fmtTime(iso: string) {
   return f.format(d)
 }
 
+function useOpenConsult() {
+  const router = useRouter()
+  return (id: string) => {
+    const params = new URLSearchParams(
+      typeof window !== 'undefined' ? window.location.search : ''
+    )
+    params.set('consult', id)
+    router.push(`?${params.toString()}`, { scroll: false })
+  }
+}
+
 export default function ReportsPage() {
   const router = useRouter()
+  const openConsult = useOpenConsult()
 
   function openLog(id: string) {
     const params = new URLSearchParams(
@@ -169,13 +181,25 @@ export default function ReportsPage() {
                 key={it.id}
                 type="button"
                 className="w-full text-left"
-                onClick={() => openLog(it.id)}
+                onClick={() => {
+                  // 相談イベントの判定ロジック（どちらか片方を採用）
+                  // ① テキストベース（暫定・手軽）
+                  // const isConsult = it.text.includes('相談')
+
+                  // ② チップベース（より厳密にしたい場合はこっち）
+                  const isConsult = it.chips?.some(c => c.kind === '信頼度')
+
+                  if (isConsult) {
+                    openConsult(it.id)  // ?consult=<id> を付けて相談モーダルを開く
+                  } else {
+                    openLog(it.id)      // 既存の会話ログモーダル
+                  }
+                }}
               >
                 <div className="flex items-start justify-between rounded-2xl border px-4 py-3 hover:bg-muted/50">
                   <div className="space-y-2">
                     <p>{it.text}</p>
                     <div className="min-h-6 flex flex-wrap gap-2">
-                      {/* 変化種別で色分け／選択中の種別だけ強調する等は将来対応 */}
                       {it.chips?.map((c, idx) => (
                         <Badge
                           key={idx}
@@ -198,6 +222,7 @@ export default function ReportsPage() {
                 </div>
               </button>
             ))}
+
           </div>
 
           {/* ページネーション */}
