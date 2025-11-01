@@ -76,3 +76,4 @@ export type Relation = z.infer<typeof relationSchema>;
 export type Feeling = z.infer<typeof feelingSchema>;
 export type EventLog = z.infer<typeof eventSchema>;
 export type SyncPayload = z.infer<typeof syncPayloadSchema>;
+export * from './conversation';
