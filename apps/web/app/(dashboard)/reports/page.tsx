@@ -12,6 +12,8 @@ type ReportItem = {
   id: string
   at: string // ISO (Asia/Tokyo想定)
   text: string
+  /** イベント種別：会話・相談・その他（将来拡張可） */
+  category: 'conversation' | 'consult' | 'other'
   chips: { kind: ChangeKind; label: string }[] // 空でもOK
   a?: string; b?: string // キャラ関与（任意）
 }
@@ -38,8 +40,20 @@ function fmtTime(iso: string) {
   return f.format(d)
 }
 
+function useOpenConsult() {
+  const router = useRouter()
+  return (id: string) => {
+    const params = new URLSearchParams(
+      typeof window !== 'undefined' ? window.location.search : ''
+    )
+    params.set('consult', id)
+    router.push(`?${params.toString()}`, { scroll: false })
+  }
+}
+
 export default function ReportsPage() {
   const router = useRouter()
+  const openConsult = useOpenConsult()
 
   function openLog(id: string) {
     const params = new URLSearchParams(
@@ -69,20 +83,41 @@ export default function ReportsPage() {
   // ---- ダミーデータ（将来 useEvents() に置換）----
   const allCharacters = ['A','B','C']
   const ALL: ReportItem[] = [
-    { id:'1', at:`${date}T23:15:00+09:00`, text:'A と C がなにやら話している。', chips:[
-      { kind:'好感度', label:'A→C：↑' },
-      { kind:'好感度', label:'C→A：↑' },
-      { kind:'印象', label:'A→C：「好きかも」' },
-      { kind:'関係', label:'A-C：「友達」' },
-    ], a:'A', b:'C' },
-    { id:'2', at:`${date}T22:50:00+09:00`, text:'C から相談を受けた。', chips:[
-      { kind:'信頼度', label:'C：↑' },
-    ], a:'C' },
-    { id:'3', at:`${date}T22:30:00+09:00`, text:'A と B が雑談している。', chips:[
-      { kind:'好感度', label:'A→B：↑' },
-      { kind:'好感度', label:'B→A：↑' },
-      { kind:'印象', label:'A→B：「なし」' },
-    ], a:'A', b:'B' },
+    {
+      id:'1',
+      at:`${date}T23:15:00+09:00`,
+      text:'A と C がなにやら話している。',
+      category: 'conversation',
+      chips:[
+        { kind:'好感度', label:'A→C：↑' },
+        { kind:'好感度', label:'C→A：↑' },
+        { kind:'印象',   label:'A→C：「好きかも」' },
+        { kind:'関係',   label:'A-C：「友達」' },
+      ],
+      a:'A', b:'C'
+    },
+    {
+      id:'2',
+      at:`${date}T22:50:00+09:00`,
+      text:'C から相談を受けた。',
+      category: 'consult',
+      chips:[
+        { kind:'信頼度', label:'C：↑' },
+      ],
+      a:'C'
+    },
+    {
+      id:'3',
+      at:`${date}T22:30:00+09:00`,
+      text:'A と B が雑談している。',
+      category: 'conversation',
+      chips:[
+        { kind:'好感度', label:'A→B：↑' },
+        { kind:'好感度', label:'B→A：↑' },
+        { kind:'印象',   label:'A→B：「なし」' },
+      ],
+      a:'A', b:'B'
+    },
   ]
 
   // ---- フィルタ＆ソート ----
@@ -169,13 +204,20 @@ export default function ReportsPage() {
                 key={it.id}
                 type="button"
                 className="w-full text-left"
-                onClick={() => openLog(it.id)}
+                onClick={() => {
+                  if (it.category === 'consult') {
+                    openConsult(it.id)  // ?consult=<id> で相談モーダル
+                  } else if (it.category === 'conversation') {
+                    openLog(it.id)      // ?log=<id> で会話モーダル（既存）
+                  } else {
+                    // other：今は何もしない / 将来の拡張（例：systemイベント詳細など）
+                  }
+                }}
               >
                 <div className="flex items-start justify-between rounded-2xl border px-4 py-3 hover:bg-muted/50">
                   <div className="space-y-2">
                     <p>{it.text}</p>
                     <div className="min-h-6 flex flex-wrap gap-2">
-                      {/* 変化種別で色分け／選択中の種別だけ強調する等は将来対応 */}
                       {it.chips?.map((c, idx) => (
                         <Badge
                           key={idx}
@@ -198,6 +240,7 @@ export default function ReportsPage() {
                 </div>
               </button>
             ))}
+
           </div>
 
           {/* ページネーション */}
