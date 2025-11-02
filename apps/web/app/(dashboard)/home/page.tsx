@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { MessageSquare, Cloud, AlertTriangle, Moon } from 'lucide-react'
 import React from 'react'
 import NotificationsSectionClient from '@/components/notifications/NotificationsSection.client';
+import { Suspense } from 'react';
 
 // 見出し（簡易罫線で雰囲気再現）
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -72,7 +73,13 @@ export default function HomePage() {
     <div className="space-y-6">
       {/* お知らせ（実データ接続 + クリックで会話詳細） */}
       <section>
-        <NotificationsSectionClient />
+        <Suspense fallback={
+          <div className="rounded-2xl border bg-white p-4 text-sm text-gray-500">
+            お知らせを読み込み中…
+          </div>
+        }>
+          <NotificationsSectionClient />
+        </Suspense>
       </section>
 
       {/* みんなの様子（将来は resident 全件を map） */}
