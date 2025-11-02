@@ -1,4 +1,4 @@
-import { boolean, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, jsonb, pgEnum, pgTable, text, timestamp, uuid, index } from 'drizzle-orm/pg-core';
 import { relations as createRelations } from 'drizzle-orm';
 
 export const relationTypeEnum = pgEnum('relation_type', ['none', 'friend', 'best_friend', 'lover', 'family']);
@@ -58,10 +58,13 @@ export const events = pgTable('events', {
   id: uuid('id').primaryKey().defaultRandom(),
   kind: text('kind').notNull(),
   payload: jsonb('payload').notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
   deleted: boolean('deleted').notNull().default(false),
   ownerId: uuid('owner_id'),
-});
+}, (t) => ({
+  byKind: index('events_kind_idx').on(t.kind),
+  byUpdated: index('events_updated_idx').on(t.updatedAt),
+}));
 
 export const residentsRelations = createRelations(residents, ({ many }) => ({
   relations: many(relations),
