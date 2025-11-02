@@ -33,12 +33,23 @@ export function useAddEvent() {
   return useMutation({
     mutationFn: async (input: Partial<EventLog>) => {
       const id = input.id ?? newId();
+
+      // ★ 厳密スキーマで検証（失敗なら throw）
+      eventSchemaStrict.parse({
+        id,
+        kind: input.kind,
+        payload: input.payload,
+        updated_at: new Date().toISOString(),
+        deleted: false,
+        owner_id: (input as any).owner_id ?? null,
+      });
+
       return putLocal('events', {
         ...input,
         id,
         updated_at: new Date().toISOString(),
         deleted: false,
-      });
+      } as EventLog);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['events'] });
