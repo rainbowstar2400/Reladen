@@ -2,7 +2,21 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": ".",
-    "outDir": "dist"
+    "outDir": "dist",
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": false
   },
-  "include": ["./**/*.ts", "../../apps/web/lib/gpt/call-gpt-for-conversation.ts"]
+  "include": [
+    "types/**/*.ts",
+    "gpt/**/*.ts",
+    "conversation.ts",
+    "index.ts",
+    "**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "../../apps/**"   // ★ apps配下は拾わない
+  ]
 }
