@@ -3,21 +3,24 @@
 import { useEffect, useState } from 'react';
 
 export function Clock() {
-  const [now, setNow] = useState(new Date());
+  // 1. サーバー/クライアントの初回描画時は null (または '--:--:--' など) にする
+  const [time, setTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
+    // 2. クライアントでのみ実行される useEffect の中で、実際の値をセットする
+    setTime(new Date());
+    
+    const timerId = setInterval(() => {
+      setTime(new Date());
+    }, 1000);
 
-    return () => clearInterval(t);
-  }, []);
+    return () => clearInterval(timerId);
+  }, []); // 空の依存配列で、マウント時に一度だけ実行
 
-  const z = (n: number) => String(n).padStart(2, '0');
-  const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][now.getDay()];
+  // 3. null の場合は何も表示しない（またはプレースホルダーを表示）
+  if (time === null) {
+    return null; // これでサーバーとクライアントの初回描画が一致する
+  }
 
-  return (
-    <span className="tabular-nums">
-      {now.getFullYear()}/{z(now.getMonth() + 1)}/{z(now.getDate())}
-      &nbsp;&nbsp;{wd}&nbsp;&nbsp;{z(now.getHours())}:{z(now.getMinutes())}:{z(now.getSeconds())}
-    </span>
-  );
+  return <div>{time.toLocaleTimeString()}</div>;
 }
