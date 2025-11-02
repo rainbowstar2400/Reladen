@@ -50,3 +50,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   )
 }
+
+if (typeof window !== 'undefined') {
+  import('@/lib/persist/persist-conversation').then(mod => {
+    (window as any).persistConversation = mod.persistConversation;
+  });
+  import('@/lib/evaluation/evaluate-conversation').then(mod => {
+    (window as any).evaluateConversation = mod.evaluateConversation;
+  });
+}
