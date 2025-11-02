@@ -4,6 +4,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { EventLog } from '@/types';
 import { listLocal, putLocal } from '@/lib/db-local';
 import { newId } from '@/lib/newId';
+import { eventSchemaStrict, EventLogStrict } from '@repo/shared/types';
 
 const PAGE_SIZE = 20;
 
@@ -43,4 +44,16 @@ export function useAddEvent() {
       void queryClient.invalidateQueries({ queryKey: ['events'] });
     },
   });
+}
+
+mutationFn: async (input: Partial<EventLogStrict>) => {
+  // Base を含めた strict 版でパース（失敗＝データ不正を確実に発見）
+  const parsed = eventSchemaStrict.parse({
+    ...input,
+    id: input.id ?? newId(),
+    updated_at: input.updated_at ?? new Date().toISOString(),
+    deleted: input.deleted ?? false,
+  });
+
+  return putLocal('events', parsed);
 }
