@@ -1,7 +1,4 @@
-import * as Sentry from '@sentry/nextjs';
-
-Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN,
-  tracesSampleRate: 0.1,
-  debug: process.env.NODE_ENV === 'development',
-});
+// apps/web/sentry.client.config.ts
+// App Router では client 初期化は instrumentation-client.ts に一本化する。
+// ここでの Sentry.init() は呼ばない。
+export {};

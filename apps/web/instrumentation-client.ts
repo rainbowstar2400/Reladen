@@ -2,6 +2,21 @@
 // The added config here will be used whenever a users loads a page in their browser.
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
+declare global {
+  // 二重初期化防止用のフラグ
+  // eslint-disable-next-line no-var
+  var __SENTRY_INITED__: boolean | undefined;
+}
+
+if (!globalThis.__SENTRY_INITED__) {
+  Sentry.init({
+    dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    tracesSampleRate: 1.0,
+    // 他のオプション…
+  });
+  globalThis.__SENTRY_INITED__ = true;
+}
+
 import * as Sentry from "@sentry/nextjs";
 
 Sentry.init({
