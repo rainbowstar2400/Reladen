@@ -18,11 +18,17 @@ importers:
       '@types/node':
         specifier: 20.11.30
         version: 20.11.30
+      dotenv:
+        specifier: ^17.2.3
+        version: 17.2.3
+      dotenv-expand:
+        specifier: ^12.0.3
+        version: 12.0.3
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@20.11.30)(typescript@5.4.4)
       tsx:
-        specifier: ^4.7.1
+        specifier: ^4.20.6
         version: 4.20.6
       turbo:
         specifier: ^1.13.3
@@ -6614,6 +6620,13 @@ packages:
 
   /dom-accessibility-api@0.6.3:
     resolution: {integrity: sha512-7ZgogeTnjuHbo+ct10G9Ffp0mif17idi0IyWNVA/wcwcm7NPOD/WEHVP3n7n3MhXqxoIYm8d6MuZohYWIZ4T3w==}
+    dev: true
+
+  /dotenv-expand@12.0.3:
+    resolution: {integrity: sha512-uc47g4b+4k/M/SeaW1y4OApx+mtLWl92l5LMPP0GNXctZqELk+YGgOPIIC5elYmUH4OuoK3JLhuRUYegeySiFA==}
+    engines: {node: '>=12'}
+    dependencies:
+      dotenv: 16.6.1
     dev: true
 
   /dotenv@16.6.1:

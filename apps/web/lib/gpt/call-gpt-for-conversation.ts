@@ -2,13 +2,9 @@
 import OpenAI from "openai";
 import { gptConversationOutputSchema, GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
 import { systemPromptConversation, buildUserPromptConversation } from "@repo/shared/gpt/prompts/conversation-prompt";
+import { env } from "@/env";
 
-const apiKey =
-  process.env.OPENAI_API_KEY ?? process.env.NEXT_PUBLIC_OPENAI_API_KEY ?? "";
-if (!apiKey) {
-  throw new Error("OPENAI_API_KEY is not set.");
-}
-const client = new OpenAI({ apiKey });
+const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
 export async function callGptForConversation(
   params: Parameters<typeof buildUserPromptConversation>[0]
