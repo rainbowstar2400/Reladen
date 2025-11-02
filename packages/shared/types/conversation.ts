@@ -1,5 +1,6 @@
 // packages/shared/types/conversation.ts
 import { z } from 'zod';
+import { baseEntitySchema, BaseEntity } from './base';
 
 export const conversationLineSchema = z.object({
   speaker: z.string().uuid(),
@@ -56,21 +57,20 @@ export const eventKindEnum = z.enum([
   'conversation', 'favor_change', 'feeling_change', 'system', 'consult',
 ]);
 
-export const eventSchemaStrict = z.object({
-  id: z.string().uuid(),
-  kind: eventKindEnum,
-  updated_at: z.string().datetime(),
-  deleted: z.boolean().default(false),
-  owner_id: z.string().uuid().nullable().optional(),
-  payload: z.union([
-    conversationEventPayloadSchema,
-    favorChangeEventPayloadSchema,
-    feelingChangeEventPayloadSchema,
-    // system/consult は緩め開始
-    z.record(z.any()),
-  ]),
-});
+export const eventSchemaStrict = baseEntitySchema.and(
+  z.object({
+    kind: eventKindEnum,
+    owner_id: z.string().uuid().nullable().optional(),
+    payload: z.union([
+      conversationEventPayloadSchema,
+      favorChangeEventPayloadSchema,
+      feelingChangeEventPayloadSchema,
+      z.record(z.any()),  // system/consult は緩い開始
+    ]),
+  })
+);
 
+// 合成後の型
 export type EventLogStrict = z.infer<typeof eventSchemaStrict>;
 
 // --- 会話スレッド・Belief・通知の型 ---
