@@ -5170,7 +5170,7 @@ packages:
   /@types/pg-pool@2.0.6:
     resolution: {integrity: sha512-TaAUE5rq2VQYxab5Ts7WZhKNmuN78Q6PiFonTDdpbx8a1H0M1vhy3rhiMjl+e2iHmogyMw7jZF4FrE6eJUy5HQ==}
     dependencies:
-      '@types/pg': 8.6.1
+      '@types/pg': 8.15.5
     dev: true
 
   /@types/pg@8.15.5:
