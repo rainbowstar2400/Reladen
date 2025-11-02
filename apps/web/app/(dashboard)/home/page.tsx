@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { MessageSquare, Cloud, AlertTriangle, Moon } from 'lucide-react'
 import React from 'react'
+import NotificationsSectionClient from '@/components/notifications/NotificationsSection.client';
 
 // 見出し（簡易罫線で雰囲気再現）
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -69,20 +70,10 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6">
-      {/* おしらせ（ダミー行。カードごとにリンク化） */}
-      <SectionTitle>おしらせ</SectionTitle>
-      <div className="grid gap-3">
-        {notifications.map(({ id, icon: Icon, text, href, iconClass }) => (
-          <Link key={id} href={href} className="block">
-            <Card className="transition hover:bg-muted">
-              <CardContent className="flex items-center gap-3 py-4 text-sm">
-                <Icon className={`h-4 w-4 ${iconClass}`} />
-                <span>{text}</span>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      {/* お知らせ（実データ接続 + クリックで会話詳細） */}
+      <section>
+        <NotificationsSectionClient />
+      </section>
 
       {/* みんなの様子（将来は resident 全件を map） */}
       <SectionTitle>みんなの様子</SectionTitle>
