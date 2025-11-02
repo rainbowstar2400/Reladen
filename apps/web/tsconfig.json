@@ -42,6 +42,12 @@
       ], // ← 追加
       "@/types/*": [
         "../../packages/shared/types/*"
+      ],
+      "@repo/shared": [
+        "../../packages/shared/types/index.ts"
+      ],
+      "@repo/shared/*": [
+        "../../packages/shared/*"
       ]
     },
     "plugins": [

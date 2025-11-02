@@ -3,28 +3,40 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { EventLog, Feeling, Relation, Resident } from '@/types';
 import { newId } from '@/lib/newId';
+import {
+  BeliefRecord,
+  NotificationRecord,
+  TopicThread,
+  EventLogStrict,
+} from '@repo/shared/types/conversation';
 
-export type LocalTableName = 'residents' | 'relations' | 'feelings' | 'events';
+export type LocalTableName =
+  | 'residents'
+  | 'relations'
+  | 'feelings'
+  | 'events'
+  | 'topic_threads'
+  | 'beliefs'
+  | 'notifications';
 
-type Entity = Resident | Relation | Feeling | EventLog;
+type Entity =
+  | Resident
+  | Relation
+  | Feeling
+  | EventLog
+  | EventLogStrict
+  | TopicThread
+  | BeliefRecord
+  | NotificationRecord;
 
 interface ReladenSchema extends DBSchema {
-  residents: {
-    key: string;
-    value: Resident;
-  };
-  relations: {
-    key: string;
-    value: Relation;
-  };
-  feelings: {
-    key: string;
-    value: Feeling;
-  };
-  events: {
-    key: string;
-    value: EventLog;
-  };
+  residents: { key: string; value: Resident; };
+  relations: { key: string; value: Relation; };
+  feelings:  { key: string; value: Feeling; };
+  events:    { key: string; value: EventLog | EventLogStrict; };
+  topic_threads: { key: string; value: TopicThread; };
+  beliefs:       { key: string; value: BeliefRecord; };
+  notifications: { key: string; value: NotificationRecord; };
 }
 
 type Snapshot = Record<LocalTableName, Record<string, Entity>>;
@@ -37,6 +49,9 @@ function createEmptySnapshot(): Snapshot {
     relations: {},
     feelings: {},
     events: {},
+    topic_threads: {},       // 追加
+    beliefs: {},             // 追加
+    notifications: {},       // 追加
   };
 }
 
@@ -45,12 +60,19 @@ let tauriState: { snapshot: Snapshot; persist: () => Promise<void> } | null = nu
 
 async function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB<ReladenSchema>('reladen', 1, {
-      upgrade(database) {
-        database.createObjectStore('residents');
-        database.createObjectStore('relations');
-        database.createObjectStore('feelings');
-        database.createObjectStore('events');
+    dbPromise = openDB<ReladenSchema>('reladen', 2, {
+      upgrade(database, oldVersion) {
+        if (oldVersion < 1) {
+          database.createObjectStore('residents');
+          database.createObjectStore('relations');
+          database.createObjectStore('feelings');
+          database.createObjectStore('events');
+        }
+        if (oldVersion < 2) {
+          database.createObjectStore('topic_threads');
+          database.createObjectStore('beliefs');
+          database.createObjectStore('notifications');
+        }
       },
     });
   }
