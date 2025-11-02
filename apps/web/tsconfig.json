@@ -1,10 +1,8 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": [
-      "dom",
-      "es2022"
-    ],
+    "target": "ES2020",           // ← ES5 ではなく
+    "lib": ["DOM", "ES2020"],     // ← Promiseなどを使うため
     "allowJs": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -42,6 +40,12 @@
       ], // ← 追加
       "@/types/*": [
         "../../packages/shared/types/*"
+      ],
+      "@repo/shared": [
+        "../../packages/shared/types/index.ts"
+      ],
+      "@repo/shared/*": [
+        "../../packages/shared/*"
       ]
     },
     "plugins": [

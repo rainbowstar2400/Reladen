@@ -16,10 +16,15 @@
     "seed:min": "tsx scripts/seed_min.ts"
   },
   "devDependencies": {
-    "tsx": "^4.7.1",
+    "@types/node": "20.11.30",
+    "dotenv": "^17.2.3",
+    "dotenv-expand": "^12.0.3",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
     "turbo": "^1.13.3"
   },
   "dependencies": {
+    "openai": "^6.7.0",
     "zod": "^3.25.76"
   }
 }

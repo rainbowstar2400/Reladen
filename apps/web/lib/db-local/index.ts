@@ -3,33 +3,63 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { EventLog, Feeling, Relation, Resident } from '@/types';
 import { newId } from '@/lib/newId';
+import {
+  BeliefRecord,
+  NotificationRecord,
+  TopicThread,
+  EventLogStrict,
+} from '@repo/shared/types/conversation';
+import { BaseEntity } from '@repo/shared/types'; // バレル経由
 
-export type LocalTableName = 'residents' | 'relations' | 'feelings' | 'events';
+export type LocalTableName =
+  | 'residents'
+  | 'relations'
+  | 'feelings'
+  | 'events'
+  | 'topic_threads'
+  | 'beliefs'
+  | 'notifications';
 
-type Entity = Resident | Relation | Feeling | EventLog;
+type Entity =
+  & BaseEntity
+  & (
+    | Resident
+    | Relation
+    | Feeling
+    | EventLog
+    | EventLogStrict
+    | TopicThread
+    | BeliefRecord
+    | NotificationRecord
+  );
+
+type PartialEntity<T extends Entity> = Partial<T> & Partial<BaseEntity>;
 
 interface ReladenSchema extends DBSchema {
-  residents: {
-    key: string;
-    value: Resident;
-  };
-  relations: {
-    key: string;
-    value: Relation;
-  };
-  feelings: {
-    key: string;
-    value: Feeling;
-  };
-  events: {
-    key: string;
-    value: EventLog;
-  };
+  residents: { key: string; value: Resident; };
+  relations: { key: string; value: Relation; };
+  feelings:  { key: string; value: Feeling; };
+  events:    { key: string; value: EventLog | EventLogStrict; };
+  topic_threads: { key: string; value: TopicThread; };
+  beliefs:       { key: string; value: BeliefRecord; };
+  notifications: { key: string; value: NotificationRecord; };
 }
 
 type Snapshot = Record<LocalTableName, Record<string, Entity>>;
 
 const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+
+/** ベースのデフォルトを与えるユーティリティ（拡張しやすく分離） */
+function withEntityDefaults<T extends Entity>(input: PartialEntity<T>): T {
+  const now = new Date().toISOString();
+  return {
+    ...input,
+    id: input.id ?? (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)), // newId() に置換可
+    updated_at: input.updated_at ?? now,
+    deleted: input.deleted ?? false,
+  } as T;
+}
+
 
 function createEmptySnapshot(): Snapshot {
   return {
@@ -37,6 +67,9 @@ function createEmptySnapshot(): Snapshot {
     relations: {},
     feelings: {},
     events: {},
+    topic_threads: {},       // 追加
+    beliefs: {},             // 追加
+    notifications: {},       // 追加
   };
 }
 
@@ -45,12 +78,19 @@ let tauriState: { snapshot: Snapshot; persist: () => Promise<void> } | null = nu
 
 async function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB<ReladenSchema>('reladen', 1, {
-      upgrade(database) {
-        database.createObjectStore('residents');
-        database.createObjectStore('relations');
-        database.createObjectStore('feelings');
-        database.createObjectStore('events');
+    dbPromise = openDB<ReladenSchema>('reladen', 2, {
+      upgrade(database, oldVersion) {
+        if (oldVersion < 1) {
+          database.createObjectStore('residents');
+          database.createObjectStore('relations');
+          database.createObjectStore('feelings');
+          database.createObjectStore('events');
+        }
+        if (oldVersion < 2) {
+          database.createObjectStore('topic_threads');
+          database.createObjectStore('beliefs');
+          database.createObjectStore('notifications');
+        }
       },
     });
   }
@@ -84,25 +124,20 @@ async function getTauriState() {
   return tauriState;
 }
 
-export async function putLocal<T extends Entity>(table: LocalTableName, entity: Partial<T>) {
-  const id = ((entity as unknown) as Resident).id ?? newId();
-  const now = new Date().toISOString();
-  const value = {
-    ...entity,
-    id,
-    updated_at: entity.updated_at ?? now,
-    deleted: entity.deleted ?? false,
-  } as T;
+// ▼ ここが今回の本丸：BaseEntity 前提なので .updated_at / .deleted に安全に触れる
+export async function putLocal<T extends Entity>(table: LocalTableName, entity: PartialEntity<T>) {
+  const value = withEntityDefaults<T>(entity);
+
   if (isTauri) {
     const state = await getTauriState();
     if (state) {
-      state.snapshot[table][id] = value;
+      state.snapshot[table][value.id] = value;
       await state.persist();
       return value;
     }
   }
   const db = await getDb();
-  await db.put(table, value, id);
+  await db.put(table, value, value.id);
   return value;
 }
 
