@@ -1,4 +1,4 @@
-import { boolean, jsonb, pgEnum, pgTable, text, timestamp, uuid, index } from 'drizzle-orm/pg-core';
+import { boolean, jsonb, pgEnum, pgTable, text, timestamp, integer, uuid, index } from 'drizzle-orm/pg-core';
 import { relations as createRelations } from 'drizzle-orm';
 
 export const relationTypeEnum = pgEnum('relation_type', ['none', 'friend', 'best_friend', 'lover', 'family']);
@@ -91,4 +91,46 @@ export const feelingsRelations = createRelations(feelings, ({ one }) => ({
     fields: [feelings.toId],
     references: [residents.id],
   }),
+}));
+
+export const topicThreads = pgTable('topic_threads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  topic: text('topic'),
+  participants: jsonb('participants').notNull(), // [aId, bId]
+  status: text('status').notNull().default('ongoing'), // 'ongoing' | 'paused' | 'done'
+  lastEventId: uuid('last_event_id'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  deleted: boolean('deleted').notNull().default(false),
+}, (t) => ({
+  statusIdx: index('topic_threads_status_idx').on(t.status),
+  updatedIdx: index('topic_threads_updated_idx').on(t.updatedAt),
+}));
+
+export const beliefs = pgTable('beliefs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  residentId: uuid('resident_id').notNull(),
+  worldFacts: jsonb('world_facts').notNull().default([]),      // Array<{ eventId, learnedAt }>
+  personKnowledge: jsonb('person_knowledge').notNull().default({}), // Record<targetId, { keys[], learnedAt }>
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  deleted: boolean('deleted').notNull().default(false),
+}, (t) => ({
+  residentIdx: index('beliefs_resident_idx').on(t.residentId),
+  updatedIdx: index('beliefs_updated_idx').on(t.updatedAt),
+}));
+
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  type: text('type').notNull(), // 'conversation' | 'consult' | 'system'
+  linkedEventId: uuid('linked_event_id').notNull(),
+  threadId: uuid('thread_id'),
+  participants: jsonb('participants'),
+  snippet: text('snippet'),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+  status: text('status').notNull().default('unread'), // 'unread' | 'read' | 'archived'
+  priority: integer('priority').notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+}, (t) => ({
+  statusIdx: index('notifications_status_idx').on(t.status),
+  occurredIdx: index('notifications_occurred_idx').on(t.occurredAt),
+  updatedIdx: index('notifications_updated_idx').on(t.updatedAt),
 }));
