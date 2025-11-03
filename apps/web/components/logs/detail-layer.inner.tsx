@@ -4,8 +4,9 @@ import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import LogDetailPanel, { LogDetail } from '@/components/logs/log-detail-panel';
 import { fetchEventById } from '@/lib/data/notifications';
+import type { EventLogStrict } from '@repo/shared/types/conversation';
 
-/** このファイル内だけで使う、会話ペイロードの厳密型（Union回避用） */
+/** 会話ペイロード（Union回避用の厳密型） */
 type ConversationPayloadStrict = {
   threadId: string;
   participants: [string, string];
@@ -24,7 +25,7 @@ type ConversationPayloadStrict = {
   topic?: string;
 };
 
-/** 実行時に payload が会話ペイロードかどうかを判定（最低限） */
+/** payloadが会話イベントか判定 */
 function isConversationPayload(p: unknown): p is ConversationPayloadStrict {
   const g = p as ConversationPayloadStrict | undefined;
   return !!g
@@ -34,12 +35,18 @@ function isConversationPayload(p: unknown): p is ConversationPayloadStrict {
     && Array.isArray(g.lines);
 }
 
-/** 日付/曜日/時刻の整形（ロケール: ja-JP） */
-function formatDateParts(iso: string | undefined) {
+/** Entity → EventLogStrict かどうかを判定（kind/payload を持つ） */
+function isEventLogStrict(x: unknown): x is EventLogStrict {
+  const e = x as EventLogStrict | undefined;
+  return !!e && typeof e === 'object' && 'kind' in e && 'payload' in e;
+}
+
+/** 日付整形 */
+function formatDateParts(iso?: string) {
   const d = iso ? new Date(iso) : new Date();
   const date = d.toLocaleDateString('ja-JP');
   const time = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-  const weekday = new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(d); // 例: 月/火/水...
+  const weekday = new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(d);
   return { date, weekday, time };
 }
 
@@ -55,39 +62,31 @@ export default function DetailLayerInner() {
         setData(null);
         return;
       }
+
       const ev = await fetchEventById(logId);
       if (!alive) return;
 
-      // 不正なID / レコードなし
-      if (!ev) {
+      // 取得失敗
+      if (!ev || !isEventLogStrict(ev)) {
         setData(null);
         return;
       }
 
-      // 会話イベント以外は表示しない
+      // 会話イベント以外 or payloadが会話型でない
       if (ev.kind !== 'conversation' || !isConversationPayload(ev.payload)) {
         setData(null);
         return;
       }
 
-      const p = ev.payload; // ConversationPayloadStrict
-      const { date, weekday, time } = formatDateParts(ev.updated_at);
+      const p = ev.payload;
+      const { date, weekday, time } = formatDateParts((ev as any).updated_at); // local entity 互換
 
-      // タイトルは topic があれば優先、なければ participants から簡易生成
-      const title =
-        p.topic ??
-        `${p.participants[0]} と ${p.participants[1]} の会話`;
-
-      const lines: LogDetail['lines'] = (p.lines ?? []).map((ln) => ({
-        speaker: ln.speaker,
-        text: ln.text,
-      }));
-
-      const system: string[] = [];
-      if (p.systemLine) system.push(p.systemLine);
+      const title = p.topic ?? `${p.participants[0]} と ${p.participants[1]} の会話`;
+      const lines: LogDetail['lines'] = p.lines.map((ln) => ({ speaker: ln.speaker, text: ln.text }));
+      const system: string[] = p.systemLine ? [p.systemLine] : [];
 
       const next: LogDetail = {
-        id: ev.id,
+        id: (ev as any).id,
         title,
         date,
         weekday,
@@ -95,7 +94,6 @@ export default function DetailLayerInner() {
         lines,
         system,
       };
-
       setData(next);
     })();
 
