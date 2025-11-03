@@ -9,6 +9,8 @@
 
 import { putLocal, listLocal, getLocal } from '@/lib/db-local';
 import { newId } from '@/lib/newId';
+import { remoteUpsertEvent, remoteUpsertNotification } from '@/lib/sync/remote-events';
+
 
 import type {
   EventLogStrict,
@@ -96,6 +98,10 @@ export async function createConversationEvent(payload: ConversationPayloadStrict
   const notif = makeNotificationForEvent(ev);
   await putLocal<LocalNotificationEntity>('notifications', notif);
 
+  await putLocal<EventLogStrict>('events', ev);
+  await putLocal('notifications', notif as any);
+  await syncEventAndNotificationToRemote(ev, notif);
+
   return ev.id;
 }
 
@@ -140,4 +146,19 @@ export function validateConversationPayload(payload: ConversationPayloadStrict):
   if (!Array.isArray(payload.lines) || payload.lines.length === 0)
     return { ok: false, reason: 'lines が空です。最低1行必要です。' };
   return { ok: true };
+}
+
+function supabaseReady() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+export async function syncEventAndNotificationToRemote(ev: EventLogStrict, notif: { id: string } & Record<string, any>) {
+  if (!supabaseReady()) return; // devローカルのみなら同期スキップ
+  try {
+    await remoteUpsertEvent(ev);
+    await remoteUpsertNotification(notif as any);
+  } catch (e) {
+    // 失敗してもUIはローカルで動くため、ログのみ
+    console.warn('remote sync failed', e);
+  }
 }
