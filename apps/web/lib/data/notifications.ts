@@ -4,6 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listLocal, putLocal, getLocal } from '@/lib/db-local';
 import type { NotificationRecord, EventLogStrict } from '@repo/shared/types/conversation';
+import { remoteFetchEventById } from '@/lib/sync/remote-events';
 
 export function useNotifications() {
   return useQuery({
@@ -37,5 +38,18 @@ export function useMarkNotificationRead() {
 }
 
 export async function fetchEventById(id: string) {
-  return (await getLocal('events', id)) as EventLogStrict | undefined;
+  const local = await getLocal('events', id);
+  if (local) return local;
+  // remote fallback
+  const remote = await remoteFetchEventById(id);
+  if (!remote) return null;
+  // ローカルへ反映（以降はオフラインでも読める）
+  await putLocal('events', {
+    id: remote.id,
+    kind: remote.kind,
+    payload: remote.payload,
+    updated_at: remote.updated_at,
+    deleted: remote.deleted ?? false,
+  } as any);
+  return await getLocal('events', id);
 }
