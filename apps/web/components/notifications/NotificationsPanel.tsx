@@ -48,12 +48,26 @@ export default function NotificationsPanel() {
   const unread = notifications.filter(n => n.status === 'unread').length;
 
   return (
+      <div className="rounded-2xl border bg-white">
+      <div className="px-4 py-3 border-b flex items-center justify-between">
+        <div className="font-semibold">お知らせ</div>
+        <div className="text-xs text-gray-500">未読 {unread} 件</div>
+      </div>
     <ul className="divide-y">
+        {notifications.length === 0 && (
+          <li className="px-4 py-6 text-sm text-gray-500">現在お知らせはありません。</li>
+        )}
       {notifications.map((n) => (
         <li key={n.id} className="px-4 py-3 hover:bg-gray-50 transition">
           <button onClick={() => openNotification(n)} className="w-full flex items-start gap-3 text-left">
             <span className="mt-1 h-2 w-2 rounded-full {n.status === 'unread' ? 'bg-blue-600' : 'bg-gray-300'}" />
             <span className="flex-1">
+                <div className="text-sm">
+                  {n.type === 'conversation' ? '会話が発生しました' : 'お知らせ'}
+                </div>
+                {n.snippet && (
+                  <div className="text-xs text-gray-500 line-clamp-1">{n.snippet}</div>
+                )}
               {/* タイトルとスニペットは同じ */}
               <div className="text-sm">{n.type === 'conversation' ? '会話が発生しました' : 'お知らせ'}</div>
               {n.snippet && <div className="text-xs text-gray-500 line-clamp-1">{n.snippet}</div>}
@@ -66,5 +80,6 @@ export default function NotificationsPanel() {
         </li>
       ))}
     </ul>
+    </div>
   );
 }
