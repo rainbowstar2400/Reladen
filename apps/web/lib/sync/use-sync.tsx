@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { supabaseClient } from '@/lib/db-cloud/supabase';
 import { bulkUpsert, since } from '@/lib/db-local';
 import { SyncPayload, syncPayloadSchema } from '@/types';
@@ -8,78 +8,124 @@ export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
 
 const TABLES: SyncPayload['table'][] = ['residents', 'relations', 'feelings', 'events'];
 
-type SyncResult =
-  | { ok: true }
-  | { ok: false; reason: 'offline' }
-  | { ok: false; reason: 'error'; message: string };
-
+// --- API 呼び出し ---
 async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 'table'>) {
   const res = await fetch(`/api/sync/${table}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...body, table }),
   });
-  if (!res.ok) throw new Error(`sync ${table} failed`);
+  if (!res.ok) throw new Error(`sync ${table} failed (${res.status})`);
   const json = await res.json();
   return syncPayloadSchema.parse(json);
 }
+
+type SyncResult =
+  | { ok: true }
+  | { ok: false; reason: 'offline' }
+  | { ok: false; reason: 'error'; message: string };
 
 function useSyncInternal() {
   const [phase, setPhase] = useState<SyncPhase>('offline');
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // ★ 多重実行ガード & 連発防止
+  const syncingRef = useRef(false);
+  const lastRunRef = useRef(0);
+  const MIN_INTERVAL_MS = 4000;
+
+  // ★ Realtimeイベントのデバウンス
+  const debounceTimerRef = useRef<number | null>(null);
+  const requestDebouncedSync = useCallback(() => {
+    if (debounceTimerRef.current != null) return;
+    debounceTimerRef.current = window.setTimeout(() => {
+      debounceTimerRef.current = null;
+      void syncAll();
+    }, 1000);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const syncAll = useCallback(async (): Promise<SyncResult> => {
-    if (!navigator.onLine) {
+    // すでに実行中ならスキップ
+    if (syncingRef.current) return { ok: true };
+
+    // スロットル：直前から一定時間経っていなければスキップ
+    const now = Date.now();
+    if (now - lastRunRef.current < MIN_INTERVAL_MS) return { ok: true };
+
+    // オフラインは実行しない
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setPhase('offline');
       return { ok: false, reason: 'offline' };
     }
+
+    syncingRef.current = true;
+    lastRunRef.current = now;
     setPhase('syncing');
     setError(null);
 
     try {
       const pendingSince = lastSyncedAt;
+
       for (const table of TABLES) {
         const localChanges = await since(table, pendingSince);
         const payload = await fetchDiff(table, {
-          changes: localChanges.map((item) => ({ data: item, updated_at: item.updated_at, deleted: item.deleted })),
+          changes: localChanges.map((item) => ({
+            data: item,
+            updated_at: item.updated_at,
+            deleted: item.deleted,
+          })),
           since: pendingSince ?? undefined,
         });
-        const cloudChanges = payload.changes.map((change) => change.data);
-        await bulkUpsert(table, cloudChanges as any);
+
+        const cloudChanges = payload.changes.map((c) => c.data);
+        if (cloudChanges.length > 0) {
+          await bulkUpsert(table, cloudChanges as any);
+        }
       }
+
+      // サーバー時刻を返していない想定なので、クライアント時刻で更新
       setLastSyncedAt(new Date().toISOString());
       setPhase('online');
       return { ok: true };
-    } catch (err) {
-      console.error(err);
-      const message = err instanceof Error ? err.message : 'unknown';
-      setError(message);
+    } catch (err: any) {
+      console.error('Sync error:', err);
+      setError(err?.message ?? 'unknown');
       setPhase('error');
-      return { ok: false, reason: 'error', message };
+      return { ok: false, reason: 'error', message: err?.message };
+    } finally {
+      syncingRef.current = false;
     }
   }, [lastSyncedAt]);
 
+  // 初回マウント時：1回だけ同期
   useEffect(() => {
-    const handleOnline = () => {
+    let t = window.setTimeout(() => { void syncAll(); }, 0);
+    return () => window.clearTimeout(t);
+  }, [syncAll]);
+
+  // online/offline での同期（重複登録・多重実行を避ける）
+  useEffect(() => {
+    const onOnline = () => {
       setPhase('online');
       void syncAll();
     };
-    const handleOffline = () => setPhase('offline');
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    const onOffline = () => setPhase('offline');
+
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
     if (navigator.onLine) {
       setPhase('online');
-      void syncAll();
     }
+
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
     };
   }, [syncAll]);
 
+  // Supabase Realtime 変更 → デバウンスして同期
   useEffect(() => {
-    // null 警告回避：ローカル変数に退避してガード
     const client = supabaseClient;
     if (!client) return;
 
@@ -87,18 +133,19 @@ function useSyncInternal() {
       client
         .channel(`public:${table}`)
         .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
-          void syncAll();
+          requestDebouncedSync(); // ← 直接 sync せずデバウンス
         })
         .subscribe()
     );
 
     return () => {
-      channels.forEach((ch) => {
-        void client.removeChannel(ch);
-      });
+      if (debounceTimerRef.current != null) {
+        window.clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      channels.forEach((ch) => { void client.removeChannel(ch); });
     };
-  }, [syncAll]);
-
+  }, [requestDebouncedSync]);
 
   return useMemo(
     () => ({
@@ -122,7 +169,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 }
 
 export function useSync() {
-  const context = useContext(SyncContext);
-  if (context) return context;
+  const ctx = useContext(SyncContext);
+  if (ctx) return ctx;
   return useSyncInternal();
 }
