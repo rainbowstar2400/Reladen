@@ -18,6 +18,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.43.4
         version: 2.75.0
+      idb:
+        specifier: ^7.1.1
+        version: 7.1.1
       openai:
         specifier: ^6.7.0
         version: 6.7.0(zod@3.25.76)

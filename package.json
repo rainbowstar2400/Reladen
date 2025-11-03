@@ -26,6 +26,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.43.4",
+    "idb": "^7.1.1",
     "openai": "^6.7.0",
     "zod": "^3.25.76"
   },
