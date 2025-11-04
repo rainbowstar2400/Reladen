@@ -194,28 +194,65 @@ export async function persistConversation(params: {
     for (const rec of arr) dict[rec.residentId] = rec;
     return dict;
   }
-  async function upsertBeliefsFromNewKnowledge(items: Array<{ target: string; key: string }>) {
+
+  // 既存の loadBeliefsDict はそのまま利用
+  async function upsertBeliefsFromNewKnowledge(
+    items: Array<{ target: string; key: string }>,
+    participants: [string, string]
+  ) {
     if (!items?.length) return;
 
     const dict = await loadBeliefsDict();
-    const touched: BeliefRecord[] = [];
-    const now = new Date().toISOString();
+    const [a, b] = participants;
+    const nowIso = new Date().toISOString();
+
+    // 「target = 学習者ID（知識を得た側）」と解釈し、aboutId を相手にする
+    const resolveAboutId = (target: string): string => (target === a ? b : a);
 
     for (const { target, key } of items) {
-      const rec = dict[target];
-      if (!rec) continue;
+      if (!target || !key) continue;
 
-      if (!rec.personKnowledge[target]) {
-        rec.personKnowledge[target] = { keys: [], learnedAt: now };
+      // 1) 学習者（residentId=target）のレコードを取得/生成
+      let rec: BeliefRecord | undefined = dict[target];
+      if (!rec) {
+        rec = {
+          id: newId(),
+          residentId: target,       // ← 学習者のレコード
+          worldFacts: {},           // 使わないなら空でOK
+          personKnowledge: {},      // { [aboutId]: { keys: string[], learnedAt: string } }
+          updated_at: nowIso,
+          deleted: false,
+        } as BeliefRecord;
+        dict[target] = rec;
       }
-      const ks = rec.personKnowledge[target].keys;
-      if (!ks.includes(key)) ks.push(key);
-      rec.personKnowledge[target].learnedAt = now;
-      rec.updated_at = now;
-      touched.push(rec);
-    }
 
-    for (const rec of touched) {
+      // 2) 相手 aboutId のセクションを確保し、key を追加
+      const aboutId = resolveAboutId(target);
+      if (!rec.personKnowledge[aboutId]) {
+        rec.personKnowledge[aboutId] = { keys: [], learnedAt: nowIso };
+      }
+      const keys = Array.isArray(rec.personKnowledge[aboutId].keys)
+        ? (rec.personKnowledge[aboutId].keys as string[])
+        : [];
+
+      if (!keys.includes(key)) keys.push(key);
+      rec.personKnowledge[aboutId].keys = keys;
+      rec.personKnowledge[aboutId].learnedAt = nowIso;
+      rec.updated_at = nowIso;
+
+      const FRESH_DAYS = 14;
+      function isStale(iso: string): boolean {
+        const t = new Date(iso).getTime();
+        return Number.isFinite(t) && (Date.now() - t) > FRESH_DAYS * 86400000;
+      }
+
+      // 追加例（keys が長い/古い場合に圧縮する）
+      if (isStale(rec.personKnowledge[aboutId].learnedAt) && rec.personKnowledge[aboutId].keys.length > 5) {
+        rec.personKnowledge[aboutId].keys = rec.personKnowledge[aboutId].keys.slice(-5);
+        // ここで "…(省略)" などの要約フラグを別フィールドに立てても良い
+      }
+
+      // 3) upsert（冪等）
       await putLocal("beliefs", {
         ...rec,
         residentId: rec.residentId,
@@ -224,7 +261,8 @@ export async function persistConversation(params: {
       });
     }
   }
-  await updateBeliefs(evalResult.newBeliefs);
+
+  upsertBeliefsFromNewKnowledge(evalResult.newBeliefs, gptOut.participants);
 
   // 4) relations / feelings を更新（簡易版）
   await updateRelationsAndFeelings({
