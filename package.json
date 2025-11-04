@@ -24,13 +24,16 @@
     "turbo": "^1.13.3"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.43.4",
+    "idb": "^7.1.1",
     "openai": "^6.7.0",
     "zod": "^3.25.76"
   },
   "pnpm": {
-  "overrides": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "overrides": {
+      "react": "^18.3.1",
+      "react-dom": "^18.3.1"
     }
   }
 }
