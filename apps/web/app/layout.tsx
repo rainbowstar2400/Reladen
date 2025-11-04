@@ -9,6 +9,7 @@ import clsx from 'clsx'
 import * as Sentry from '@sentry/nextjs'
 import { SonnerToaster } from '@/components/sonner-toaster'
 import ConversationSchedulerProvider from "@/components/providers/ConversationSchedulerProvider";
+import { Providers } from './providers'
 
 export const runtime = 'nodejs';
 
@@ -41,14 +42,12 @@ export function generateMetadata(): Metadata {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja">
-      <body>
-        <ConversationSchedulerProvider>
-          {children}
-        </ConversationSchedulerProvider>
+    <html lang="ja" suppressHydrationWarning>
+      <body className={clsx('min-h-screen bg-background font-sans antialiased', fontSans.variable)}>
+        <Providers>{children}</Providers>
       </body>
     </html>
-  );
+  )
 }
 
 if (typeof window !== 'undefined') {
