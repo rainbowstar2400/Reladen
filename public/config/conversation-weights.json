@@ -1,0 +1,26 @@
+{
+  "tags": {
+    "共感": 0.6,
+    "感謝": 0.7,
+    "称賛": 0.8,
+    "協力": 0.5,
+    "否定": -0.8,
+    "皮肉": -0.5,
+    "非難": -1.2,
+    "情報共有": 0.1,
+    "軽い冗談": 0.2
+  },
+  "qualityHints": {
+    "coherence.good": 0.2,
+    "coherence.poor": -0.4,
+    "tone.gentle": 0.2,
+    "tone.harsh": -0.4
+  },
+  "signals": {
+    "continue": 0.1,
+    "close": 0.2,
+    "park": 0
+  },
+  "favorClip": { "min": -2, "max": 2 },
+  "impressionOrder": ["dislike", "awkward", "none", "curious", "like?", "like"]
+}
