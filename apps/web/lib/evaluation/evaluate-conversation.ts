@@ -43,6 +43,7 @@ export function evaluateConversation(params: {
   const { gptOut: output, beliefs } = params;
   const weights = params.weights ?? defaultWeightTable;
   const [a, b] = output.participants;
+  const now = new Date().toISOString();
 
   let aFavor = 0;
   let bFavor = 0;
@@ -85,30 +86,32 @@ export function evaluateConversation(params: {
   // ---- Belief更新 ----
   const newBeliefs: Record<string, BeliefRecord> = structuredClone(beliefs);
   for (const item of output.meta.newKnowledge ?? []) {
-    const target = item.target;
-    const key = item.key;
-    const rec = newBeliefs[target];
+    const learnerId = target; // GPT meta.newKnowledge の target は “知識を得る人物” と解釈
+    const aboutId = a === learnerId ? b : a; // 相手（知識の対象）
+    const rec = newBeliefs[learnerId];
     if (!rec) continue;
 
-    if (!rec.personKnowledge[target]) {
-      rec.personKnowledge[target] = { keys: [], learnedAt: new Date().toISOString() };
+
+    if (!rec.personKnowledge[aboutId]) {
+      rec.personKnowledge[aboutId] = { keys: [], learnedAt: now };
     }
-    const existing = rec.personKnowledge[target].keys;
-    if (!existing.includes(key)) existing.push(key);
-    rec.personKnowledge[target].learnedAt = new Date().toISOString();
-    rec.updated_at = new Date().toISOString();
+    const ks = rec.personKnowledge[aboutId].keys;
+    if (!ks.includes(key)) ks.push(key);
+    rec.personKnowledge[aboutId].learnedAt = now;
+    rec.updated_at = now;
   }
 
-  const systemLine = _buildSystemLine(output.participants, deltas);
-  let threadNextState: TopicThread["status"] | undefined = undefined;
-  const signal = output.meta.signals?.[0]; // GPTからのシグナルを取得
-  if (signal === "close") {
-    threadNextState = "done";
-  } else if (signal === "park") {
-    threadNextState = "paused";
-  } else if (signal === "continue") {
-    threadNextState = "ongoing";
-  }
 
-  return { deltas, newBeliefs, systemLine, threadNextState };
-}
+    const systemLine = _buildSystemLine(output.participants, deltas);
+    let threadNextState: TopicThread["status"] | undefined = undefined;
+    const signal = output.meta.signals?.[0]; // GPTからのシグナルを取得
+    if (signal === "close") {
+      threadNextState = "done";
+    } else if (signal === "park") {
+      threadNextState = "paused";
+    } else if (signal === "continue") {
+      threadNextState = "ongoing";
+    }
+
+    return { deltas, newBeliefs, systemLine, threadNextState };
+  }
