@@ -17,8 +17,11 @@ import type { Feeling } from "@/types";
 function makeSystemLine(out: GptConversationOutput, r: EvaluationResult): string {
   const [a, b] = out.participants;
   const fmt = (x: number) => (x > 0 ? `+${x}` : `${x}`);
-  const impArrow = (x: number) => (x > 0 ? "↑" : x < 0 ? "↓" : "→");
-  return `SYSTEM: ${a}→${b} 好感度 ${fmt(r.deltas.aToB.favor)} / 印象 ${impArrow(r.deltas.aToB.impression)} | ${b}→${a} 好感度 ${fmt(r.deltas.bToA.favor)} / 印象 ${impArrow(r.deltas.bToA.impression)}`;
+
+  // 削除: const impArrow = (x: number) => (x > 0 ? "↑" : x < 0 ? "↓" : "→");
+
+  // 修正: impArrow() によるラップを外し、impression の値 (string) を直接使用
+  return `SYSTEM: ${a}→${b} 好感度 ${fmt(r.deltas.aToB.favor)} / 印象 ${r.deltas.aToB.impression} | ${b}→${a} 好感度 ${fmt(r.deltas.bToA.favor)} / 印象 ${r.deltas.bToA.impression}`;
 }
 
 /**
@@ -75,22 +78,49 @@ async function updateRelationsAndFeelings(params: {
 }
 
 /**
+ * Belief の更新（冪等）
+ */
+async function updateBeliefs(newBeliefs: Record<string, BeliefRecord>) {
+  const now = new Date().toISOString();
+  for (const [residentId, rec] of Object.entries(newBeliefs)) {
+    await putLocal("beliefs", {
+      ...rec,
+      residentId,           // 念のため residentId をキーに合わせて上書き
+      updated_at: now,
+      deleted: false,
+    });
+  }
+}
+
+/**
  * topic_threads の lastEventId / status を更新
  */
 async function updateThreadAfterEvent(params: {
   threadId: string;
   lastEventId: string;
   signal?: "continue" | "close" | "park";
+  status?: TopicThread["status"]; // ★ 変更： status も受け取れるように
 }) {
   const now = new Date().toISOString();
-  let status: TopicThread["status"] = "ongoing";
-  if (params.signal === "close") status = "done";
-  else if (params.signal === "park") status = "paused";
+
+  let finalStatus: TopicThread["status"] = "ongoing"; // ★ デフォルト
+
+  if (params.status) {
+    // ★ 1. status (評価側) があれば最優先
+    finalStatus = params.status;
+  } else if (params.signal === "close") {
+    // ★ 2. signal (GPT側)
+    finalStatus = "done";
+  } else if (params.signal === "park") {
+    // ★ 2. signal (GPT側)
+    finalStatus = "paused";
+  }
+  // (signal が 'continue' または undefined の場合は 'ongoing' のまま)
 
   await putLocal("topic_threads", {
     id: params.threadId,
     lastEventId: params.lastEventId,
-    status,
+    status: finalStatus, // ★ 変更
     updated_at: now,
     deleted: false,
   } as any);
@@ -121,18 +151,6 @@ async function createNotification(params: {
   await putLocal("notifications", n);
 }
 
-async function updateBeliefs(newBeliefs: Record<string, BeliefRecord>) {
-  const now = new Date().toISOString();
-  for (const [residentId, rec] of Object.entries(newBeliefs)) {
-    await putLocal("beliefs", {
-      ...rec,
-      residentId,           // 念のため residentId をキーに合わせて上書き
-      updated_at: now,
-      deleted: false,
-    });
-  }
-}
-
 /**
  * 会話の永続化：events / topic_threads / notifications / beliefs / feelings
  */
@@ -143,9 +161,9 @@ export async function persistConversation(params: {
   const { gptOut, evalResult } = params;
   const now = new Date().toISOString();
 
-  // 1) events へ保存（systemLine を確定）
+  // 1) events へ保存
   const eventId = newId();
-  const systemLine = makeSystemLine(gptOut, evalResult);
+  // const systemLine = makeSystemLine(gptOut, evalResult); ← 削除
 
   await putLocal("events", {
     id: eventId,
@@ -154,20 +172,58 @@ export async function persistConversation(params: {
     deleted: false,
     payload: {
       ...gptOut,
-      deltas: evalResult.deltas,
-      systemLine,
+      deltas: evalResult.deltas,      // impression はラベル型でOK（数値ではない）
+      systemLine: evalResult.systemLine, // ★ ここを評価側のsystemLineに
     },
   } as any);
 
-  // 2) topic_threads の lastEventId / status を更新
-  const signal = gptOut.meta.signals?.[0];
+
+  // 2) topic_threads の更新
+  // const next = evalResult.threadNextState ?? gptOut.meta.signals?.[0]; // ← 型が混在するため削除
   await updateThreadAfterEvent({
     threadId: gptOut.threadId,
     lastEventId: eventId,
-    signal,
+    signal: gptOut.meta.signals?.[0],    // ★ GPT側の Signal
+    status: evalResult.threadNextState, // ★ 評価側の Status (こちらが優先される)
   });
 
   // 3) beliefs を更新（冪等）
+  async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
+    const arr = (await listLocal("beliefs")) as unknown as BeliefRecord[];
+    const dict: Record<string, BeliefRecord> = {};
+    for (const rec of arr) dict[rec.residentId] = rec;
+    return dict;
+  }
+  async function upsertBeliefsFromNewKnowledge(items: Array<{ target: string; key: string }>) {
+    if (!items?.length) return;
+
+    const dict = await loadBeliefsDict();
+    const touched: BeliefRecord[] = [];
+    const now = new Date().toISOString();
+
+    for (const { target, key } of items) {
+      const rec = dict[target];
+      if (!rec) continue;
+
+      if (!rec.personKnowledge[target]) {
+        rec.personKnowledge[target] = { keys: [], learnedAt: now };
+      }
+      const ks = rec.personKnowledge[target].keys;
+      if (!ks.includes(key)) ks.push(key);
+      rec.personKnowledge[target].learnedAt = now;
+      rec.updated_at = now;
+      touched.push(rec);
+    }
+
+    for (const rec of touched) {
+      await putLocal("beliefs", {
+        ...rec,
+        residentId: rec.residentId,
+        updated_at: rec.updated_at,
+        deleted: false,
+      });
+    }
+  }
   await updateBeliefs(evalResult.newBeliefs);
 
   // 4) relations / feelings を更新（簡易版）

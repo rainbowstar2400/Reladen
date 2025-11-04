@@ -23,7 +23,7 @@ export async function runConversation(params: {
 
   // 2) 評価
   const evalResult = evaluateConversation({
-    output: out,
+    gptOut: out,
     beliefs: params.beliefs,
   });
 

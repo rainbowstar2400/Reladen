@@ -36,5 +36,5 @@ const beliefs = {
   },
 };
 
-const result = evaluateConversation({ output: mockOutput, beliefs });
+const result = evaluateConversation({ gptOut: mockOutput, beliefs });
 console.log(result);
