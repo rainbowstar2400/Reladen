@@ -224,7 +224,7 @@ export async function persistConversation(params: {
       });
     }
   }
-  await upsertBeliefsFromNewKnowledge(evalResult.newBeliefs);
+  await updateBeliefs(evalResult.newBeliefs);
 
   // 4) relations / feelings を更新（簡易版）
   await updateRelationsAndFeelings({
