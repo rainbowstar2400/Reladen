@@ -1,182 +1,132 @@
-// apps/web/app/actions/conversation.ts
-'use server';
-import 'server-only';
+// apps/web/lib/conversation/run-conversation.ts
+// ------------------------------------------------------------
+// 会話エンジンのオーケストレータ。
+// 1) GPT生成（callGptForConversation）→ 2) ローカル評価 → 3) 永続化
+// ------------------------------------------------------------
 
-import { randomUUID } from 'crypto';
-import { StartConversationInput } from '@/lib/schemas/server/conversation';
-import { callGptForConversation } from '@/lib/gpt/call-gpt-for-conversation';
-import { evaluateConversation } from '@/lib/evaluation/evaluate-conversation';
-import { sbServer } from '@/lib/supabase/server';
-import { getUserOrThrow } from '@/lib/supabase/get-user';
-import type { TopicThread } from '@repo/shared/types/conversation';
-import { withRetry } from '@/lib/utils/with-retry';
+import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
+import type { EvaluationResult, EvalInput } from "@/lib/evaluation/evaluate-conversation";
+import { evaluateConversation } from "@/lib/evaluation/evaluate-conversation";
+import { persistConversation } from "@/lib/persist/persist-conversation";
+import { callGptForConversation } from "@/lib/gpt/call-gpt-for-conversation";
 
-/** SYSTEM 行の整形 */
-function makeSystemLine(out: any, r: any): string {
-  const [a, b] = out.participants as [string, string];
-  const fmt = (x: number) => (x > 0 ? `+${x}` : `${x}`);
-  const imp = (x: number) => (x > 0 ? '↑' : x < 0 ? '↓' : '→');
-  return `SYSTEM: ${a}→${b} 好感度 ${fmt(r.deltas.aToB.favor)} / 印象 ${imp(
-    r.deltas.aToB.impression
-  )} | ${b}→${a} 好感度 ${fmt(r.deltas.bToA.favor)} / 印象 ${imp(r.deltas.bToA.impression)}`;
+import { listLocal } from "@/lib/db-local";
+import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
+
+/** GPTに渡す thread 形状（エラーメッセージに出ていた型に合わせる） */
+type ThreadForGpt = {
+  participants: [string, string];
+  status: "ongoing" | "paused" | "done";
+  id: string;
+  updated_at: string;
+  deleted: boolean;
+  topic?: string;
+  lastEventId?: string;
+};
+
+/** ラン引数 */
+export type RunConversationArgs = {
+  /** 既存スレッドID（無ければ undefined） */
+  threadId?: string;
+  /** 参加者 [A,B] */
+  participants: [string, string];
+  /** GPTへのヒント（任意） */
+  topicHint?: string;
+  /** 最終要約（任意。なければ thread 側にない前提で undefined） */
+  lastSummary?: string;
+};
+
+/** ラン結果 */
+export type RunConversationResult = {
+  eventId: string;
+  threadId: string;
+  gptOut: GptConversationOutput;
+  evalResult: EvaluationResult;
+};
+
+/** beliefs を Record<residentId, BeliefRecord> でロード */
+async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
+  const arr = (await listLocal("beliefs")) as unknown as BeliefRecord[];
+  const dict: Record<string, BeliefRecord> = {};
+  for (const rec of arr) dict[rec.residentId] = rec;
+  return dict;
 }
 
-export async function startConversation(raw: unknown) {
-  // 0) 入力検証
-  const parsed = StartConversationInput.safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false as const, reason: parsed.error.issues.map((i) => i.message).join(', ') };
-  }
-  const { threadId, participants, topic, hints, idempotencyKey } = parsed.data;
-
-  const sb = sbServer();
-  const user = await getUserOrThrow();
+/** threadId と participants から GPT向けの thread オブジェクトを構築 */
+async function ensureThreadForGpt(input: {
+  threadId?: string;
+  participants: [string, string];
+}): Promise<ThreadForGpt> {
   const now = new Date().toISOString();
 
-  // 1) thread 取得（なければ必ず仮構築） ※ undefined を渡さない
-  const { data: tRow } = await sb
-    .from('topic_threads')
-    .select('*')
-    .eq('id', threadId)
-    .eq('owner_id', user.id)
-    .maybeSingle();
-
-  // participants は [string, string] のタプルに揃える関数
-  const tupleParticipants = (arr: unknown): [string, string] => {
-    if (Array.isArray(arr) && arr.length === 2) {
-      return [String(arr[0]), String(arr[1])];
+  if (input.threadId) {
+    // 既存スレッドを探す
+    const allThreads = (await listLocal("topic_threads")) as unknown as TopicThread[];
+    const found = allThreads.find((t) => t.id === input.threadId);
+    if (found) {
+      const t = found;
+      // TopicThread -> ThreadForGpt へプロジェクション（status フィールド名に注意）
+      const status: "ongoing" | "paused" | "done" = (t.status ?? "ongoing") as any;
+      return {
+        id: t.id,
+        participants: (t.participants as [string, string]) ?? input.participants,
+        status,
+        topic: t.topic,
+        lastEventId: t.lastEventId,
+        updated_at: t.updated_at ?? now,
+        deleted: !!t.deleted,
+      };
     }
-    // fallback: parsed.data.participants を使用
-    return [String(participants[0]), String(participants[1])];
+  }
+
+  // 新規スレッド相当（最低限の形で GPT に渡す）
+  return {
+    id: input.threadId ?? "TEMP", // GPT 側が適切に付与/維持する想定。TEMPでも型整合のため入れておく
+    participants: input.participants,
+    status: "ongoing",
+    updated_at: now,
+    deleted: false,
   };
+}
 
-  const thread: TopicThread = tRow
-    ? {
-      id: String(tRow.id),
-      topic: tRow.topic ?? undefined,
-      participants: tupleParticipants(tRow.participants),
-      status: (tRow.status ?? 'ongoing') as TopicThread['status'],
-      lastEventId: tRow.last_event_id ?? undefined,
-      updated_at: String(tRow.updated_at ?? now),
-      deleted: Boolean(tRow.deleted ?? false),
-    }
-    : {
-      id: threadId,
-      topic: topic,
-      participants: tupleParticipants(participants),
-      status: 'ongoing',
-      lastEventId: undefined,
-      updated_at: now,
-      deleted: false,
-    };
+export async function runConversation(args: RunConversationArgs): Promise<RunConversationResult> {
+  const { participants, threadId, topicHint, lastSummary } = args;
 
+  // 1) 入力下ごしらえ：thread / beliefs を用意
+  const thread: ThreadForGpt = await ensureThreadForGpt({ threadId, participants });
+  const beliefs: Record<string, BeliefRecord> = await loadBeliefsDict();
 
-  // 2) Belief（必要なら取得、ここでは空で進める）
-  const beliefs: Record<string, any> = {};
-
-  // 3) GPT 生成 → 4) 評価
-  const gptOut = await callGptForConversation({
+  // 2) GPT 生成（★ ここがポイント：threadId ではなく thread/ beliefs を渡す）
+  const gptOut: GptConversationOutput = await callGptForConversation({
     thread,
     beliefs,
-    topicHint: topic,
-    lastSummary: undefined,
+    topicHint,
+    lastSummary,
   });
-const evalResult = evaluateConversation({ gptOut: gptOut, beliefs });
 
-  // 5) 行組み立て
-  const systemLine = makeSystemLine(gptOut, evalResult);
-  const eventId = randomUUID();
-  const first = gptOut.lines?.[0];
-  const snippet = first ? `${first.speaker.slice(0, 4)}: ${first.text.slice(0, 28)}…` : undefined;
+  // 念のため threadId を GPT の返却値から確定
+  const ensuredThreadId = gptOut.threadId;
 
-  const eventRow = {
-    id: eventId,
-    kind: 'conversation',
-    payload: { ...gptOut, deltas: evalResult.deltas, systemLine },
-    updated_at: now,
-    deleted: false,
-    owner_id: user.id,
-    idempotency_key: idempotencyKey ?? null,
+  // 3) ローカル評価
+  const evalInput: EvalInput = {
+    threadId: ensuredThreadId,
+    participants,
+    lines: gptOut.lines,
+    meta: gptOut.meta,
+    // currentImpression を使う場合はここで読み出して渡す
   };
+  const evalResult = evaluateConversation(evalInput);
 
-  const notifRow = {
-    id: randomUUID(),
-    type: 'conversation' as const,
-    status: 'unread' as const,
-    linked_event_id: eventId,
-    occurred_at: now,
-    priority: 0,
-    updated_at: now,
-    deleted: false,
-    owner_id: user.id,
-    // UI補助
-    thread_id: gptOut.threadId,
-    participants: gptOut.participants as [string, string],
-    snippet,
+  // 4) 永続化
+  const { eventId } = await persistConversation({
+    gptOut,
+    evalResult,
+  });
+
+  return {
+    eventId,
+    threadId: ensuredThreadId,
+    gptOut,
+    evalResult,
   };
-
-  // 6) 保存
-  {
-    const { error: e1 } = await withRetry(async () => {
-      const res = await sb.from('events').upsert(eventRow).select().single();
-      if (res.error) throw res.error;
-      return res;
-    });
-
-    const { error: e2 } = await withRetry(async () => {
-      const res = await sb.from('notifications').upsert(notifRow).select().single();
-      if (res.error) throw res.error;
-      return res;
-    });
-
-    const { error: e3 } = await withRetry(async () => {
-      const res = await sb
-        .from('topic_threads')
-        .upsert({
-          id: threadId,
-          topic: topic ?? null,
-          participants,
-          status: 'ongoing',
-          last_event_id: eventId,
-          updated_at: now,
-          deleted: false,
-          owner_id: user.id,
-        })
-        .select()
-        .maybeSingle();
-      if (res.error) throw res.error;
-      return res;
-    });
-  }
-
-    // 7) Belief 反映（B-7）
-    if (Array.isArray((evalResult as any)?.newBeliefs) && (evalResult as any).newBeliefs.length > 0) {
-      try {
-        const { upsertBeliefs } = await import('./upsert-beliefs');
-        const res = await upsertBeliefs(
-          (evalResult as any).newBeliefs.map((b: any) => ({
-            residentId: b.residentId,
-            worldFacts: b.worldFacts,
-            personKnowledge: b.personKnowledge,
-          }))
-        );
-        if (!res.ok) console.warn('upsertBeliefs failed', res);
-      } catch (e) {
-        console.warn('upsertBeliefs thrown', e);
-      }
-    }
-
-    // 8) スレッドの最終イベント更新
-    await sb.from('topic_threads').upsert({
-      id: threadId,
-      topic: topic ?? null,
-      participants,
-      status: 'ongoing',
-      last_event_id: eventId,
-      updated_at: now,
-      deleted: false,
-      owner_id: user.id,
-    });
-
-    return { ok: true as const, eventId };
-  }
+}
