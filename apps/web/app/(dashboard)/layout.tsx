@@ -3,7 +3,7 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { Header } from '@/components/layout/header'
 import { MotionMain } from '@/components/layout/motion-main'
 import DetailLayer from '@/components/logs/detail-layer'
-import ConsultDetailLayer from '@/components/consults/detail-layer' // ← すでにありますね！
+import ConsultDetailLayer from '@/components/consults/detail-layer'
 
 export const runtime = 'nodejs';
 
