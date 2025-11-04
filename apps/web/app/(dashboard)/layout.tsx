@@ -4,8 +4,7 @@ import { Header } from '@/components/layout/header'
 import { MotionMain } from '@/components/layout/motion-main'
 import DetailLayer from '@/components/logs/detail-layer'
 import ConsultDetailLayer from '@/components/consults/detail-layer'
-
-export const runtime = 'nodejs';
+import RealtimeSubscriber from '@/components/Realtime/RealtimeSubscriber';
 
 export default function DashboardLayout({
   children,
@@ -17,6 +16,7 @@ export default function DashboardLayout({
       <Header />
       <div className="grid flex-1 grid-cols-1 md:grid-cols-[16rem_1fr]">
         <Sidebar />
+        <RealtimeSubscriber />  {/* ←ここに移動 */}
         <MotionMain>{children}</MotionMain>
       </div>
 

@@ -9,6 +9,8 @@ import clsx from 'clsx'
 import * as Sentry from '@sentry/nextjs'
 import { SonnerToaster } from '@/components/sonner-toaster'
 
+export const runtime = 'nodejs';
+
 const baseMetadata: Metadata = {
   title: 'Reladen Sync Dashboard',
   description: 'Residents relationship tracker with offline-first sync.',
