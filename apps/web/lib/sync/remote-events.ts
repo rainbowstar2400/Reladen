@@ -1,5 +1,5 @@
 'use client';
-import { sb } from '@/lib/supabase/client';
+import { supabaseClient as sb } from '@/lib/db-cloud/supabase'
 import type { EventLogStrict, NotificationRecord } from '@repo/shared/types/conversation';
 
 export async function remoteUpsertEvent(ev: EventLogStrict) {
