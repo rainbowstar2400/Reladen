@@ -1,117 +1,167 @@
 // apps/web/lib/evaluation/evaluate-conversation.ts
 
-// ★ 問題1の修正: import文を正しく記述する
-import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
-import type { BeliefRecord, TopicThread, } from "@repo/shared/types/conversation";
-import { defaultWeightTable, type WeightTable } from "./weight-table";
+import { getWeightsCached, nextImpression, clipFavor, Impression } from './weights';
 
-export type EvaluationResult = {
-  deltas: {
-    aToB: { favor: number; impression: number };
-    bToA: { favor: number; impression: number };
+// ------------------------------------------------------------
+// GPT応答（会話）をローカルで評価し、Δ値・印象・スレッド進行・Belief更新を決定。
+// 数値の最終決定はローカルのみで行う（GPTに決めさせない）。
+// 依存なしで自己完結するよう、重みやユーティリティも本ファイル内に定義。
+// ------------------------------------------------------------
+
+/** 印象ラベル（1段階だけ変化させる） */
+
+/** evaluateConversation の入力 */
+export type EvalInput = {
+  threadId: string;
+  participants: [string, string]; // [A, B]
+  lines: Array<{ speaker: string; text: string }>;
+  meta?: {
+    tags?: string[];
+    newKnowledge?: Array<{ target: string; key: string }>;
+    signals?: Array<'continue' | 'close' | 'park'>;
+    qualityHints?: Record<string, unknown>;
   };
-  newBeliefs: Record<string, BeliefRecord>;
-  systemLine: string; // ★ 1. systemLine を型定義に追加
-  threadNextState: TopicThread["status"] | undefined; // ★ 2. これを追加
+  // 直前の印象（未指定なら 'none'）
+  currentImpression?: { aToB: Impression; bToA: Impression };
 };
 
-/**
- * ★ 2. systemLine を構築するヘルパー関数を追加
- * (persist-conversation.ts からロジックを移動)
- */
-function _buildSystemLine(
-  participants: [string, string],
-  deltas: EvaluationResult["deltas"],
-): string {
-  const [a, b] = participants;
-  const fmt = (x: number) => (x > 0 ? `+${x}` : `${x}`);
-  // evaluate-conversation 内では impression は number 型なので、impArrow は正しく動作します
-  const impArrow = (x: number) => (x > 0 ? "↑" : x < 0 ? "↓" : "→");
-  return `SYSTEM: ${a}→${b} 好感度 ${fmt(deltas.aToB.favor)} / 印象 ${impArrow(
-    deltas.aToB.impression,
-  )} | ${b}→${a} 好感度 ${fmt(deltas.bToA.favor)} / 印象 ${impArrow(deltas.bToA.impression)}`;
+/** evaluateConversation の出力（persist 側が使う） */
+export type EvaluationResult = {
+  deltas: {
+    aToB: { favor: number; impression: Impression };
+    bToA: { favor: number; impression: Impression };
+  };
+  newBeliefs: Array<{ target: string; key: string }>;
+  threadNextState: 'ongoing' | 'paused' | 'done';
+  /** ログ表示用の簡易SYSTEM行 */
+  systemLine: string;
+};
+
+// ===== デフォルト重み・ユーティリティ（外部 weights 未導入でも動くよう自己完結） =====
+const TAG_WEIGHTS: Record<string, number> = {
+  // ポジティブ
+  '共感': 0.6,
+  '感謝': 0.7,
+  '称賛': 0.8,
+  '協力': 0.5,
+  // ネガティブ
+  '否定': -0.8,
+  '皮肉': -0.5,
+  '非難': -1.2,
+  // 中立/軽微
+  '情報共有': 0.1,
+  '軽い冗談': 0.2,
+};
+
+const QUALITY_WEIGHTS: Record<string, number> = {
+  'coherence.good': 0.2,
+  'coherence.poor': -0.4,
+  'tone.gentle': 0.2,
+  'tone.harsh': -0.4,
+};
+
+const SIGNAL_WEIGHTS: Record<'continue' | 'close' | 'park', number> = {
+  continue: 0.1,
+  close: 0.2,
+  park: 0,
+};
+
+const FAVOR_CLIP = { min: -2, max: 2 } as const;
+const IMPRESSION_ORDER: Impression[] = ['dislike', 'awkward', 'none', 'curious', 'like?', 'like'];
+
+function nextImpression1step(current: Impression, deltaSign: number): Impression {
+  if (deltaSign === 0) return current;
+  const i = IMPRESSION_ORDER.indexOf(current);
+  if (i < 0) return current;
+  return deltaSign > 0
+    ? IMPRESSION_ORDER[Math.min(i + 1, IMPRESSION_ORDER.length - 1)]
+    : IMPRESSION_ORDER[Math.max(i - 1, 0)];
 }
 
-/**
- * GPT出力を基に好感度／印象変化とBelief更新を算出する
- */
-export function evaluateConversation(params: {
-  gptOut: GptConversationOutput;
-  beliefs: Record<string, BeliefRecord>;
-  weights?: WeightTable;
-}): EvaluationResult {
-  const { gptOut: output, beliefs } = params;
-  const weights = params.weights ?? defaultWeightTable;
-  const [a, b] = output.participants;
-  const now = new Date().toISOString();
+// ===== 本体 ===================================================================
 
-  let aFavor = 0;
-  let bFavor = 0;
-  let aImpression = 0;
-  let bImpression = 0;
+export function evaluateConversation(input: EvalInput): EvaluationResult {
+  const meta = input.meta ?? {};
+  const [a, b] = input.participants;
+  const now = new Date().toISOString(); // learnedAt などに使う場合はここから渡す
 
-  // ---- タグ評価 ----
-  for (const tag of output.meta.tags ?? []) {
-    const w = weights.tags[tag] ?? 0;
-    aFavor += w;
-    bFavor += w * 0.9; // 双方向だが受け取り手を若干小さめに
+  // 1) タグ重み集計（A→B / B→A 同加算。必要なら話者向きで差別化可能）
+  let a2bFavor = 0;
+  let b2aFavor = 0;
+  const tags: string[] = meta.tags ?? [];
+  for (const t of tags) {
+    const w = TAG_WEIGHTS[t] ?? 0;
+    a2bFavor += w;
+    b2aFavor += w;
   }
 
-  // ---- 会話バランス／トーン補正 ----
-  const q = output.meta.qualityHints;
-  if (q?.turnBalance && weights.quality[q.turnBalance]) {
-    aImpression += weights.quality[q.turnBalance];
-    bImpression += weights.quality[q.turnBalance];
-  }
-  if (q?.tone && weights.quality.toneBonus[q.tone]) {
-    aFavor += weights.quality.toneBonus[q.tone];
-    bFavor += weights.quality.toneBonus[q.tone];
+  // 2) 会話バランス（均衡に微加点）
+  const speakCountA = input.lines.filter((l: { speaker: string; text: string }) => l.speaker === a).length;
+  const speakCountB = input.lines.filter((l: { speaker: string; text: string }) => l.speaker === b).length;
+  const total = Math.max(1, speakCountA + speakCountB);
+  const balance = Math.abs(speakCountA - speakCountB) / total; // 0=均衡, 1=偏り
+  const balanceGain = (1 - balance) * 0.2;
+  a2bFavor += balanceGain;
+  b2aFavor += balanceGain;
+
+  // 3) qualityHints の寄与（キー出現で加減点）
+  const qh = meta.qualityHints ?? {};
+  for (const k of Object.keys(qh)) {
+    const w = QUALITY_WEIGHTS[k];
+    if (typeof w === 'number') {
+      a2bFavor += w;
+      b2aFavor += w;
+    }
   }
 
-  // ---- 正規化（クリップ ±2／印象±1）----
-  const clip = (v: number, limit: number) =>
-    Math.max(-limit, Math.min(limit, Number(v.toFixed(2))));
+  // 4) signals によるスレッド進行
+  let threadScore = 0;
+  const sigs: Array<'continue' | 'close' | 'park'> = (meta.signals ?? []) as Array<
+    'continue' | 'close' | 'park'
+  >;
+  for (const s of sigs) {
+    threadScore += SIGNAL_WEIGHTS[s] ?? 0;
+  }
+  const threadNextState: EvaluationResult['threadNextState'] =
+    threadScore >= 0.2 ? 'done' : threadScore > 0 ? 'ongoing' : 'paused';
 
-  const deltas = {
-    aToB: {
-      favor: clip(aFavor, 2),
-      impression: clip(aImpression, 1),
+  // 5) Belief 更新パッチの作成
+  // meta.newKnowledge: { target: 学習者ID, key: その学習者が覚えた知識キー }
+  const newBeliefs: Array<{ target: string; key: string }> = [];
+  const nkList: Array<{ target: string; key: string }> = meta.newKnowledge ?? [];
+  for (const nk of nkList) {
+    const { target, key } = nk; // ← これがないと target/key 未定義になる
+    if (!target || !key) continue;
+    // aboutId を扱う場合は: const aboutId = target === a ? b : a;
+    newBeliefs.push({ target, key });
+    // learnedAt を返したい場合は型を広げて { target, key, learnedAt: now } にする
+  }
+
+  // 6) クリップと印象1段階制限
+  a2bFavor = clipFavor(a2bFavor);
+  b2aFavor = clipFavor(b2aFavor);
+  const prevA2B: Impression = input.currentImpression?.aToB ?? 'none';
+  const prevB2A: Impression = input.currentImpression?.bToA ?? 'none';
+  const nextA2B: Impression = nextImpression1step(prevA2B, Math.sign(a2bFavor));
+  const nextB2A: Impression = nextImpression1step(prevB2A, Math.sign(b2aFavor));
+
+  // 7) SYSTEM 行（UI用サマリ）
+  const bits: string[] = [];
+  if (a2bFavor !== 0) bits.push(`${a}→${b} 好感度: ${a2bFavor > 0 ? '↑' : '↓'}`);
+  if (b2aFavor !== 0) bits.push(`${b}→${a} 好感度: ${b2aFavor > 0 ? '↑' : '↓'}`);
+  if (nextA2B !== prevA2B) bits.push(`${a}→${b} 印象: ${prevA2B}→${nextA2B}`);
+  if (nextB2A !== prevB2A) bits.push(`${b}→${a} 印象: ${prevB2A}→${nextB2A}`);
+  if (newBeliefs.length) bits.push(`Belief更新: ${newBeliefs.length}件`);
+  const systemLine = bits.length ? `SYSTEM: ${bits.join(' / ')}` : '';
+
+  // 8) 最終 return（必ず到達）
+  return {
+    deltas: {
+      aToB: { favor: a2bFavor, impression: nextA2B },
+      bToA: { favor: b2aFavor, impression: nextB2A },
     },
-    bToA: {
-      favor: clip(bFavor, 2),
-      impression: clip(bImpression, 1),
-    },
+    newBeliefs,
+    threadNextState,
+    systemLine,
   };
-
-  // ---- Belief更新 ----
-  const newBeliefs: Record<string, BeliefRecord> = structuredClone(beliefs);
-  for (const item of output.meta.newKnowledge ?? []) {
-    const learnerId = target; // GPT meta.newKnowledge の target は “知識を得る人物” と解釈
-    const aboutId = a === learnerId ? b : a; // 相手（知識の対象）
-    const rec = newBeliefs[learnerId];
-    if (!rec) continue;
-
-
-    if (!rec.personKnowledge[aboutId]) {
-      rec.personKnowledge[aboutId] = { keys: [], learnedAt: now };
-    }
-    const ks = rec.personKnowledge[aboutId].keys;
-    if (!ks.includes(key)) ks.push(key);
-    rec.personKnowledge[aboutId].learnedAt = now;
-    rec.updated_at = now;
-  }
-
-
-    const systemLine = _buildSystemLine(output.participants, deltas);
-    let threadNextState: TopicThread["status"] | undefined = undefined;
-    const signal = output.meta.signals?.[0]; // GPTからのシグナルを取得
-    if (signal === "close") {
-      threadNextState = "done";
-    } else if (signal === "park") {
-      threadNextState = "paused";
-    } else if (signal === "continue") {
-      threadNextState = "ongoing";
-    }
-
-    return { deltas, newBeliefs, systemLine, threadNextState };
-  }
+}
