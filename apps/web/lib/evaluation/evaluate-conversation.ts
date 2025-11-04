@@ -11,19 +11,35 @@ export type EvaluationResult = {
     bToA: { favor: number; impression: number };
   };
   newBeliefs: Record<string, BeliefRecord>;
+  systemLine: string; // ★ 1. systemLine を型定義に追加
 };
+
+/**
+ * ★ 2. systemLine を構築するヘルパー関数を追加
+ * (persist-conversation.ts からロジックを移動)
+ */
+function _buildSystemLine(
+  participants: [string, string],
+  deltas: EvaluationResult["deltas"],
+): string {
+  const [a, b] = participants;
+  const fmt = (x: number) => (x > 0 ? `+${x}` : `${x}`);
+  // evaluate-conversation 内では impression は number 型なので、impArrow は正しく動作します
+  const impArrow = (x: number) => (x > 0 ? "↑" : x < 0 ? "↓" : "→");
+  return `SYSTEM: ${a}→${b} 好感度 ${fmt(deltas.aToB.favor)} / 印象 ${impArrow(
+    deltas.aToB.impression,
+  )} | ${b}→${a} 好感度 ${fmt(deltas.bToA.favor)} / 印象 ${impArrow(deltas.bToA.impression)}`;
+}
 
 /**
  * GPT出力を基に好感度／印象変化とBelief更新を算出する
  */
 export function evaluateConversation(params: {
-  // ★ Vercel エラーの修正: 'output' を 'gptOut' に変更
-  gptOut: GptConversationOutput; 
+  gptOut: GptConversationOutput;
   beliefs: Record<string, BeliefRecord>;
   weights?: WeightTable;
 }): EvaluationResult {
-  // ★ 内部のロジックは変更しないよう、'gptOut' を 'output' という名前で受け取る
-  const { gptOut: output, beliefs } = params; 
+  const { gptOut: output, beliefs } = params;
   const weights = params.weights ?? defaultWeightTable;
   const [a, b] = output.participants;
 
@@ -82,5 +98,7 @@ export function evaluateConversation(params: {
     rec.updated_at = new Date().toISOString();
   }
 
-  return { deltas, newBeliefs };
+  const systemLine = _buildSystemLine(output.participants, deltas);
+
+  return { deltas, newBeliefs, systemLine };
 }
