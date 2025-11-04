@@ -1,5 +1,5 @@
 'use client';
-import { sb } from '@/lib/supabase/client';
+import { supabaseClient as sb } from '@/lib/db-cloud/supabase';
 import { putLocal } from '@/lib/db-local';
 
 export function subscribeRealtime(
