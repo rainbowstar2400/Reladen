@@ -1,4 +1,6 @@
 // apps/web/app/actions/conversation.ts
+export const runtime = 'nodejs';
+
 'use server';
 
 import 'server-only';
@@ -9,6 +11,7 @@ import { evaluateConversation } from '@/lib/evaluation/evaluate-conversation';
 import { sbServer } from '@/lib/supabase/server';
 import { getUserOrThrow } from '@/lib/supabase/get-user';
 import type { TopicThread } from '@repo/shared/types/conversation';
+import { withRetry } from '@/lib/utils/with-retry';
 
 /** SYSTEM 行の整形 */
 function makeSystemLine(out: any, r: any): string {
@@ -116,41 +119,66 @@ export async function startConversation(raw: unknown) {
 
   // 6) 保存
   {
-    const { error: e1 } = await sb.from('events').upsert(eventRow).select().single();
-    if (e1) return { ok: false as const, reason: `upsert events failed: ${e1.message}` };
+    const { error: e1 } = await withRetry(async () => {
+      const res = await sb.from('events').upsert(eventRow).select().single();
+      if (res.error) throw res.error;
+      return res;
+    });
 
-    const { error: e2 } = await sb.from('notifications').upsert(notifRow).select().single();
-    if (e2) return { ok: false as const, reason: `upsert notifications failed: ${e2.message}` };
+    const { error: e2 } = await withRetry(async () => {
+      const res = await sb.from('notifications').upsert(notifRow).select().single();
+      if (res.error) throw res.error;
+      return res;
+    });
+
+    const { error: e3 } = await withRetry(async () => {
+      const res = await sb
+        .from('topic_threads')
+        .upsert({
+          id: threadId,
+          topic: topic ?? null,
+          participants,
+          status: 'ongoing',
+          last_event_id: eventId,
+          updated_at: now,
+          deleted: false,
+          owner_id: user.id,
+        })
+        .select()
+        .maybeSingle();
+      if (res.error) throw res.error;
+      return res;
+    });
   }
 
-  // 7) Belief 反映（B-7）
-  if (Array.isArray((evalResult as any)?.newBeliefs) && (evalResult as any).newBeliefs.length > 0) {
-    try {
-      const { upsertBeliefs } = await import('./upsert-beliefs');
-      const res = await upsertBeliefs(
-        (evalResult as any).newBeliefs.map((b: any) => ({
-          residentId: b.residentId,
-          worldFacts: b.worldFacts,
-          personKnowledge: b.personKnowledge,
-        }))
-      );
-      if (!res.ok) console.warn('upsertBeliefs failed', res);
-    } catch (e) {
-      console.warn('upsertBeliefs thrown', e);
+    // 7) Belief 反映（B-7）
+    if (Array.isArray((evalResult as any)?.newBeliefs) && (evalResult as any).newBeliefs.length > 0) {
+      try {
+        const { upsertBeliefs } = await import('./upsert-beliefs');
+        const res = await upsertBeliefs(
+          (evalResult as any).newBeliefs.map((b: any) => ({
+            residentId: b.residentId,
+            worldFacts: b.worldFacts,
+            personKnowledge: b.personKnowledge,
+          }))
+        );
+        if (!res.ok) console.warn('upsertBeliefs failed', res);
+      } catch (e) {
+        console.warn('upsertBeliefs thrown', e);
+      }
     }
+
+    // 8) スレッドの最終イベント更新
+    await sb.from('topic_threads').upsert({
+      id: threadId,
+      topic: topic ?? null,
+      participants,
+      status: 'ongoing',
+      last_event_id: eventId,
+      updated_at: now,
+      deleted: false,
+      owner_id: user.id,
+    });
+
+    return { ok: true as const, eventId };
   }
-
-  // 8) スレッドの最終イベント更新
-  await sb.from('topic_threads').upsert({
-    id: threadId,
-    topic: topic ?? null,
-    participants,
-    status: 'ongoing',
-    last_event_id: eventId,
-    updated_at: now,
-    deleted: false,
-    owner_id: user.id,
-  });
-
-  return { ok: true as const, eventId };
-}

@@ -4,6 +4,7 @@
 import 'server-only';
 import { sbServer } from '@/lib/supabase/server';
 import { getUserOrThrow } from '@/lib/supabase/get-user';
+import { withRetry } from '@/lib/utils/with-retry';
 
 export type UpsertBeliefInput = Array<{
   residentId: string;
@@ -46,8 +47,11 @@ export async function upsertBeliefs(inputs: UpsertBeliefInput): Promise<{ ok: tr
       owner_id: user.id,
     };
 
-    const { error: upErr } = await sb.from('beliefs').upsert(row).select().maybeSingle();
-    if (upErr) return { ok: false, reason: `upsert failed: ${upErr.message}` };
+    const { error: upErr } = await withRetry(async () => {
+      const res = await sb.from('beliefs').upsert(row).select().maybeSingle();
+      if (res.error) throw res.error;
+      return res;
+    });
   }
 
   return { ok: true };
