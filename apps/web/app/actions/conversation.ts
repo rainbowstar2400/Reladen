@@ -81,7 +81,7 @@ export async function startConversation(raw: unknown) {
     topicHint: topic,
     lastSummary: undefined,
   });
-  const evalResult = evaluateConversation({ output: gptOut, beliefs });
+const evalResult = evaluateConversation({ gptOut: gptOut, beliefs });
 
   // 5) 行組み立て
   const systemLine = makeSystemLine(gptOut, evalResult);
