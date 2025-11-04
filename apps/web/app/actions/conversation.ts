@@ -141,6 +141,29 @@ export async function startConversation(raw: unknown) {
   if (notifErr) {
     return { ok: false as const, reason: `upsert notifications failed: ${notifErr.message}` };
   }
+  if (Array.isArray(evalResult.newBeliefs)) {
+  const { upsertBeliefs } = await import('./upsert-beliefs');
+  await upsertBeliefs(evalResult.newBeliefs);
+}
+
+// 7.5) 評価結果の newBeliefs を保存（B-7）
+if (Array.isArray(evalResult?.newBeliefs) && evalResult.newBeliefs.length > 0) {
+  try {
+    const { upsertBeliefs } = await import('./upsert-beliefs');
+    const res = await upsertBeliefs(
+      evalResult.newBeliefs.map((b: any) => ({
+        residentId: b.residentId,
+        worldFacts: b.worldFacts,
+        personKnowledge: b.personKnowledge,
+      }))
+    );
+    if (!res.ok) {
+      console.warn('upsertBeliefs failed', res);
+    }
+  } catch (e) {
+    console.warn('upsertBeliefs thrown', e);
+  }
+}
 
   // 必要なら topic_threads.lastEventId や beliefs をここで更新する
 
