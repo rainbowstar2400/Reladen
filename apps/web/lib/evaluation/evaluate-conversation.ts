@@ -2,7 +2,7 @@
 
 // ★ 問題1の修正: import文を正しく記述する
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
-import type { BeliefRecord } from "@repo/shared/types/conversation";
+import type { BeliefRecord, TopicThread, } from "@repo/shared/types/conversation";
 import { defaultWeightTable, type WeightTable } from "./weight-table";
 
 export type EvaluationResult = {
@@ -12,6 +12,7 @@ export type EvaluationResult = {
   };
   newBeliefs: Record<string, BeliefRecord>;
   systemLine: string; // ★ 1. systemLine を型定義に追加
+  threadNextState: TopicThread["status"] | undefined; // ★ 2. これを追加
 };
 
 /**
@@ -99,6 +100,15 @@ export function evaluateConversation(params: {
   }
 
   const systemLine = _buildSystemLine(output.participants, deltas);
+  let threadNextState: TopicThread["status"] | undefined = undefined;
+  const signal = output.meta.signals?.[0]; // GPTからのシグナルを取得
+  if (signal === "close") {
+    threadNextState = "done";
+  } else if (signal === "park") {
+    threadNextState = "paused";
+  } else if (signal === "continue") {
+    threadNextState = "ongoing";
+  }
 
-  return { deltas, newBeliefs, systemLine };
+  return { deltas, newBeliefs, systemLine, threadNextState };
 }
