@@ -1,6 +1,4 @@
 // apps/web/app/actions/conversation.ts
-export const runtime = 'nodejs';
-
 'use server';
 
 import 'server-only';
@@ -12,6 +10,8 @@ import { sbServer } from '@/lib/supabase/server';
 import { getUserOrThrow } from '@/lib/supabase/get-user';
 import type { TopicThread } from '@repo/shared/types/conversation';
 import { withRetry } from '@/lib/utils/with-retry';
+
+export const runtime = 'nodejs';
 
 /** SYSTEM 行の整形 */
 function makeSystemLine(out: any, r: any): string {
