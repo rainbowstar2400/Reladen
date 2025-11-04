@@ -1,7 +1,7 @@
 // apps/web/app/actions/conversation.ts
 'use server';
-
 import 'server-only';
+
 import { randomUUID } from 'crypto';
 import { StartConversationInput } from '@/lib/schemas/server/conversation';
 import { callGptForConversation } from '@/lib/gpt/call-gpt-for-conversation';
@@ -10,8 +10,6 @@ import { sbServer } from '@/lib/supabase/server';
 import { getUserOrThrow } from '@/lib/supabase/get-user';
 import type { TopicThread } from '@repo/shared/types/conversation';
 import { withRetry } from '@/lib/utils/with-retry';
-
-export const runtime = 'nodejs';
 
 /** SYSTEM 行の整形 */
 function makeSystemLine(out: any, r: any): string {

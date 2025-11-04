@@ -5,6 +5,8 @@ import { MotionMain } from '@/components/layout/motion-main'
 import DetailLayer from '@/components/logs/detail-layer'
 import ConsultDetailLayer from '@/components/consults/detail-layer' // ← すでにありますね！
 
+export const runtime = 'nodejs';
+
 export default function DashboardLayout({
   children,
 }: {
