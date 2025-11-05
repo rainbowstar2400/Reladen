@@ -29,7 +29,6 @@ export default function ConversationLogModal(props: Props) {
     }
     if (!data?.payload?.lines) return;
 
-    // typing風に1行ずつ再生
     setPlayedIndex(0);
     let i = 0;
     const lines: Array<{ speaker: string; text: string }> = data.payload.lines;
@@ -79,7 +78,6 @@ export default function ConversationLogModal(props: Props) {
             </div>
           ))}
 
-          {/* SYSTEM 行（評価結果サマリ） */}
           {data?.payload?.systemLine && (
             <div className="mt-3 text-xs text-muted-foreground border-t pt-3">
               {data.payload.systemLine}
