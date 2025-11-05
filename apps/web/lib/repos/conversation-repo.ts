@@ -175,9 +175,6 @@ export async function createConversationEvent(payload: ConversationPayloadStrict
   // 2) notifications へ保存（deleted 付きローカル型で満たす）
   const notif = makeNotificationForEvent(ev);
   await putLocal<LocalNotificationEntity>('notifications', notif);
-
-  await putLocal<EventLogStrict>('events', ev);
-  await putLocal('notifications', notif as any);
   await syncEventAndNotificationToRemote(ev, notif);
 
   return ev.id;
