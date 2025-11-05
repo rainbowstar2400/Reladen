@@ -1,11 +1,11 @@
- // apps/web/app/(dashboard)/consults/[id]/page.tsx
- 'use client'
+// apps/web/app/(dashboard)/consults/[id]/page.tsx
+'use client'
 
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import ConsultDetailPanel, { ConsultDetail } from '@/components/consults/consult-detail-panel'
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage'
- 
+
 // API からの応答（/api/consults/[id]）を既存 UI が要求する ConsultDetail に正規化
 function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
   // サーバー側 route.ts で { consult: {...} } 形式を返す想定
@@ -61,13 +61,13 @@ function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
     choices,
     replyByChoice,
     systemAfter,
-    // selectedChoiceId は表示時に localStorage から復元
-    selectedChoiceId: loadConsultAnswer(src?.id ?? id)?.selectedChoiceId ?? null,
+    // selectedChoiceId は非同期で別途読み込み
+    selectedChoiceId: null,
   }
 }
- 
- export default function ConsultDetailPage() {
-   const params = useParams<{ id: string }>()
+
+export default function ConsultDetailPage() {
+  const params = useParams<{ id: string }>()
   const id = params.id
 
   const [data, setData] = useState<ConsultDetail | null>(null)
@@ -87,9 +87,16 @@ function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
           throw new Error(`failed to load consult (${res.status})`)
         }
         const json = await res.json()
-        if (!aborted) {
-          setData(normalizeToConsultDetail(json, id))
-        }
+        if (aborted) return
+        // 1) 本体を正規化
+        const base = normalizeToConsultDetail(json, id)
+        // 2) 回答の復元（IndexedDBへ移行済: 非同期）
+        const stored = await loadConsultAnswer(base.id)
+        if (aborted) return
+        setData({
+          ...base,
+          selectedChoiceId: stored?.selectedChoiceId ?? null,
+        })
       } catch (e: any) {
         if (!aborted) {
           setError(e?.message ?? 'failed to load consult')
@@ -116,9 +123,9 @@ function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
       aborted = true
     }
   }, [id])
- 
-   return (
-     <div className="min-h-screen bg-background">
+
+  return (
+    <div className="min-h-screen bg-background">
       {loading ? (
         <div className="p-6 text-sm text-muted-foreground">読み込み中…</div>
       ) : error ? (
@@ -127,11 +134,20 @@ function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
         <ConsultDetailPanel
           open
           data={data}
-          onDecide={(choiceId) => saveConsultAnswer(id, choiceId)}
+          onDecide={async (choiceId) => {
+            // 保存（IndexedDB）
+            await saveConsultAnswer(id, choiceId)
+            // 直ちにUIへ反映
+            setData((prev) =>
+              prev
+                ? { ...prev, selectedChoiceId: choiceId ?? null }
+                : prev
+            )
+          }}
         />
       ) : (
         <div className="p-6 text-sm text-muted-foreground">相談が見つかりませんでした。</div>
       )}
-     </div>
-   )
- }
+    </div>
+  )
+}
