@@ -15,6 +15,45 @@ export const SpeechPresetEnum = z.enum([
   'soft',       // やわらかい
 ]);
 
+export const GenderEnum = z.enum([
+  'male',
+  'female',
+  'nonbinary',
+  'other'
+]);
+
+export const OccupationEnum = z.enum([
+  'student',
+  'office',
+  'engineer',
+  'teacher',
+  'parttimer',
+  'freelancer',
+  'unemployed',
+  'other'
+]);
+
+export const FirstPersonEnum = z.enum([
+  '私',
+  '僕',
+  '俺',
+  'うち',
+  '自分'
+]);
+
+export const ActivityTendencyEnum = z.enum([
+  'morning',    // 朝型
+  'normal',     // 普通
+  'night'       // 夜型
+]);
+
+export const sleepProfileSchema = z.object({
+  // 'HH:mm'（24時間表記）。『24:00』は不可、'00:00'に正規化方針
+  bedtime: z.string().regex(/^\d{2}:\d{2}$/),
+  wakeTime: z.string().regex(/^\d{2}:\d{2}$/),
+  prepMinutes: z.number().int().min(0).max(180).default(30),
+});
+
 export const baseEntitySchema = z.object({
   id: z.string().uuid(),
   updated_at: z.string().datetime(),
@@ -42,6 +81,14 @@ export const residentSchema = baseEntitySchema.extend({
   // 0〜100、既定50（中立）
   trustToPlayer: z.number().int().min(0).max(100).default(50),
 
+  gender: GenderEnum.optional(),
+  age: z.number().int().min(0).max(120).optional(),
+  occupation: OccupationEnum.optional(),
+  firstPerson: FirstPersonEnum.optional(),
+  interests: z.array(z.string()).max(20).optional(),
+
+  activityTendency: ActivityTendencyEnum.optional(),
+  sleepProfile: sleepProfileSchema.optional(),
 });
 
 export const relationSchema = baseEntitySchema.extend({

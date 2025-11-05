@@ -7,7 +7,8 @@ type Table =
   | "topic_threads"
   | "notifications"
   | "beliefs"
-  | "feelings";
+  | "feelings"
+  | "residents";
 
 export async function putKV(table: Table, rec: any) {
   const sb = sbServer();

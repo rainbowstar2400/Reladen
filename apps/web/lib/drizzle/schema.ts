@@ -29,6 +29,15 @@ export const relations = pgTable(
     aId: uuid('a_id').notNull(),
     bId: uuid('b_id').notNull(),
     type: relationTypeEnum('type').notNull().default('none'),
+
+    gender: text('gender'),                 // 'male' | 'female' | 'nonbinary' | 'other'
+    age: integer('age'),                    // 0..120 想定
+    occupation: text('occupation'),         // 列挙相当だが text で保存
+    firstPerson: text('first_person'),      // '私'など
+    activityTendency: text('activity_tendency'), // 'morning'|'normal'|'night'
+    interests: jsonb('interests'),          // string[] を想定
+    sleepProfile: jsonb('sleep_profile'),   // { bedtime, wakeTime, prepMinutes }
+
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
     ownerId: uuid('owner_id'),
