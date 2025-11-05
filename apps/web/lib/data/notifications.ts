@@ -6,14 +6,27 @@ import { listLocal, putLocal, getLocal } from '@/lib/db-local';
 import type { NotificationRecord, EventLogStrict } from '@repo/shared/types/conversation';
 import { remoteFetchEventById } from '@/lib/sync/remote-events';
 
+/**
+* 通知の並び順を共通化：
+* - まず occurredAt の降順
+* - 同時刻の場合は updated_at の降順
+*/
+function sortNotifications(items: NotificationRecord[]): NotificationRecord[] {
+  return [...items].sort((a, b) => {
+    const p = (b.occurredAt ?? '').localeCompare(a.occurredAt ?? '');
+    if (p !== 0) return p;
+    return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
+  });
+}
+
 export function useNotifications() {
   return useQuery({
     queryKey: ['notifications'],
     queryFn: async () => {
       const all = (await listLocal('notifications')) as NotificationRecord[];
-      return all
-        .slice()
-        .sort((a, b) => (b.occurredAt?.localeCompare(a.occurredAt) ?? 0));
+      // UI 向けは archived を除外し、共通ソートを使用
+      const filtered = all.filter((n) => n.status !== 'archived');
+      return sortNotifications(filtered);
     },
   });
 }
@@ -56,8 +69,10 @@ export async function fetchEventById(id: string) {
 
 export async function listNotifications(opts?: { limit?: number }): Promise<NotificationRecord[]> {
   const arr = (await listLocal('notifications')) as unknown as NotificationRecord[];
-  const sorted = arr.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
-  return typeof opts?.limit === 'number' ? sorted.slice(0, opts.limit) : sorted;
+  // こちらも archived を除外し、共通ソートへ統一
+  const filtered = arr.filter((n) => n.status !== 'archived');
+  const sorted = sortNotifications(filtered);
+  return (typeof opts?.limit === 'number') ? sorted.slice(0, opts.limit) : sorted;
 }
 
 export async function getUnreadCount(): Promise<number> {
