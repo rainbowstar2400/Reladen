@@ -7,7 +7,7 @@ import { MessageSquare, Cloud, AlertTriangle, Moon } from 'lucide-react';
 import React, { useMemo } from 'react';
 import NotificationsSectionClient from '@/components/notifications/NotificationsSection.client';
 import { Suspense } from 'react';
-import { calcSituation, defaultSleepByTendency } from '@/lib/schedule';
+import { calcSituation, defaultSleepByTendency, type Situation } from '@/lib/schedule';
 import { useEffect, useState } from 'react';
 // （将来の実データ切替用）Resident 型があれば有効化
 // import type { Resident } from '@/types';
@@ -27,7 +27,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 /* -------------------------------------
    状況ラベル & バッジ（active/preparing/sleeping）
 -------------------------------------- */
-type Situation = 'active' | 'preparing' | 'sleeping';
+
 
 function SituationBadge({ situation }: { situation: Situation }) {
   const label =
@@ -58,9 +58,10 @@ function SituationBadge({ situation }: { situation: Situation }) {
 type ResidentLite = {
   id: string;
   name: string;
-  status?: 'sleep' | 'active'; // ← 既存ダミー互換
-  // 将来：activityTendency?: 'morning'|'normal'|'night';
-  // 将来：sleepProfile?: { bedtime: string; wakeTime: string; prepMinutes: number };
+  status?: 'sleep' | 'active'; // ← 既存ダミー互換（データ未整備時のフォールバック用）
+  // 将来（実データ）:
+  activityTendency?: 'morning' | 'normal' | 'night';
+  sleepProfile?: { bedtime: string; wakeTime: string; prepMinutes: number };
 };
 
 function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation }) {
@@ -115,15 +116,17 @@ export default function HomePage() {
   const residentsWithSituation = useMemo(
     () =>
       residents.map((r) => {
-        // ★ 将来ここで calcSituation を使う：
-        // const base = r.sleepProfile
-        //   ?? (r.activityTendency
-        //        ? defaultSleepByTendency(r.activityTendency)
-        //        : defaultSleepByTendency('normal'));
-        // const sit = calcSituation(now, base);
-
-        // いまは互換：ダミー status から置換
-        const sit: Situation = r.status === 'sleep' ? 'sleeping' : 'active';
+        // ★ 実データがあれば calcSituation を使用。無ければ従来のダミー status にフォールバック。
+        let sit: Situation;
+        if (r.sleepProfile || r.activityTendency) {
+          const base =
+            r.sleepProfile ??
+            defaultSleepByTendency(r.activityTendency ?? 'normal');
+          sit = calcSituation(now, base);
+        } else {
+          // 既存ダミー互換（sleep → sleeping / それ以外 → active）
+          sit = r.status === 'sleep' ? 'sleeping' : 'active';
+        }
         return { r, sit };
       }),
     [residents, now]
