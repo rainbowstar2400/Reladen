@@ -162,3 +162,8 @@ export async function syncEventAndNotificationToRemote(ev: EventLogStrict, notif
     console.warn('remote sync failed', e);
   }
 }
+
+export async function loadConversationEventById(eventId: string): Promise<any | null> {
+  const arr = (await listLocal('events')) as any[];
+  return arr.find((e) => e.id === eventId) ?? null;
+}
