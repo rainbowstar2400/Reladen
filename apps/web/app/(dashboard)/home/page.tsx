@@ -6,7 +6,6 @@ import { MessageSquare, Cloud, AlertTriangle, Moon } from 'lucide-react'
 import React from 'react'
 import NotificationsSectionClient from '@/components/notifications/NotificationsSection.client';
 import { Suspense } from 'react';
-import NotificationsBell from '@/components/notifications/NotificationsBell';
 
 // 見出し（簡易罫線で雰囲気再現）
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -75,7 +74,6 @@ export default function HomePage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold">ホーム</h1>
         <div className="group relative">
-          <NotificationsBell />
         </div>
       </div>
       <div className="space-y-6">
