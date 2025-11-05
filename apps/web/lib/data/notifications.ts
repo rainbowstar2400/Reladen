@@ -53,3 +53,22 @@ export async function fetchEventById(id: string) {
   } as any);
   return await getLocal('events', id);
 }
+
+export async function listNotifications(opts?: { limit?: number }): Promise<NotificationRecord[]> {
+  const arr = (await listLocal('notifications')) as unknown as NotificationRecord[];
+  const sorted = arr.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
+  return typeof opts?.limit === 'number' ? sorted.slice(0, opts.limit) : sorted;
+}
+
+export async function getUnreadCount(): Promise<number> {
+  const arr = (await listLocal('notifications')) as unknown as NotificationRecord[];
+  return arr.filter((n) => n.status === 'unread').length;
+}
+
+export async function markAsRead(notificationId: string): Promise<void> {
+  const arr = (await listLocal('notifications')) as unknown as NotificationRecord[];
+  const found = arr.find((n) => n.id === notificationId);
+  if (!found) return;
+  const now = new Date().toISOString();
+  await putLocal('notifications', { ...found, status: 'read', updated_at: now });
+}

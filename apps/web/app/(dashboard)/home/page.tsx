@@ -70,35 +70,42 @@ export default function HomePage() {
   ] as const
 
   return (
-    <div className="space-y-6">
-      {/* お知らせ（実データ接続 + クリックで会話詳細） */}
-      <section>
-        <Suspense fallback={
-          <div className="rounded-2xl border bg-white p-4 text-sm text-gray-500">
-            お知らせを読み込み中…
-          </div>
-        }>
-          <NotificationsSectionClient />
-        </Suspense>
-      </section>
-
-      {/* みんなの様子（将来は resident 全件を map） */}
-      <SectionTitle>みんなの様子</SectionTitle>
-      <div className="overflow-x-auto">
-        <div className="flex gap-4 pb-2">
-          {residents.map((r) => (
-            <ResidentTile key={r.id} r={r} />
-          ))}
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-semibold">ホーム</h1>
+        <div className="group relative">
         </div>
       </div>
+      <div className="space-y-6">
+        {/* お知らせ（実データ接続 + クリックで会話詳細） */}
+        <section>
+          <Suspense fallback={
+            <div className="rounded-2xl border bg-white p-4 text-sm text-gray-500">
+              お知らせを読み込み中…
+            </div>
+          }>
+            <NotificationsSectionClient />
+          </Suspense>
+        </section>
 
-      {/* 今日の新聞（プレースホルダ） */}
-      <SectionTitle>今日の新聞</SectionTitle>
-      <Card>
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          ここにニュースカードを追加予定
-        </CardContent>
-      </Card>
+        {/* みんなの様子（将来は resident 全件を map） */}
+        <SectionTitle>みんなの様子</SectionTitle>
+        <div className="overflow-x-auto">
+          <div className="flex gap-4 pb-2">
+            {residents.map((r) => (
+              <ResidentTile key={r.id} r={r} />
+            ))}
+          </div>
+        </div>
+
+        {/* 今日の新聞（プレースホルダ） */}
+        <SectionTitle>今日の新聞</SectionTitle>
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            ここにニュースカードを追加予定
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
