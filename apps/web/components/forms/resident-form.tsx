@@ -11,6 +11,7 @@ import { useUpsertResident } from '@/lib/data/residents';
 import { useMemo, useState, useEffect } from 'react';
 import { QUESTIONS, calculateMbti, type Answer } from '@/lib/mbti';
 import { useRouter } from 'next/navigation';
+import { defaultSleepByTendency } from '@/lib/schedule';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
 const MBTI_TYPES = [
@@ -361,20 +362,273 @@ export function ResidentForm({
             />
           ))}
         </div>
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">プレイヤーへの信頼度</span>
-            <span className="text-sm tabular-nums">
-              {(form.getValues('trustToPlayer') ?? 50)}/100
-            </span>
-          </div>
-          <div className="h-2 w-full rounded bg-muted">
-            <div
-              className="h-2 rounded bg-foreground/70"
-              style={{ width: `${(form.getValues('trustToPlayer') ?? 50)}%` }}
+
+        {/* 背景情報 */}
+        <div className="space-y-4 pt-2 border-t">
+          <h3 className="text-sm font-semibold">背景情報</h3>
+
+          {/* 性別 */}
+          <FormField
+            control={form.control}
+            name="gender"
+            render={({ field }) => {
+              const v = field.value ?? '';
+              return (
+                <FormItem className="space-y-2">
+                  <FormLabel>性別</FormLabel>
+                  <FormControl>
+                    <select
+                      className="w-full rounded border px-3 py-2"
+                      name={field.name}
+                      ref={field.ref}
+                      value={v}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      onBlur={field.onBlur}
+                    >
+                      <option value="">（未設定）</option>
+                      <option value="male">男性</option>
+                      <option value="female">女性</option>
+                      <option value="nonbinary">ノンバイナリ</option>
+                      <option value="other">その他</option>
+                    </select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+
+          {/* 年齢 */}
+          <FormField
+            control={form.control}
+            name="age"
+            render={({ field }) => (
+              <FormItem className="space-y-2">
+                <FormLabel>年齢</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={120}
+                    placeholder="例：20"
+                    value={field.value ?? ''}
+                    onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                    onBlur={field.onBlur}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* 職業 */}
+          <FormField
+            control={form.control}
+            name="occupation"
+            render={({ field }) => {
+              const v = field.value ?? '';
+              return (
+                <FormItem className="space-y-2">
+                  <FormLabel>職業</FormLabel>
+                  <FormControl>
+                    <select
+                      className="w-full rounded border px-3 py-2"
+                      name={field.name}
+                      ref={field.ref}
+                      value={v}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      onBlur={field.onBlur}
+                    >
+                      <option value="">（未設定）</option>
+                      <option value="student">学生</option>
+                      <option value="office">会社員</option>
+                      <option value="engineer">エンジニア</option>
+                      <option value="teacher">教員</option>
+                      <option value="parttimer">パート・アルバイト</option>
+                      <option value="freelancer">フリーランス</option>
+                      <option value="unemployed">無職</option>
+                      <option value="other">その他</option>
+                    </select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+
+          {/* 一人称（ユーザー指定：私／僕／俺／うち／自分） */}
+          <FormField
+            control={form.control}
+            name="firstPerson"
+            render={({ field }) => {
+              const v = field.value ?? '';
+              return (
+                <FormItem className="space-y-2">
+                  <FormLabel>一人称</FormLabel>
+                  <FormControl>
+                    <select
+                      className="w-full rounded border px-3 py-2"
+                      name={field.name}
+                      ref={field.ref}
+                      value={v}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      onBlur={field.onBlur}
+                    >
+                      <option value="">（未設定）</option>
+                      <option value="私">私</option>
+                      <option value="僕">僕</option>
+                      <option value="俺">俺</option>
+                      <option value="うち">うち</option>
+                      <option value="自分">自分</option>
+                    </select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+
+          {/* 興味関心（カンマ区切り） */}
+          <FormField
+            control={form.control}
+            name="interestsText"
+            render={({ field }) => (
+              <FormItem className="space-y-2">
+                <FormLabel>興味・関心（カンマ区切り）</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="例：音楽, 読書, カフェ"
+                    value={field.value ?? ''}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    onBlur={field.onBlur}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* 活動傾向と睡眠 */}
+        <div className="space-y-4 pt-2 border-t">
+          <h3 className="text-sm font-semibold">活動傾向と睡眠</h3>
+
+          {/* 活動傾向 */}
+          <FormField
+            control={form.control}
+            name="activityTendency"
+            render={({ field }) => {
+              const v = field.value ?? '';
+              return (
+                <FormItem className="space-y-2">
+                  <FormLabel>活動傾向（クロノタイプ）</FormLabel>
+                  <FormControl>
+                    <select
+                      className="w-full rounded border px-3 py-2"
+                      name={field.name}
+                      ref={field.ref}
+                      value={v}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      onBlur={field.onBlur}
+                    >
+                      <option value="">（未設定）</option>
+                      <option value="morning">朝型</option>
+                      <option value="normal">通常</option>
+                      <option value="night">夜型</option>
+                    </select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+
+          {/* 任意：睡眠プロファイル（上書き） */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <FormField
+              control={form.control}
+              name="sleepBedtime"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel>就寝時刻（任意・HH:mm）</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="例：23:00"
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      onBlur={field.onBlur}
+                      inputMode="numeric"
+                      pattern="^[0-2][0-9]:[0-5][0-9]$"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="sleepWakeTime"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel>起床時刻（任意・HH:mm）</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="例：07:30"
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      onBlur={field.onBlur}
+                      inputMode="numeric"
+                      pattern="^[0-2][0-9]:[0-5][0-9]$"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="sleepPrepMinutes"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel>就寝準備（分・任意）</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={180}
+                      placeholder="例：30"
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                      onBlur={field.onBlur}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
           </div>
+
+          {/* 既定値プレビュー（sleepProfile未入力時に、活動傾向からの既定を見せるだけ） */}
+          {(() => {
+            const t = form.watch('activityTendency') as ('morning'|'normal'|'night'|undefined);
+            const bed = form.watch('sleepBedtime');
+            const wake = form.watch('sleepWakeTime');
+            const prep = form.watch('sleepPrepMinutes');
+
+            // sleepProfileを未入力で activityTendency が選ばれているときだけ表示
+            if (t && !bed && !wake) {
+              const def = defaultSleepByTendency(t);
+              return (
+                <p className="text-xs text-muted-foreground">
+                  既定の睡眠帯（{t === 'morning' ? '朝型' : t === 'night' ? '夜型' : '通常'}）：
+                  就寝 <span className="tabular-nums">{def.bedtime}</span>／起床 <span className="tabular-nums">{def.wakeTime}</span>（就寝準備 {def.prepMinutes}分）
+                </p>
+              );
+            }
+            return null;
+          })()}
         </div>
+
         <div className="flex justify-end gap-2">
           <Button
             type="button"
