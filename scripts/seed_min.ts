@@ -37,11 +37,36 @@ type Resident = {
   updated_at?: string;
   deleted?: boolean;
 };
+type Relation = {
+  id?: string;
+  a: string;         // 住人ID（旧IDの可能性あり）
+  b: string;         // 住人ID（旧IDの可能性あり）
+  label?: string | null;
+  updated_at?: string;
+  deleted?: boolean;
+};
+type Feeling = {
+  id?: string;
+  from: string;      // 住人ID（旧IDの可能性あり）
+  to: string;        // 住人ID（旧IDの可能性あり）
+  label?: string | null;
+  score?: number | null;
+  updated_at?: string;
+  deleted?: boolean;
+};
+type EventRow = {
+  id?: string;
+  kind: string;                // 'consult' | 'conversation' | ...
+  payload?: any;
+  occurredAt?: string | null;  // timestamptz
+  updated_at?: string;
+  deleted?: boolean;
+};
 type SeedData = {
   residents: Resident[];
-  relations?: any[];
-  feelings?: any[];
-  events?: any[];
+  relations?: Relation[];
+  feelings?: Feeling[];
+  events?: EventRow[];
 };
 
 let data: SeedData;
@@ -74,7 +99,94 @@ for (const r of data.residents) {
   r.deleted = false;
 }
 
-// 8) いったん住人だけ upsert（5人想定）
+// 8) 住人以外の参照IDを idMap で置換する補助
+function mapId(oldOrNew: string): string {
+  if (!oldOrNew) return oldOrNew;
+  const mapped = idMap.get(oldOrNew);
+  return mapped ?? oldOrNew;
+}
+
+function ensureUuid(id?: string): string {
+  return id && isUUID(id) ? id : randomUUID();
+}
+
+function normalizeRelations(input?: Relation[]): Relation[] {
+  if (!Array.isArray(input)) return [];
+  const now = new Date().toISOString();
+  return input.map((r) => ({
+    id: ensureUuid(r.id),
+    a: mapId(r.a),
+    b: mapId(r.b),
+    label: r.label ?? null,
+    updated_at: now,
+    deleted: false,
+  }));
+}
+
+function normalizeFeelings(input?: Feeling[]): Feeling[] {
+  if (!Array.isArray(input)) return [];
+  const now = new Date().toISOString();
+  return input.map((f) => ({
+    id: ensureUuid(f.id),
+    from: mapId(f.from),
+    to: mapId(f.to),
+    label: f.label ?? null,
+    score: typeof f.score === 'number' ? f.score : null,
+    updated_at: now,
+    deleted: false,
+  }));
+}
+
+function normalizeEvents(input?: EventRow[]): EventRow[] {
+  if (!Array.isArray(input)) return [];
+  const now = new Date().toISOString();
+  return input.map((e) => {
+    // payload の中に住人IDが含まれる一般的な場所（任意項目）も軽く置換を試みる
+    const p = e.payload ?? {};
+    // 例: participants: ['A','B'] / speaker: 'C' / residentId: 'A' などを置換
+    if (Array.isArray(p.participants)) {
+      p.participants = p.participants.map((x: any) =>
+        typeof x === 'string' ? mapId(x) : x
+      );
+    }
+    if (typeof p.speaker === 'string') {
+      p.speaker = mapId(p.speaker);
+    }
+    if (typeof p.residentId === 'string') {
+      p.residentId = mapId(p.residentId);
+    }
+    // choices はそのまま通す（構造はアプリ側で解釈）
+
+    return {
+      id: ensureUuid(e.id),
+      kind: e.kind,
+      payload: p,
+      occurredAt: e.occurredAt ?? now,
+      updated_at: now,
+      deleted: false,
+    };
+  });
+}
+
+// 9) upsert 共通ヘルパ
+async function upsertOrExit<T extends object>(
+  table: string,
+  rows: T[],
+  onConflict = 'id'
+) {
+  if (!rows.length) {
+    console.log(`${table}: データ無しのためスキップ`);
+    return;
+  }
+  const { error } = await supabase.from(table).upsert(rows as any, { onConflict });
+  if (error) {
+    console.error(`${table} のアップサートに失敗しました:`, error.message);
+    process.exit(1);
+  }
+  console.log(`✓ ${table} upsert 完了 (${rows.length}件)`);
+}
+
+// 10) シード本体
 async function main() {
   console.log(`residents を upsert します（${data.residents.length}件）`);
   const { error } = await supabase
@@ -87,8 +199,17 @@ async function main() {
   }
   console.log('住人 upsert 完了');
 
-  // relations/feelings/events は今はスキップ（後で追加する想定）
-  console.log('relations / feelings / events は今回は投入していません');
+  // relations / feelings / events も投入
+  const relations = normalizeRelations(data.relations);
+  await upsertOrExit('relations', relations);
+
+  const feelings = normalizeFeelings(data.feelings);
+  await upsertOrExit('feelings', feelings);
+
+  const events = normalizeEvents(data.events);
+  await upsertOrExit('events', events);
+
+  console.log('✓ seed_min: すべての upsert が完了しました');
 }
 
 main().catch((e) => {
