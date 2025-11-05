@@ -11,7 +11,6 @@ import { putLocal, listLocal, getLocal } from '@/lib/db-local';
 import { newId } from '@/lib/newId';
 import { remoteUpsertEvent, remoteUpsertNotification } from '@/lib/sync/remote-events';
 
-
 import type {
   EventLogStrict,
   NotificationRecord,
@@ -29,8 +28,8 @@ export type ConversationPayloadStrict = {
     qualityHints?: { [k: string]: unknown };
   };
   deltas: {
-    aToB: { favor: number; impression: number };
-    bToA: { favor: number; impression: number };
+    aToB: { favor: number; impression: string };
+    bToA: { favor: number; impression: string };
   };
   systemLine: string;
   topic?: string;
@@ -43,6 +42,85 @@ function isConversationPayload(p: unknown): p is ConversationPayloadStrict {
     && Array.isArray(g.participants)
     && g.participants.length === 2
     && Array.isArray(g.lines);
+}
+
+/**
+ * 会話イベントを JST の「日付」単位でグルーピングして返す。
+ * @param opts from/to: ISO 文字列（JST 日付キーの後段フィルタにも使える）。limitDays: 直近 N 日に絞る簡易オプション。
+ */
+export async function listConversationEventsByDate(opts?: {
+  from?: string;   // ISO
+  to?: string;     // ISO
+  limitDays?: number;
+}): Promise<ConversationDayGroup[]> {
+  const all = (await listLocal('events')) as Array<EventLogStrict>;
+
+  // 1) 会話イベントのみ
+  let convs = all
+    .filter((e) => e?.kind === 'conversation' && isConversationPayload(e?.payload));
+
+  // 2) 期間フィルタ（updated_at ベース / ISO）
+  const fromTs = opts?.from ? Date.parse(opts.from) : undefined;
+  const toTs   = opts?.to   ? Date.parse(opts.to)   : undefined;
+
+  convs = convs.filter((e) => {
+    const iso = (e as any).updated_at as string | undefined;
+    if (!iso) return false;
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return false;
+    if (fromTs && t < fromTs) return false;
+    if (toTs && t > toTs) return false;
+    return true;
+  });
+
+  // 3) 直近N日で絞る（簡易）
+  if (opts?.limitDays && opts.limitDays > 0) {
+    const now = Date.now();
+    const span = opts.limitDays * 86400000;
+    convs = convs.filter((e) => {
+      const iso = (e as any).updated_at as string | undefined;
+      if (!iso) return false;
+      const t = Date.parse(iso);
+      return Number.isFinite(t) && (now - t) <= span;
+    });
+  }
+
+  // 4) 変換 & グルーピング
+  const byDate = new Map<string, ConversationDayGroup>();
+
+  for (const ev of convs) {
+    const iso = (ev as any).updated_at as string; // persist 側で必ず入る想定
+    const p = ev.payload as ConversationPayloadStrict;
+
+    const { dateKey, dateLabel, weekday, timeLabel } = toJstDateKey(iso);
+
+    const item: ConversationListItem = {
+      id: (ev as any).id,
+      threadId: p.threadId,
+      participants: p.participants,
+      timeISO: iso,
+      timeLabel,
+      systemLine: p.systemLine,
+      topic: p.topic,
+      deltas: p.deltas, // impression は string に型修正済み
+    };
+
+    if (!byDate.has(dateKey)) {
+      byDate.set(dateKey, { dateKey, dateLabel, weekday, items: [item] });
+    } else {
+      byDate.get(dateKey)!.items.push(item);
+    }
+  }
+
+  // 5) 並び替え：日付降順 → 同日の items は時刻降順
+  const groups = Array.from(byDate.values())
+    .map((g) => ({
+      ...g,
+      items: g.items.sort((a, b) => b.timeISO.localeCompare(a.timeISO)),
+    }))
+    .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+
+  return groups;
 }
 
 /** Notification を db-local へ入れる際、BaseEntity の deleted を付与 */
@@ -167,3 +245,41 @@ export async function loadConversationEventById(eventId: string): Promise<any | 
   const arr = (await listLocal('events')) as any[];
   return arr.find((e) => e.id === eventId) ?? null;
 }
+
+export type ConversationListItem = {
+  id: string;
+  threadId: string;
+  participants: [string, string];
+  timeISO: string;        // 例: "2025-11-05T10:23:00.000Z"（元データの updated_at）
+  timeLabel: string;      // 例: "10:23"
+  systemLine?: string;    // "SYSTEM: ..."（存在すれば）
+  topic?: string;         // ある場合のみ
+  deltas: {
+    aToB: { favor: number; impression: string };
+    bToA: { favor: number; impression: string };
+  };
+};
+
+export type ConversationDayGroup = {
+  dateKey: string;        // "2025-11-05"（JST基準）
+  dateLabel: string;      // "2025/11/05"
+  weekday: string;        // "水"
+  items: ConversationListItem[];
+};
+
+function toJstDateKey(iso: string): { dateKey: string; dateLabel: string; weekday: string; timeLabel: string } {
+  const d = new Date(iso);
+
+  const dateFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const weekdayFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', weekday: 'short' });
+  const timeFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
+
+  const [y, m, day] = dateFmt.format(d).split('/');   // "2025/11/05"
+  const dateLabel = `${y}/${m}/${day}`;
+  const dateKey = `${y}-${m}-${day}`;                 // "2025-11-05"
+  const weekday = weekdayFmt.format(d);               // "水"
+  const timeLabel = timeFmt.format(d);                // "10:23"
+
+  return { dateKey, dateLabel, weekday, timeLabel };
+}
+
