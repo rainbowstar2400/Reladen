@@ -4,33 +4,29 @@ import * as React from 'react';
 
 type FavorDelta = number;
 type ImpressionLabel = 'dislike' | 'awkward' | 'none' | 'curious' | 'like?' | 'like' | string;
-
 type Variant = 'favor' | 'impression';
 
 export type DeltaChipProps = {
   variant: Variant;
   value: FavorDelta | ImpressionLabel;
-  /** 小さめ表示にする（行間を詰める） */
   size?: 'sm' | 'md';
-  /** ツールチップ用の title（未指定なら自動生成） */
   title?: string;
-  /** className 追加（レイアウト側で余白を調整したい場合に） */
   className?: string;
 };
 
-/** 符号付き数値のフォーマット（+1 / -1 / ±0） */
-function formatFavor(n: number): string {
-  if (n > 0) return `+${n}`;
-  if (n < 0) return `${n}`;
-  return '±0';
+/** 好感度変化を↑↓だけで表示 */
+function formatFavorSymbol(n: number): string | null {
+  if (n > 0) return '↑';
+  if (n < 0) return '↓';
+  return null; // ← 変化なしの場合は非表示
 }
 
-/** 印象ラベル → 表示名（UIラベル） */
+/** 印象ラベル → 表示名 */
 function labelImpression(s: ImpressionLabel): string {
   switch (s) {
     case 'dislike': return '嫌い';
     case 'awkward': return '気まずい';
-    case 'none':    return '→';
+    case 'none':    return 'なし';
     case 'curious': return '気になる';
     case 'like?':   return '好きかも';
     case 'like':    return '好き';
@@ -38,14 +34,12 @@ function labelImpression(s: ImpressionLabel): string {
   }
 }
 
-/** favor の色付け */
+/** 色定義 */
 function colorFavor(n: number): string {
   if (n > 0) return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
   if (n < 0) return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200';
-  return 'bg-gray-50 text-gray-600 ring-1 ring-gray-200';
+  return '';
 }
-
-/** impression の色付け */
 function colorImpression(s: ImpressionLabel): string {
   switch (s) {
     case 'dislike': return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200';
@@ -58,36 +52,33 @@ function colorImpression(s: ImpressionLabel): string {
   }
 }
 
-/** title の自動生成 */
-function autoTitle(variant: Variant, v: FavorDelta | ImpressionLabel): string {
-  if (variant === 'favor') return `好感度: ${formatFavor(v as number)}`;
-  return `印象: ${labelImpression(v as ImpressionLabel)}`;
-}
-
-/**
- * DeltaChip: 好感度Δ / 印象ラベルを小さなチップで表示する。
- * - 依存を増やさず Tailwind のみで視認性を確保
- * - 後からアイコン・アニメを載せられるよう構造はシンプルに
- */
 export default function DeltaChip(props: DeltaChipProps) {
   const { variant, value, size = 'md', title, className } = props;
 
-  const isFavor = variant === 'favor';
-  const base =
-    'inline-flex items-center rounded-full px-2 py-[2px] leading-none select-none ' +
-    'text-xs font-medium transition-colors';
+  // --- 「好感度」用: 変化なしならレンダーしない ---
+  if (variant === 'favor') {
+    const sym = formatFavorSymbol(value as number);
+    if (!sym) return null; // ★ 表示しない
+    return (
+      <span
+        className={`inline-flex items-center rounded-full px-2 py-[2px] leading-none select-none text-xs font-medium ${colorFavor(value as number)} ${className ?? ''}`}
+        title={title ?? (value as number > 0 ? '好感度が上昇' : '好感度が下降')}
+      >
+        {sym}
+      </span>
+    );
+  }
 
-  const sizeCls = size === 'sm' ? 'text-[11px] px-1.5 py-[1px]' : '';
-  const palette = isFavor ? colorFavor(value as number) : colorImpression(value as ImpressionLabel);
-  const content = isFavor ? formatFavor(value as number) : labelImpression(value as ImpressionLabel);
+  // --- 「印象」用（常に表示） ---
+  const label = labelImpression(value as ImpressionLabel);
+  const palette = colorImpression(value as ImpressionLabel);
 
   return (
     <span
-      className={`${base} ${sizeCls} ${palette} ${className ?? ''}`}
-      title={title ?? autoTitle(variant, value)}
-      aria-label={title ?? autoTitle(variant, value)}
+      className={`inline-flex items-center rounded-full px-2 py-[2px] leading-none select-none text-xs font-medium ${palette} ${className ?? ''}`}
+      title={title ?? `印象: ${label}`}
     >
-      {content}
+      {label}
     </span>
   );
 }
