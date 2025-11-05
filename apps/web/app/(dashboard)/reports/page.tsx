@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { listConversationEventsByDate } from '@/lib/repos/conversation-repo';
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度'
 type ChangeKindFilter = ChangeKind | ''
@@ -23,20 +24,20 @@ const KINDS: ChangeKind[] = ['好感度', '印象', '関係', '信頼度']
 // 変化種別ごとの色（Tailwind）
 const CHIP_CLASS: Record<ChangeKind, string> = {
   '好感度': 'bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 dark:bg-rose-900/30 dark:text-rose-300 dark:hover:bg-rose-900/60 dark:hover:text-rose-200',
-  '印象':   'bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-800 dark:bg-sky-900/30 dark:text-sky-300 dark:hover:bg-sky-900/60 dark:hover:text-sky-200',
-  '関係':   'bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/60 dark:hover:text-amber-200',
+  '印象': 'bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-800 dark:bg-sky-900/30 dark:text-sky-300 dark:hover:bg-sky-900/60 dark:hover:text-sky-200',
+  '関係': 'bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/60 dark:hover:text-amber-200',
   '信頼度': 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/60 dark:hover:text-emerald-200',
 }
 
 function fmtDate(d: Date) {
-  const f = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', year:'numeric', month:'2-digit', day:'2-digit', weekday:'short' })
+  const f = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })
   const p = f.formatToParts(d)
-  const get = (t: string) => p.find(x=>x.type===t)?.value ?? ''
-  return { y:get('year'), m:get('month'), d:get('day'), wd:get('weekday') }
+  const get = (t: string) => p.find(x => x.type === t)?.value ?? ''
+  return { y: get('year'), m: get('month'), d: get('day'), wd: get('weekday') }
 }
 function fmtTime(iso: string) {
   const d = new Date(iso)
-  const f = new Intl.DateTimeFormat('ja-JP', { timeZone:'Asia/Tokyo', hour:'2-digit', minute:'2-digit', hour12:false })
+  const f = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false })
   return f.format(d)
 }
 
@@ -66,7 +67,7 @@ export default function ReportsPage() {
   // ---- フィルタ状態（即時反映） ----
   const today = useMemo(() => {
     const d = new Date()
-    const { y,m,d:dd } = fmtDate(d)
+    const { y, m, d: dd } = fmtDate(d)
     return `${y}-${m}-${dd}` // input[type=date]
   }, [])
   const [date, setDate] = useState(today)
@@ -79,55 +80,81 @@ export default function ReportsPage() {
     setCharB('')
     setKind('')
   }
+  // ---- 実データ（会話）をロード → ReportItem[] に変換 ----
+  const [convItems, setConvItems] = useState<ReportItem[]>([]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const groups = await listConversationEventsByDate({ limitDays: 14 });
+        const g = groups.find(g => g.dateKey === date);
+        const items: ReportItem[] = (g?.items ?? []).map(it => {
+          const chips: ReportItem['chips'] = [];
+          const favorAB = it.deltas.aToB.favor;
+          const favorBA = it.deltas.bToA.favor;
+          if (favorAB > 0) chips.push({ kind: '好感度', label: ` ${it.participants[0]}→${it.participants[1]}：↑` });
+          if (favorAB < 0) chips.push({ kind: '好感度', label: ` ${it.participants[0]}→${it.participants[1]}：↓` });
+          if (favorBA > 0) chips.push({ kind: '好感度', label: ` ${it.participants[1]}→${it.participants[0]}：↑` });
+          if (favorBA < 0) chips.push({ kind: '好感度', label: ` ${it.participants[1]}→${it.participants[0]}：↓` });
+
+          const toLabel = (s: string) =>
+            s === 'none' ? '→' :
+              s === 'like' ? '好き' :
+                s === 'like?' ? '好きかも' :
+                  s === 'curious' ? '気になる' :
+                    s === 'awkward' ? '気まずい' :
+                      s === 'dislike' ? '嫌い' : s;
+
+          chips.push({ kind: '印象', label: ` ${it.participants[0]}→${it.participants[1]}：「${toLabel(it.deltas.aToB.impression)}」` });
+          chips.push({ kind: '印象', label: ` ${it.participants[1]}→${it.participants[0]}：「${toLabel(it.deltas.bToA.impression)}」` });
+
+          return {
+            id: it.id,
+            at: it.timeISO,
+            text: it.systemLine || `${it.participants[0]} と ${it.participants[1]} が会話した。`,
+            category: 'conversation',
+            chips,
+            a: it.participants[0],
+            b: it.participants[1],
+          };
+        });
+        if (alive) setConvItems(items);
+      } catch (e) {
+        console.error('reports: load conversations failed', e);
+        if (alive) setConvItems([]);
+      }
+    })();
+    return () => { alive = false };
+  }, [date]);
+
+  // ---- 相談ダミー設定 ----
+  const INCLUDE_DUMMY_CONSULT = true;
+  const dummyConsults: ReportItem[] = INCLUDE_DUMMY_CONSULT ? [{
+    id: 'dummy-consult-1',
+    at: `${date}T22:50:00+09:00`,
+    text: 'C から相談を受けた。',
+    category: 'consult',
+    chips: [{ kind: '信頼度', label: ' C：↑' }],
+    a: 'C',
+  }] : [];
 
   // ---- ダミーデータ（将来 useEvents() に置換）----
-  const allCharacters = ['A','B','C']
-  const ALL: ReportItem[] = [
-    {
-      id:'1',
-      at:`${date}T23:15:00+09:00`,
-      text:'A と C がなにやら話している。',
-      category: 'conversation',
-      chips:[
-        { kind:'好感度', label:'A→C：↑' },
-        { kind:'好感度', label:'C→A：↑' },
-        { kind:'印象',   label:'A→C：「好きかも」' },
-        { kind:'関係',   label:'A-C：「友達」' },
-      ],
-      a:'A', b:'C'
-    },
-    {
-      id:'2',
-      at:`${date}T22:50:00+09:00`,
-      text:'C から相談を受けた。',
-      category: 'consult',
-      chips:[
-        { kind:'信頼度', label:'C：↑' },
-      ],
-      a:'C'
-    },
-    {
-      id:'3',
-      at:`${date}T22:30:00+09:00`,
-      text:'A と B が雑談している。',
-      category: 'conversation',
-      chips:[
-        { kind:'好感度', label:'A→B：↑' },
-        { kind:'好感度', label:'B→A：↑' },
-        { kind:'印象',   label:'A→B：「なし」' },
-      ],
-      a:'A', b:'B'
-    },
-  ]
+  const allCharacters = ['A', 'B', 'C'];
+
+  // 実データ + 相談ダミー
+  const ALL: ReportItem[] = useMemo(() => {
+    return [...convItems, ...dummyConsults];
+  }, [convItems, dummyConsults]);
+
 
   // ---- フィルタ＆ソート ----
   const filtered = useMemo(() => {
     const items = ALL
       .filter(it => it.at.startsWith(date))
-      .filter(it => (charA ? (it.a===charA || it.b===charA) : true))
-      .filter(it => (charB ? (it.a===charB || it.b===charB) : true))
+      .filter(it => (charA ? (it.a === charA || it.b === charA) : true))
+      .filter(it => (charB ? (it.a === charB || it.b === charB) : true))
       .filter(it => (kind === '' ? true : it.chips?.some(chip => chip.kind === kind)))
-      .sort((a,b) => (a.at < b.at ? 1 : -1)) // 新しい→古い
+      .sort((a, b) => (a.at < b.at ? 1 : -1)) // 新しい→古い
     return items
   }, [ALL, date, charA, charB, kind])
 
@@ -144,11 +171,11 @@ export default function ReportsPage() {
   const [page, setPage] = useState(1)
   useEffect(() => setPage(1), [date, charA, charB, kind])
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
-  const start = (page-1)*pageSize
-  const pageItems = filtered.slice(start, start+pageSize)
+  const start = (page - 1) * pageSize
+  const pageItems = filtered.slice(start, start + pageSize)
 
   const d = new Date(`${date}T00:00:00+09:00`)
-  const { y,m,d:dd, wd } = fmtDate(d)
+  const { y, m, d: dd, wd } = fmtDate(d)
 
   return (
     <div className="space-y-6">
@@ -157,22 +184,22 @@ export default function ReportsPage() {
         <CardContent className="flex flex-wrap items-center gap-3 py-3">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">日付：</span>
-            <input type="date" value={date} onChange={e=>setDate(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-background"/>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-background" />
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">キャラクター：</span>
-            <select value={charA} onChange={e=>setCharA(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-background">
+            <select value={charA} onChange={e => setCharA(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-background">
               <option value="">—</option>
               {allCharacters.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <select value={charB} onChange={e=>setCharB(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-background">
+            <select value={charB} onChange={e => setCharB(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-background">
               <option value="">—</option>
               {allCharacters.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">変化種別：</span>
-            <select value={kind} onChange={e=>setKind(e.target.value as ChangeKindFilter)} className="rounded-md border px-2 py-1 text-sm bg-background">
+            <select value={kind} onChange={e => setKind(e.target.value as ChangeKindFilter)} className="rounded-md border px-2 py-1 text-sm bg-background">
               <option value="">—</option>
               {KINDS.map(k => <option key={k} value={k}>{k}</option>)}
             </select>
@@ -246,17 +273,17 @@ export default function ReportsPage() {
           {/* ページネーション */}
           <div className="flex items-center justify-center gap-2 pt-4">
             {page > 1 && (
-              <Button variant="outline" size="icon" onClick={()=>setPage(page-1)}>
+              <Button variant="outline" size="icon" onClick={() => setPage(page - 1)}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
             )}
-            {Array.from({length: totalPages}).map((_,i)=>(
-              <Button key={i} variant={page===i+1?'secondary':'outline'} size="icon" onClick={()=>setPage(i+1)}>
-                {i+1}
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <Button key={i} variant={page === i + 1 ? 'secondary' : 'outline'} size="icon" onClick={() => setPage(i + 1)}>
+                {i + 1}
               </Button>
             ))}
             {page < totalPages && (
-              <Button variant="outline" size="icon" onClick={()=>setPage(page+1)}>
+              <Button variant="outline" size="icon" onClick={() => setPage(page + 1)}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             )}
