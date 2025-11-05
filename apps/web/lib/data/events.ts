@@ -56,15 +56,3 @@ export function useAddEvent() {
     },
   });
 }
-
-mutationFn: async (input: Partial<EventLogStrict>) => {
-  // Base を含めた strict 版でパース（失敗＝データ不正を確実に発見）
-  const parsed = eventSchemaStrict.parse({
-    ...input,
-    id: input.id ?? newId(),
-    updated_at: input.updated_at ?? new Date().toISOString(),
-    deleted: input.deleted ?? false,
-  });
-
-  return putLocal('events', parsed);
-}
