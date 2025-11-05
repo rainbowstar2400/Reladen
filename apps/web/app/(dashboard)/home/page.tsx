@@ -8,6 +8,7 @@ import React, { useMemo } from 'react';
 import NotificationsSectionClient from '@/components/notifications/NotificationsSection.client';
 import { Suspense } from 'react';
 import { calcSituation, defaultSleepByTendency } from '@/lib/schedule';
+import { useEffect, useState } from 'react';
 // （将来の実データ切替用）Resident 型があれば有効化
 // import type { Resident } from '@/types';
 
@@ -33,15 +34,15 @@ function SituationBadge({ situation }: { situation: Situation }) {
     situation === 'sleeping'
       ? '就寝中'
       : situation === 'preparing'
-      ? '就寝準備中'
-      : '活動中';
+        ? '就寝準備中'
+        : '活動中';
 
   const style =
     situation === 'sleeping'
       ? 'bg-gray-200 text-gray-700 border border-gray-300'
       : situation === 'preparing'
-      ? 'bg-amber-100 text-amber-800 border border-amber-200'
-      : 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+        : 'bg-emerald-100 text-emerald-800 border border-emerald-200';
 
   return (
     <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs ${style}`}>
@@ -102,7 +103,15 @@ export default function HomePage() {
   // const now = new Date(); // JST 運用（現実同期）
 
   // いまはダミー status → Situation に丸める（将来 calcSituation に置換）
-  const now = useMemo(() => new Date(), []);
+  // 1分ごとに tick して再レンダを促す。都度 new Date() を評価して calcSituation に渡す。
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((v) => v + 1), 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const now = new Date();
+
   const residentsWithSituation = useMemo(
     () =>
       residents.map((r) => {
@@ -119,30 +128,6 @@ export default function HomePage() {
       }),
     [residents, now]
   );
-
-  const notifications = [
-    {
-      id: 'chat',
-      icon: MessageSquare,
-      text: 'A と B が雑談しているようです…',
-      href: '#',
-      iconClass: 'text-emerald-500',
-    },
-    {
-      id: 'advice',
-      icon: Cloud,
-      text: 'C から相談があるようです…',
-      href: '#',
-      iconClass: 'text-sky-500',
-    },
-    {
-      id: 'event',
-      icon: AlertTriangle,
-      text: 'イベントが開催されます！',
-      href: '#',
-      iconClass: 'text-amber-500',
-    },
-  ] as const;
 
   return (
     <div className="p-4">
