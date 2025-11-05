@@ -10,7 +10,7 @@ import { evaluateConversation } from "@/lib/evaluation/evaluate-conversation";
 import { persistConversation } from "@/lib/persist/persist-conversation";
 import { callGptForConversation } from "@/lib/gpt/call-gpt-for-conversation";
 
-import { listLocal } from "@/lib/db-local";
+import { listKV as listAny } from "@/lib/db/kv-server";
 import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
 
 /** GPTに渡す thread 形状 */
@@ -44,7 +44,7 @@ export type RunConversationResult = {
 
 /** beliefs を Record<residentId, BeliefRecord> でロード */
 async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
-  const arr = (await listLocal("beliefs")) as unknown as BeliefRecord[];
+  const arr = (await listAny("beliefs")) as unknown as BeliefRecord[];
   const dict: Record<string, BeliefRecord> = {};
   for (const rec of arr) dict[rec.residentId] = rec;
   return dict;
@@ -58,8 +58,8 @@ async function ensureThreadForGpt(input: {
   const now = new Date().toISOString();
 
   if (input.threadId) {
-    // listLocal はフィルタ引数なし → 全件取得してから絞り込み
-    const allThreads = (await listLocal("topic_threads")) as unknown as TopicThread[];
+    // listAny はフィルタ引数なし → 全件取得してから絞り込み
+    const allThreads = (await listAny("topic_threads")) as unknown as TopicThread[];
     const found = allThreads.find((t) => t.id === input.threadId);
 
     if (found) {

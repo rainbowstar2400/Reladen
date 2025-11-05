@@ -1,5 +1,5 @@
 // apps/web/lib/persist/persist-conversation.ts
-import { putLocal, listLocal } from "@/lib/db-local";
+import { putKV as putAny, listKV as listAny } from "@/lib/db/kv-server";
 import { newId } from "@/lib/newId";
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
 import type {
@@ -36,8 +36,8 @@ async function updateRelationsAndFeelings(params: {
   const [a, b] = params.participants;
   const now = new Date().toISOString();
 
-  // listLocal は Entity[]（Union）を返すため、Feeling[] に明示キャストして扱う
-  const feelings = (await listLocal("feelings")) as unknown as Feeling[];
+  // listAny は Entity[]（Union）を返すため、Feeling[] に明示キャストして扱う
+  const feelings = (await listAny("feelings")) as unknown as Feeling[];
 
   // 既存レコード検索（a->b / b->a）
   const findFeeling = (fromId: string, toId: string) =>
@@ -53,7 +53,7 @@ async function updateRelationsAndFeelings(params: {
   const curFavorBA = (recBA as any)?.favor ?? 0;
 
   // a -> b
-  await putLocal("feelings", {
+  await putAny("feelings", {
     id: idAB,
     a_id: a,
     b_id: b,
@@ -64,7 +64,7 @@ async function updateRelationsAndFeelings(params: {
   } as any);
 
   // b -> a
-  await putLocal("feelings", {
+  await putAny("feelings", {
     id: idBA,
     a_id: b,
     b_id: a,
@@ -83,7 +83,7 @@ async function updateRelationsAndFeelings(params: {
 async function updateBeliefs(newBeliefs: Record<string, BeliefRecord>) {
   const now = new Date().toISOString();
   for (const [residentId, rec] of Object.entries(newBeliefs)) {
-    await putLocal("beliefs", {
+    await putAny("beliefs", {
       ...rec,
       residentId,           // 念のため residentId をキーに合わせて上書き
       updated_at: now,
@@ -117,7 +117,7 @@ async function updateThreadAfterEvent(params: {
   }
   // (signal が 'continue' または undefined の場合は 'ongoing' のまま)
 
-  await putLocal("topic_threads", {
+  await putAny("topic_threads", {
     id: params.threadId,
     lastEventId: params.lastEventId,
     status: finalStatus, // ★ 変更
@@ -148,7 +148,7 @@ async function createNotification(params: {
     priority: 0,
     updated_at: now,
   };
-  await putLocal("notifications", n);
+  await putAny("notifications", n);
 }
 
 /**
@@ -165,7 +165,7 @@ export async function persistConversation(params: {
   const eventId = newId();
   // const systemLine = makeSystemLine(gptOut, evalResult); ← 削除
 
-  await putLocal("events", {
+  await putAny("events", {
     id: eventId,
     kind: "conversation",
     updated_at: now,
@@ -189,7 +189,7 @@ export async function persistConversation(params: {
 
   // 3) beliefs を更新（冪等）
   async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
-    const arr = (await listLocal("beliefs")) as unknown as BeliefRecord[];
+    const arr = (await listAny("beliefs")) as unknown as BeliefRecord[];
     const dict: Record<string, BeliefRecord> = {};
     for (const rec of arr) dict[rec.residentId] = rec;
     return dict;
@@ -253,7 +253,7 @@ export async function persistConversation(params: {
       }
 
       // 3) upsert（冪等）
-      await putLocal("beliefs", {
+      await putAny("beliefs", {
         ...rec,
         residentId: rec.residentId,
         updated_at: rec.updated_at,
