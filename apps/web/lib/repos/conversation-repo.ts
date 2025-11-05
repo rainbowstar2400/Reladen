@@ -29,8 +29,8 @@ export type ConversationPayloadStrict = {
     qualityHints?: { [k: string]: unknown };
   };
   deltas: {
-    aToB: { favor: number; impression: number };
-    bToA: { favor: number; impression: number };
+    aToB: { favor: number; impression: string };
+    bToA: { favor: number; impression: string };
   };
   systemLine: string;
   topic?: string;
