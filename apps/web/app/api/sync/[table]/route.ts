@@ -2,90 +2,66 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// 許可テーブル（ローカルDBの LocalTableName と対応）
-const ALLOWED_TABLES = new Set([
-  'residents',
-  'relations',
-  'feelings',
-  'events',
-  'topic_threads',
-  'beliefs',
-  'notifications',
-] as const);
+// use-sync.tsx 側の TABLES と一致させる（まずは4テーブル）
+const ALLOWED_TABLES = new Set(['residents', 'relations', 'feelings', 'events'] as const);
+type Allowed = typeof ALLOWED_TABLES extends Set<infer U> ? U : never;
 
-type AllowedTable = typeof ALLOWED_TABLES extends Set<infer U> ? U : never;
-
-type SyncRequest = {
-  since?: string | null;   // ISO (strict) or null
-  limit?: number;          // 安全のため上限をかける
+type IncomingChange = {
+  data: any;            // 受け取るが今回は未使用（将来的にPush対応予定）
+  updated_at?: string;
+  deleted?: boolean;
 };
 
-// Supabase クライアント（公開キーでも読み取りは可。必要なら Service Role に差し替え）
+type SyncRequest = {
+  // use-sync.tsx から渡ってくる
+  since?: string;                 // ISO string / undefined
+  changes?: IncomingChange[];     // ローカル差分（今回は無視）
+  limit?: number;                 // 任意（未指定可）
+  table?: string;                 // fetch 側で付与されるが、URL の [table] を優先
+};
+
 function getSb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   if (!url || !anon) return null;
-  return createClient(url, anon, {
-    auth: { persistSession: false },
-  });
+  return createClient(url, anon, { auth: { persistSession: false } });
 }
 
-/**
- * body: { since?: ISO | null, limit?: number }
- * res : { changes: any[] }
- */
-export async function POST(
-  req: Request,
-  { params }: { params: { table: string } }
-) {
+export async function POST(req: Request, ctx: { params: { table: string } }) {
   try {
-    const tableParam = params?.table ?? '';
-    if (!ALLOWED_TABLES.has(tableParam as AllowedTable)) {
-      return NextResponse.json(
-        { error: `table "${tableParam}" is not allowed` },
-        { status: 400 }
-      );
+    const table = ctx?.params?.table ?? '';
+    if (!ALLOWED_TABLES.has(table as Allowed)) {
+      return NextResponse.json({ error: `table "${table}" is not allowed` }, { status: 400 });
     }
 
     const sb = getSb();
-    if (!sb) {
-      return NextResponse.json(
-        { error: 'Supabase client is not configured' },
-        { status: 503 }
-      );
-    }
+    if (!sb) return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
 
-    // 入力バリデーション
-    const json = (await req.json().catch(() => ({}))) as SyncRequest | undefined;
-    const since = json?.since ?? null;
-    const limit = Math.max(1, Math.min(1000, json?.limit ?? 500)); // デフォルト500, 上限1000
+    const body = (await req.json().catch(() => ({}))) as SyncRequest;
 
-    // updated_at で差分取得
-    // - Supabase 側テーブルはすべて updated_at と deleted を持つ前提
-    // - since が無い場合は全件（上限あり）
-    let q = sb.from(tableParam).select('*').order('updated_at', { ascending: true }).limit(limit);
+    // since: これより新しい updated_at を取得
+    const since = body?.since ?? undefined;
+    const limit = Math.max(1, Math.min(1000, body?.limit ?? 500));
 
-    if (since) {
-      // 厳密に since より新しいもの（同タイムスタンプ衝突を避ける）
-      q = q.gt('updated_at', since);
-    }
+    let q = sb.from(table).select('*').order('updated_at', { ascending: true }).limit(limit);
+    if (since) q = q.gt('updated_at', since);
 
     const { data, error } = await q;
     if (error) {
-      // 例: RLS による拒否やカラム名の不一致
-      return NextResponse.json(
-        { error: error.message ?? 'query failed' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: error.message ?? 'query failed' }, { status: 500 });
     }
 
-    // 返却：ローカルの bulkUpsert でそのまま取り込めるよう raw を返す
-    return NextResponse.json({ changes: data ?? [] }, { status: 200 });
+    // use-sync.tsx 側の syncPayloadSchema が期待する形に整形：
+    // { changes: [ { data: row, updated_at: row.updated_at, deleted: row.deleted } ] }
+    const changes = (data ?? []).map((row: any) => ({
+      data: row,
+      updated_at: row?.updated_at ?? null,
+      deleted: !!row?.deleted,
+    }));
+
+    return NextResponse.json({ changes }, { status: 200 });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message ?? 'unexpected error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message ?? 'unexpected error' }, { status: 500 });
   }
 }
 
