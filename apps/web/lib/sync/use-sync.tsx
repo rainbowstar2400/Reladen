@@ -5,6 +5,7 @@ import { supabaseClient } from '@/lib/db-cloud/supabase';
 import { bulkUpsert, since } from '@/lib/db-local';
 import { SyncPayload, syncPayloadSchema } from '@/types';
 export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
+import { makeOutboxKey, listPendingByTable, markSent /* , markFailed */ } from '@/lib/sync/outbox';
 
 const TABLES: SyncPayload['table'][] = [
   'residents',
@@ -78,9 +79,25 @@ function useSyncInternal() {
 
       for (const table of TABLES) {
         const localChanges = await since(table, pendingSince);
+
+        // outbox の pending を取得し、localChanges と LWW でマージ
+        const pending = await listPendingByTable(table);
+        const mergedMap = new Map<string, { data: any; updated_at: string; deleted?: boolean; __key?: string }>();
+
+        for (const it of localChanges) {
+          mergedMap.set((it as any).id, { data: it, updated_at: (it as any).updated_at, deleted: (it as any).deleted });
+        }
+        for (const ob of pending) {
+          const cur = mergedMap.get(ob.id);
+          if (!cur || new Date(ob.updated_at).getTime() >= new Date(cur.updated_at).getTime()) {
+            mergedMap.set(ob.id, { data: ob.data, updated_at: ob.updated_at, deleted: ob.deleted, __key: makeOutboxKey(table, ob.id) });
+          }
+        }
+        const merged = Array.from(mergedMap.values());
+
         const payload = await fetchDiff(table, {
-          changes: localChanges.map((item) => ({
-            data: item,
+          changes: merged.map((item) => ({
+            data: item.data,
             updated_at: item.updated_at,
             deleted: item.deleted,
           })),
@@ -90,6 +107,11 @@ function useSyncInternal() {
         const cloudChanges = payload.changes.map((c) => c.data);
         if (cloudChanges.length > 0) {
           await bulkUpsert(table, cloudChanges as any);
+          // 送信成功扱いの outbox を削除
+          const sentKeys = merged.filter(m => m.__key).map(m => m.__key!) as string[];
+          if (sentKeys.length > 0) {
+            await markSent(sentKeys);
+          }
         }
       }
 
