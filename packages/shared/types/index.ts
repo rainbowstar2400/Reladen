@@ -109,7 +109,7 @@ export const eventSchema = baseEntitySchema.extend({
 });
 
 export const syncPayloadSchema = z.object({
-  table: z.enum(['residents', 'relations', 'feelings', 'events']),
+  table: z.enum(['residents', 'relations', 'feelings', 'events','consult_answers']),
   changes: z.array(z.object({
     data: z.record(z.any()),
     updated_at: z.string().datetime(),
