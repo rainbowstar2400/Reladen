@@ -36,6 +36,9 @@ function useSyncInternal() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 追加: リトライ回数（指数バックオフ用）
+  const [retryCount, setRetryCount] = useState(0);
+
   // ★ 多重実行ガード & 連発防止
   const syncingRef = useRef(false);
   const lastRunRef = useRef(0);
@@ -93,15 +96,32 @@ function useSyncInternal() {
       // サーバー時刻を返していない想定なので、クライアント時刻で更新
       setLastSyncedAt(new Date().toISOString());
       setPhase('online');
+      setRetryCount(0);
       return { ok: true };
     } catch (err: any) {
       console.error('Sync error:', err);
       setError(err?.message ?? 'unknown');
       setPhase('error');
+
+      // 追加: 指数バックオフ + ジッターで自動リトライ
+      const MAX_RETRIES = 5;
+      if (retryCount < MAX_RETRIES) {
+        const base = 1000; // 1秒
+        const backoff = base * Math.pow(2, retryCount);
+        const jitter = Math.floor(Math.random() * 250); // 0〜250ms
+        const delay = Math.min(60000, backoff + jitter); // 上限60秒
+        setRetryCount((c) => c + 1);
+        window.setTimeout(() => { void syncAll(); }, delay);
+      } else {
+        // 規定回数を超えたら自動再試行は一旦停止（手動/イベントで再開）
+        setRetryCount(0);
+      }
+
       return { ok: false, reason: 'error', message: err?.message };
     } finally {
       syncingRef.current = false;
     }
+
   }, [lastSyncedAt]);
 
   // 初回マウント時：1回だけ同期
@@ -152,6 +172,13 @@ function useSyncInternal() {
       channels.forEach((ch) => { void client.removeChannel(ch); });
     };
   }, [requestDebouncedSync]);
+
+  // 追加: 外部からの明示同期リクエスト（window.dispatchEvent(new Event('reladen:request-sync'))）
+  useEffect(() => {
+    const onRequest = () => { void syncAll(); };
+    window.addEventListener('reladen:request-sync', onRequest);
+    return () => window.removeEventListener('reladen:request-sync', onRequest);
+  }, [syncAll]);
 
   return useMemo(
     () => ({
