@@ -6,7 +6,13 @@ import { bulkUpsert, since } from '@/lib/db-local';
 import { SyncPayload, syncPayloadSchema } from '@/types';
 export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
 
-const TABLES: SyncPayload['table'][] = ['residents', 'relations', 'feelings', 'events'];
+const TABLES: SyncPayload['table'][] = [
+  'residents',
+  'relations',
+  'feelings',
+  'events',
+  'consult_answers', // ← 追加
+];
 
 // --- API 呼び出し ---
 async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 'table'>) {

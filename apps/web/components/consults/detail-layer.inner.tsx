@@ -1,6 +1,7 @@
 // apps/web/components/consults/detail-layer.inner.tsx
 'use client'
 
+import React, { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ConsultDetailPanel, { ConsultDetail } from './consult-detail-panel'
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage'
@@ -25,22 +26,46 @@ function makeDummy(id: string): ConsultDetail {
       c3: '（Cの返答例）ありがとう、助かった！',
     },
     systemAfter: ['Cからの信頼度が上昇した！'],
-    selectedChoiceId: loadConsultAnswer(id)?.selectedChoiceId ?? null,
+    // ※ 非同期で復元するため、ここでは null を入れておく
+    selectedChoiceId: null,
   }
 }
 
 export default function ConsultDetailLayerInner() {
   const sp = useSearchParams()
   const consultId = sp.get('consult')
-  const data = consultId ? makeDummy(consultId) : null
+  const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let aborted = false
+      ; (async () => {
+        if (!consultId) {
+          setSelectedChoiceId(null)
+          return
+        }
+        try {
+          const stored = await loadConsultAnswer(consultId)
+          if (!aborted) setSelectedChoiceId(stored?.selectedChoiceId ?? null)
+        } catch {
+          if (!aborted) setSelectedChoiceId(null)
+        }
+      })()
+    return () => { aborted = true }
+  }, [consultId])
+
+  const data = useMemo(
+    () => (consultId ? { ...makeDummy(consultId), selectedChoiceId } : null),
+    [consultId, selectedChoiceId]
+  )
 
   return (
     <ConsultDetailPanel
       open={!!consultId}
       data={data}
-      onDecide={(choiceId) => {
+      onDecide={async (choiceId) => {
         if (!consultId) return
-        saveConsultAnswer(consultId, choiceId)
+        await saveConsultAnswer(consultId, choiceId)
+        setSelectedChoiceId(choiceId ?? null) // UIへ即反映
         // 必要ならトーストやSentry送信などをここに
       }}
     />
