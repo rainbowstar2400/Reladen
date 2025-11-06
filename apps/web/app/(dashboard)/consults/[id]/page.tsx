@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import ConsultDetailPanel, { ConsultDetail } from '@/components/consults/consult-detail-panel'
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage'
+import { useSync } from '@/lib/sync/use-sync'
 
 // API からの応答（/api/consults/[id]）を既存 UI が要求する ConsultDetail に正規化
 function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
@@ -69,6 +70,7 @@ function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
 export default function ConsultDetailPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
+  const { sync } = useSync();
 
   const [data, setData] = useState<ConsultDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -143,6 +145,8 @@ export default function ConsultDetailPage() {
                 ? { ...prev, selectedChoiceId: choiceId ?? null }
                 : prev
             )
+            // 保存後に同期を起動（Service Role 環境なら Push→Pull）
+            try { await sync(); } catch { }
           }}
         />
       ) : (
