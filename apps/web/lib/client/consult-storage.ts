@@ -80,5 +80,10 @@ export async function saveConsultAnswer(id: string, selectedChoiceId: string | n
     } catch {
       // noop
     }
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('reladen:request-sync'));
+      }
+    } catch { /* noop */ }
   }
 }
