@@ -165,15 +165,11 @@ export default function SettingsPage() {
   )
 }
 
-function AccountButtons() {
-  const { ready, user, signInWithGoogle, signOut, hasSupabase } = useAuth();
+function AccountButtons(): JSX.Element {
+  const { ready, user, signInWithGoogle, signOut, hasSupabase, linkWithGoogle } = useAuth();
 
-  if (!hasSupabase) {
-    return <Button variant="outline" disabled>ローカル動作中</Button>;
-  }
-  if (!ready) {
-    return <Button variant="outline" disabled>状態確認中…</Button>;
-  }
+  if (!hasSupabase) return <Button variant="outline" disabled>ローカル動作中</Button>;
+  if (!ready)       return <Button variant="outline" disabled>状態確認中…</Button>;
   if (!user) {
     return (
       <div className="flex items-center gap-2">
@@ -181,11 +177,22 @@ function AccountButtons() {
       </div>
     );
   }
+
+  const linked = new Set(user.providers ?? (user.provider ? [user.provider] : []));
   return (
     <div className="flex items-center gap-3">
       <span className="text-sm text-muted-foreground">
-        {user.email ?? 'ログイン中'}{user.provider ? `（${user.provider}）` : ''}
+        {user.email ?? 'ログイン中'}　
+        {linked.size > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <span className="text-xs">連携済み：</span>
+            <span className="text-xs">{Array.from(linked).join(', ')}</span>
+          </span>
+        )}
       </span>
+      {!linked.has('google') && (
+        <Button variant="outline" onClick={linkWithGoogle}>Google を紐づけ</Button>
+      )}
       <Button variant="outline" onClick={signOut}>ログアウト</Button>
     </div>
   );
