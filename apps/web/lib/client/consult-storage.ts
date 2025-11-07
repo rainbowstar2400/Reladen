@@ -69,16 +69,29 @@ export async function saveConsultAnswer(id: string, selectedChoiceId: string | n
     await putLocal(STORE as any, entity as any);
   } catch {
     // フォールバック（非常時のみ localStorage へ）
+    // 追記: outbox へ投入（クラウドへのpush対象にする）
+    try {
+      const { enqueueOutbox } = await import('@/lib/sync/outbox');
+      await enqueueOutbox({
+        id,
+        table: 'consult_answers',
+        data: {
+          id,
+          selectedChoiceId: entity.selectedChoiceId,
+          decidedAt: entity.decidedAt,
+          updated_at: entity.updated_at,
+          deleted: entity.deleted,
+        },
+        updated_at: entity.updated_at,
+        deleted: entity.deleted,
+      });
+    } catch { /* noop */ }
+
+    // 追記: 成功時も即同期を要求（オンラインなら即push、オフラインなら後でリトライ）
     try {
       if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_KEY(id), JSON.stringify({
-          id,
-          selectedChoiceId: selectedChoiceId ?? null,
-          decidedAt: now,
-        } as StoredConsultAnswer));
+        window.dispatchEvent(new Event('reladen:request-sync'));
       }
-    } catch {
-      // noop
-    }
+    } catch { /* noop */ }
   }
 }

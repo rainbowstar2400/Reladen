@@ -208,3 +208,25 @@ export async function since(table: LocalTableName, isoDate: string | null) {
   const sinceDate = new Date(isoDate).getTime();
   return items.filter((item) => new Date(item.updated_at).getTime() > sinceDate);
 }
+
+// 追加：全ストア初期化（ローカルデータ消去）
+export async function clearLocalAll() {
+  // Tauri: スナップショットを空にして保存
+  if (isTauri) {
+    const state = await getTauriState();
+    if (state) {
+      state.snapshot = createEmptySnapshot();
+      await state.persist();
+      return;
+    }
+  }
+  // ブラウザ IndexedDB: 既存ストアをクリア
+  const db = await getDb();
+  const stores: LocalTableName[] = [
+    'residents','relations','feelings','events',
+    'topic_threads','beliefs','notifications','consult_answers'
+  ];
+  const tx = db.transaction(stores, 'readwrite');
+  await Promise.all(stores.map((name) => tx.objectStore(name).clear()));
+  await tx.done;
+}

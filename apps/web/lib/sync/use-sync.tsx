@@ -5,6 +5,7 @@ import { supabaseClient } from '@/lib/db-cloud/supabase';
 import { bulkUpsert, since } from '@/lib/db-local';
 import { SyncPayload, syncPayloadSchema } from '@/types';
 export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
+import { makeOutboxKey, listPendingByTable, markSent /* , markFailed */ } from '@/lib/sync/outbox';
 
 const TABLES: SyncPayload['table'][] = [
   'residents',
@@ -16,9 +17,19 @@ const TABLES: SyncPayload['table'][] = [
 
 // --- API 呼び出し ---
 async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 'table'>) {
+  // ★ 追加：アクセストークン取得（ログインしていない場合は未付与）
+  let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { data } = await supabaseClient?.auth.getSession()!;
+    const accessToken = data?.session?.access_token;
+    if (accessToken) {
+      headers = { ...headers, Authorization: `Bearer ${accessToken}` };
+    }
+  } catch { /* noop */ }
+
   const res = await fetch(`/api/sync/${table}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ ...body, table }),
   });
   if (!res.ok) throw new Error(`sync ${table} failed (${res.status})`);
@@ -35,6 +46,9 @@ function useSyncInternal() {
   const [phase, setPhase] = useState<SyncPhase>('offline');
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 追加: リトライ回数（指数バックオフ用）
+  const [retryCount, setRetryCount] = useState(0);
 
   // ★ 多重実行ガード & 連発防止
   const syncingRef = useRef(false);
@@ -75,9 +89,25 @@ function useSyncInternal() {
 
       for (const table of TABLES) {
         const localChanges = await since(table, pendingSince);
+
+        // outbox の pending を取得し、localChanges と LWW でマージ
+        const pending = await listPendingByTable(table);
+        const mergedMap = new Map<string, { data: any; updated_at: string; deleted?: boolean; __key?: string }>();
+
+        for (const it of localChanges) {
+          mergedMap.set((it as any).id, { data: it, updated_at: (it as any).updated_at, deleted: (it as any).deleted });
+        }
+        for (const ob of pending) {
+          const cur = mergedMap.get(ob.id);
+          if (!cur || new Date(ob.updated_at).getTime() >= new Date(cur.updated_at).getTime()) {
+            mergedMap.set(ob.id, { data: ob.data, updated_at: ob.updated_at, deleted: ob.deleted, __key: makeOutboxKey(table, ob.id) });
+          }
+        }
+        const merged = Array.from(mergedMap.values());
+
         const payload = await fetchDiff(table, {
-          changes: localChanges.map((item) => ({
-            data: item,
+          changes: merged.map((item) => ({
+            data: item.data,
             updated_at: item.updated_at,
             deleted: item.deleted,
           })),
@@ -87,21 +117,43 @@ function useSyncInternal() {
         const cloudChanges = payload.changes.map((c) => c.data);
         if (cloudChanges.length > 0) {
           await bulkUpsert(table, cloudChanges as any);
+          // 送信成功扱いの outbox を削除
+          const sentKeys = merged.filter(m => m.__key).map(m => m.__key!) as string[];
+          if (sentKeys.length > 0) {
+            await markSent(sentKeys);
+          }
         }
       }
 
       // サーバー時刻を返していない想定なので、クライアント時刻で更新
       setLastSyncedAt(new Date().toISOString());
       setPhase('online');
+      setRetryCount(0);
       return { ok: true };
     } catch (err: any) {
       console.error('Sync error:', err);
       setError(err?.message ?? 'unknown');
       setPhase('error');
+
+      // 追加: 指数バックオフ + ジッターで自動リトライ
+      const MAX_RETRIES = 5;
+      if (retryCount < MAX_RETRIES) {
+        const base = 1000; // 1秒
+        const backoff = base * Math.pow(2, retryCount);
+        const jitter = Math.floor(Math.random() * 250); // 0〜250ms
+        const delay = Math.min(60000, backoff + jitter); // 上限60秒
+        setRetryCount((c) => c + 1);
+        window.setTimeout(() => { void syncAll(); }, delay);
+      } else {
+        // 規定回数を超えたら自動再試行は一旦停止（手動/イベントで再開）
+        setRetryCount(0);
+      }
+
       return { ok: false, reason: 'error', message: err?.message };
     } finally {
       syncingRef.current = false;
     }
+
   }, [lastSyncedAt]);
 
   // 初回マウント時：1回だけ同期
@@ -152,6 +204,13 @@ function useSyncInternal() {
       channels.forEach((ch) => { void client.removeChannel(ch); });
     };
   }, [requestDebouncedSync]);
+
+  // 追加: 外部からの明示同期リクエスト（window.dispatchEvent(new Event('reladen:request-sync'))）
+  useEffect(() => {
+    const onRequest = () => { void syncAll(); };
+    window.addEventListener('reladen:request-sync', onRequest);
+    return () => window.removeEventListener('reladen:request-sync', onRequest);
+  }, [syncAll]);
 
   return useMemo(
     () => ({

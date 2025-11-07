@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { listConversationEventsByDate } from '@/lib/repos/conversation-repo';
+import { listLocal } from '@/lib/db-local';                           // ★追加
+import type { EventLogStrict } from '@repo/shared/types/conversation'; // ★追加
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度'
 type ChangeKindFilter = ChangeKind | ''
@@ -81,71 +83,95 @@ export default function ReportsPage() {
     setKind('')
   }
   // ---- 実データ（会話）をロード → ReportItem[] に変換 ----
+  // ---- 実データ（会話＋相談）を events からロード → ReportItem[] に変換 ----
   const [convItems, setConvItems] = useState<ReportItem[]>([]);
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const groups = await listConversationEventsByDate({ limitDays: 14 });
-        const g = groups.find(g => g.dateKey === date);
-        const items: ReportItem[] = (g?.items ?? []).map(it => {
+        // すべての events を取得（EventLogStrict 形）
+        const all = (await listLocal('events')) as unknown as EventLogStrict[];
+
+        // 対象は conversation / consult のみ
+        const targets = all.filter(ev => ev && (ev.kind === 'conversation' || ev.kind === 'consult'));
+
+        // ReportItem へ整形（payload のshape差に耐える防御的マッピング）
+        const items: ReportItem[] = targets.map((ev) => {
+          const occurred =
+            (ev as any)?.payload?.occurredAt ??
+            (ev as any)?.occurredAt ??
+            ev.updated_at ??
+            (ev as any)?.created_at ??
+            new Date().toISOString();
+
+          const participants = Array.isArray((ev as any)?.payload?.participants)
+            ? (ev as any).payload.participants
+            : [];
+
+          const a = participants[0] ?? undefined;
+          const b = participants[1] ?? undefined;
+
+          // chips（あれば）を抽出：favor / impression を前実装に寄せて簡易生成
           const chips: ReportItem['chips'] = [];
-          const favorAB = it.deltas.aToB.favor;
-          const favorBA = it.deltas.bToA.favor;
-          if (favorAB > 0) chips.push({ kind: '好感度', label: ` ${it.participants[0]}→${it.participants[1]}：↑` });
-          if (favorAB < 0) chips.push({ kind: '好感度', label: ` ${it.participants[0]}→${it.participants[1]}：↓` });
-          if (favorBA > 0) chips.push({ kind: '好感度', label: ` ${it.participants[1]}→${it.participants[0]}：↑` });
-          if (favorBA < 0) chips.push({ kind: '好感度', label: ` ${it.participants[1]}→${it.participants[0]}：↓` });
+          const deltas = (ev as any)?.payload?.deltas ?? (ev as any)?.deltas;
+          if (deltas) {
+            const aToB = deltas.aToB ?? {};
+            const bToA = deltas.bToA ?? {};
+            const favorAB = Number(aToB.favor ?? 0);
+            const favorBA = Number(bToA.favor ?? 0);
+            if (a && b) {
+              if (favorAB > 0) chips.push({ kind: '好感度', label: ` ${a}→${b}：↑` });
+              if (favorAB < 0) chips.push({ kind: '好感度', label: ` ${a}→${b}：↓` });
+              if (favorBA > 0) chips.push({ kind: '好感度', label: ` ${b}→${a}：↑` });
+              if (favorBA < 0) chips.push({ kind: '好感度', label: ` ${b}→${a}：↓` });
+            }
+            const toLabel = (s: string) =>
+              s === 'none' ? '→' :
+                s === 'like' ? '好き' :
+                  s === 'like?' ? '好きかも' :
+                    s === 'curious' ? '気になる' :
+                      s === 'awkward' ? '気まずい' :
+                        s === 'dislike' ? '嫌い' : s;
+            if (a && b) {
+              if (aToB.impression != null) chips.push({ kind: '印象', label: ` ${a}→${b}：「${toLabel(String(aToB.impression))}」` });
+              if (bToA.impression != null) chips.push({ kind: '印象', label: ` ${b}→${a}：「${toLabel(String(bToA.impression))}」` });
+            }
+          }
 
-          const toLabel = (s: string) =>
-            s === 'none' ? '→' :
-              s === 'like' ? '好き' :
-                s === 'like?' ? '好きかも' :
-                  s === 'curious' ? '気になる' :
-                    s === 'awkward' ? '気まずい' :
-                      s === 'dislike' ? '嫌い' : s;
+          // 表示テキスト（会話/相談でフォールバック）
+          const text =
+            (ev as any)?.payload?.systemLine ??
+            (ev as any)?.payload?.title ??
+            (ev.kind === 'consult'
+              ? `${a ?? ''} から相談を受けた。`.trim()
+              : (a && b) ? `${a} と ${b} が会話した。` : '出来事が記録されました。');
 
-          chips.push({ kind: '印象', label: ` ${it.participants[0]}→${it.participants[1]}：「${toLabel(it.deltas.aToB.impression)}」` });
-          chips.push({ kind: '印象', label: ` ${it.participants[1]}→${it.participants[0]}：「${toLabel(it.deltas.bToA.impression)}」` });
+          const category: ReportItem['category'] =
+            ev.kind === 'consult' ? 'consult'
+              : ev.kind === 'conversation' ? 'conversation'
+                : 'other';
 
           return {
-            id: it.id,
-            at: it.timeISO,
-            text: it.systemLine || `${it.participants[0]} と ${it.participants[1]} が会話した。`,
-            category: 'conversation',
+            id: ev.id,
+            at: occurred,
+            text,
+            category,
             chips,
-            a: it.participants[0],
-            b: it.participants[1],
+            a, b,
           };
         });
+
+        // ここでは全件保持（後段で date / フィルタで絞り込み）
         if (alive) setConvItems(items);
       } catch (e) {
-        console.error('reports: load conversations failed', e);
+        console.error('reports: load events failed', e);
         if (alive) setConvItems([]);
       }
     })();
     return () => { alive = false };
   }, [date]);
 
-  // ---- 相談ダミー設定 ----
-  const INCLUDE_DUMMY_CONSULT = true;
-  const dummyConsults: ReportItem[] = INCLUDE_DUMMY_CONSULT ? [{
-    id: 'dummy-consult-1',
-    at: `${date}T22:50:00+09:00`,
-    text: 'C から相談を受けた。',
-    category: 'consult',
-    chips: [{ kind: '信頼度', label: ' C：↑' }],
-    a: 'C',
-  }] : [];
-
-  // ---- ダミーデータ（将来 useEvents() に置換）----
-  const allCharacters = ['A', 'B', 'C'];
-
-  // 実データ + 相談ダミー
-  const ALL: ReportItem[] = useMemo(() => {
-    return [...convItems, ...dummyConsults];
-  }, [convItems, dummyConsults]);
-
+  const ALL: ReportItem[] = useMemo(() => convItems, [convItems]);
 
   // ---- フィルタ＆ソート ----
   const filtered = useMemo(() => {
@@ -176,6 +202,16 @@ export default function ReportsPage() {
 
   const d = new Date(`${date}T00:00:00+09:00`)
   const { y, m, d: dd, wd } = fmtDate(d)
+
+  // convItems から登場キャラを動的に算出
+  const allCharacters = useMemo(() => {
+    const s = new Set<string>();
+    convItems.forEach((it) => {
+      if (it.a) s.add(it.a);
+      if (it.b) s.add(it.b);
+    });
+    return Array.from(s).sort();
+  }, [convItems]);
 
   return (
     <div className="space-y-6">

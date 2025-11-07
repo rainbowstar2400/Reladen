@@ -9,8 +9,8 @@ import NotificationsSectionClient from '@/components/notifications/Notifications
 import { Suspense } from 'react';
 import { calcSituation, defaultSleepByTendency, type Situation } from '@/lib/schedule';
 import { useEffect, useState } from 'react';
-// （将来の実データ切替用）Resident 型があれば有効化
-// import type { Resident } from '@/types';
+import { listLocal } from '@/lib/db-local';
+import type { Resident } from '@/types';
 
 /* ---------------------------
    共通UI：セクション見出し
@@ -93,11 +93,9 @@ function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation 
 ----------------------------- */
 export default function HomePage() {
   // ✅ いまはモック。既存ダミーを維持しつつ「状況バッジ」を動かす
-  const residents: ResidentLite[] = [
-    { id: 'A', name: 'A', status: 'active' },
-    { id: 'B', name: 'B', status: 'sleep' },
-    { id: 'C', name: 'C', status: 'active' },
-  ];
+  // 実データ（IndexedDB）から取得
+  const [residents, setResidents] = useState<Resident[]>([]);
+
 
   // ✅ 実データ導入時の雛形（コメント解除で利用）
   // const residentsFull: Resident[] = useResidents(); // ← 将来の取得フック
@@ -109,6 +107,15 @@ export default function HomePage() {
   useEffect(() => {
     const timer = setInterval(() => setTick((v) => v + 1), 60 * 1000);
     return () => clearInterval(timer);
+
+    useEffect(() => {
+      let alive = true;
+      (async () => {
+        const rows = await listLocal('residents');
+        if (alive) setResidents(rows as Resident[]);
+      })();
+      return () => { alive = false; };
+    }, []);
   }, []);
 
   const now = new Date();
@@ -116,21 +123,30 @@ export default function HomePage() {
   const residentsWithSituation = useMemo(
     () =>
       residents.map((r) => {
-        // ★ 実データがあれば calcSituation を使用。無ければ従来のダミー status にフォールバック。
+        // Resident 側に sleepProfile / activityTendency がある場合は calcSituation を使用
+        // どちらも無い場合は「活動中」フォールバック
+        const hasProfile = (r as any).sleepProfile || (r as any).activityTendency;
         let sit: Situation;
-        if (r.sleepProfile || r.activityTendency) {
+        if (hasProfile) {
           const base =
-            r.sleepProfile ??
-            defaultSleepByTendency(r.activityTendency ?? 'normal');
+            (r as any).sleepProfile ??
+            defaultSleepByTendency((r as any).activityTendency ?? 'normal');
           sit = calcSituation(now, base);
         } else {
-          // 既存ダミー互換（sleep → sleeping / それ以外 → active）
-          sit = r.status === 'sleep' ? 'sleeping' : 'active';
+          sit = 'active';
         }
-        return { r, sit };
+
+        // ResidentTile は name / id があれば表示できる
+        const lite: ResidentLite = {
+          id: (r as any).id,
+          name: (r as any).name ?? '',
+          // 旧ダミー互換の status は不要だが、型互換のため残せる
+        };
+        return { r: lite, sit };
       }),
     [residents, now]
   );
+
 
   return (
     <div className="p-4">
@@ -162,6 +178,18 @@ export default function HomePage() {
             ))}
           </div>
         </div>
+        <div className="overflow-x-auto">
+          <div className="flex gap-4 pb-2">
+            {residentsWithSituation.length === 0 ? (
+              <div className="text-sm text-muted-foreground px-2 py-1">住人がいません。</div>
+            ) : (
+              residentsWithSituation.map(({ r, sit }) => (
+                <ResidentTile key={r.id} r={r} situation={sit} />
+              ))
+            )}
+          </div>
+        </div>
+
 
         {/* 今日の新聞（プレースホルダ） */}
         <SectionTitle>今日の新聞</SectionTitle>
