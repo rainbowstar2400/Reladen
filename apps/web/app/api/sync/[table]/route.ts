@@ -56,10 +56,19 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     if (incoming.length > 0) {
       const rows = incoming.map((c) => {
         // LWW用に updated_at をそのまま採用する（衝突はDB/ポリシー側で解決）
-        const d = c.data as Record<string, any>;
-        // tombstone運用：deleted を持たせる（無ければfalse）
+        const d = { ...(c.data as Record<string, any>) };
         if (typeof d.deleted !== 'boolean') d.deleted = !!c.deleted;
-        return d;
+        if (table === 'residents') {
+          // camelCase → snake_case に変換して保存
+          if ('activityTendency' in d) {
+            d.activity_tendency = d.activityTendency;
+            delete d.activityTendency;
+          }
+          if ('sleepProfile' in d) {
+            d.sleep_profile = d.sleepProfile;
+            delete d.sleepProfile;
+          }
+        }
       });
 
       const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
