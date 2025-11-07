@@ -16,15 +16,14 @@ const TABLES: SyncPayload['table'][] = [
 ];
 
 // --- API 呼び出し ---
+// --- API 呼び出し ---
 async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 'table'>) {
   // ★ 追加：アクセストークン取得（ログインしていない場合は未付与）
   let headers: Record<string, string> = { 'Content-Type': 'application/json' };
   try {
     const { data } = await supabaseClient?.auth.getSession()!;
-    const accessToken = data?.session?.access_token;
-    if (accessToken) {
-      headers = { ...headers, Authorization: `Bearer ${accessToken}` };
-    }
+    const token = data?.session?.access_token;
+    if (token) headers.Authorization = `Bearer ${token}`;
   } catch { /* noop */ }
 
   const res = await fetch(`/api/sync/${table}`, {
@@ -32,10 +31,16 @@ async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 't
     headers,
     body: JSON.stringify({ ...body, table }),
   });
-  if (!res.ok) throw new Error(`sync ${table} failed (${res.status})`);
+
+  // ★ サーバーのエラーメッセージを拾って表示できるように
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`sync ${table} failed (${res.status}): ${text || res.statusText}`);
+  }
   const json = await res.json();
   return syncPayloadSchema.parse(json);
 }
+
 
 type SyncResult =
   | { ok: true }
