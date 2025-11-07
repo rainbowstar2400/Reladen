@@ -27,25 +27,55 @@ export default function NotificationsPanel() {
 
   async function openNotification(n: NotificationRecord) {
     try {
-      // 対応するイベント（会話）を取得して存在確認
-      const ev = await fetchEventById(n.linkedEventId);
-      if (!ev) return;
-
       // 既読化（未読のみ）
       if (n.status !== 'read') {
-        // 非同期でも UI が先に更新されるようにミューテーションに任せる
         markRead.mutate(n.id);
       }
 
-      // URLに ?log=<eventId> を付ける → 既存の detail-layer が拾ってダイアログ表示
-      const url = new URL(window.location.href);
-      url.searchParams.set('log', ev.id);
-      router.push(url.pathname + '?' + url.searchParams.toString(), { scroll: false });
+      // kind を決定（type がなければ payload.kind を参照）
+      const kind =
+        (n as any).type ??
+        (n as any)?.payload?.kind ??
+        'conversation';
+
+      // --- 相談: /?consult=<consultId> へ ---
+      if (kind === 'consult') {
+        const consultId =
+          (n as any).linkedConsultId ??
+          (n as any)?.payload?.consultId ??
+          (n as any)?.consultId;
+
+        if (consultId) {
+          const url = new URL(window.location.href);
+          url.searchParams.set('consult', String(consultId));
+          url.searchParams.delete('log'); // 競合しないよう除去
+          router.push(url.pathname + '?' + url.searchParams.toString(), { scroll: false });
+        }
+        return;
+      }
+
+      // --- 既定: 会話（ログ）: /reports?log=<eventId> 相当（現実装はトップで ?log= を拾う想定） ---
+      const eventId =
+        n.linkedEventId ??
+        (n as any)?.payload?.eventId ??
+        (n as any)?.eventId;
+
+      if (eventId) {
+        // 存在確認してローカルに取り込む（既存の挙動を維持）
+        const ev = await fetchEventById(eventId);
+        if (!ev) return;
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('log', ev.id);
+        url.searchParams.delete('consult'); // 競合しないよう除去
+        router.push(url.pathname + '?' + url.searchParams.toString(), { scroll: false });
+      }
     } catch (e) {
-      // 必要に応じてエラートーストなど
+      // 必要に応じてトーストなど
       // console.warn(e);
     }
   }
+
 
   if (isLoading) {
     return (
@@ -78,9 +108,8 @@ export default function NotificationsPanel() {
             >
               {/* 未読ドット（お知らせ単位） */}
               <span
-                className={`mt-1 h-2 w-2 rounded-full ${
-                  n.status === 'unread' ? 'bg-blue-600' : 'bg-gray-300'
-                }`}
+                className={`mt-1 h-2 w-2 rounded-full ${n.status === 'unread' ? 'bg-blue-600' : 'bg-gray-300'
+                  }`}
               />
 
               <span className="flex-1">

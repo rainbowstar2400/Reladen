@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listLocal, putLocal, getLocal } from '@/lib/db-local';
 import type { NotificationRecord, EventLogStrict } from '@repo/shared/types/conversation';
 import { remoteFetchEventById } from '@/lib/sync/remote-events';
+import { bulkUpsert } from '@/lib/db-local'; // ★ 追加（ローカルへ取り込み）
+import { remoteFetchRecentNotifications, remoteUpsertNotification } from '@/lib/sync/remote-notifications'; // ★ 追加
 
 /**
 * 通知の並び順を共通化：
@@ -23,10 +25,30 @@ export function useNotifications() {
   return useQuery({
     queryKey: ['notifications'],
     queryFn: async () => {
-      const all = (await listLocal('notifications')) as NotificationRecord[];
-      // UI 向けは archived を除外し、共通ソートを使用
-      const filtered = all.filter((n) => n.status !== 'archived');
-      return sortNotifications(filtered);
+      // 1) まずローカルを即時返す
+      const localAll = (await listLocal('notifications')) as NotificationRecord[];
+      const localFiltered = localAll.filter((n) => n.status !== 'archived');
+      let current = sortNotifications(localFiltered);
+
+      // 2) オンラインならクラウド取り込み → ローカルへ反映 → 再読み込み
+      if (typeof navigator === 'undefined' || !navigator.onLine) {
+        return current;
+      }
+
+      try {
+        const remote = await remoteFetchRecentNotifications(50);
+        if (remote?.length) {
+          await bulkUpsert('notifications', remote as any);
+          const after = (await listLocal('notifications')) as NotificationRecord[];
+          const afterFiltered = after.filter((n) => n.status !== 'archived');
+          current = sortNotifications(afterFiltered);
+        }
+      } catch (e) {
+        // ネットワーク等の一時失敗は無視（ローカル表示を維持）
+        console.warn('[notifications] remote fetch skipped:', (e as any)?.message);
+      }
+
+      return current;
     },
   });
 }
@@ -38,12 +60,25 @@ export function useMarkNotificationRead() {
       const n = (await getLocal('notifications', id)) as NotificationRecord | undefined;
       if (!n) return;
       if (n.status === 'read') return;
-      await putLocal('notifications', {
+
+      const now = new Date().toISOString();
+      const updated: NotificationRecord = {
         ...n,
         status: 'read',
-        updated_at: new Date().toISOString(),
-      });
+        updated_at: now,
+      };
+
+      // 1) ローカル更新
+      await putLocal('notifications', updated as any);
+
+      // 2) クラウドへ反映（失敗してもUIはそのまま）
+      try {
+        await remoteUpsertNotification(updated as any);
+      } catch (e) {
+        console.warn('[notifications] remote upsert failed:', (e as any)?.message);
+      }
     },
+
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['notifications'] });
     },
