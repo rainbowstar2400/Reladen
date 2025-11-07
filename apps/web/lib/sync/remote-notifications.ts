@@ -8,8 +8,12 @@ type AnyRecord = Record<string, any>;
 /** 直近の通知を取得（デフォルト: 50件） */
 export async function remoteFetchRecentNotifications(limit = 50): Promise<AnyRecord[]> {
   const sb = supabaseClient;
+  if (!sb) {
+    // SSR/未初期化/未ログインなどで null の可能性があるため安全にスキップ
+    return [];
+  }
   const { data, error } = await sb
-    .from('notifications')               // ← テーブル名が異なる場合は合わせてください
+    .from('notifications')
     .select('*')
     .order('updated_at', { ascending: false })
     .limit(limit);
@@ -18,11 +22,17 @@ export async function remoteFetchRecentNotifications(limit = 50): Promise<AnyRec
   return data ?? [];
 }
 
+
 /** 通知のUpsert（既読反映など） */
 export async function remoteUpsertNotification(row: AnyRecord) {
   const sb = supabaseClient;
+  if (!sb) {
+    // 初期化前は黙ってスキップ（次回同期で収束）
+    return;
+  }
   const { error } = await sb
-    .from('notifications')               // ← テーブル名が異なる場合は合わせてください
+    .from('notifications')
     .upsert(row, { onConflict: 'id' });
+
   if (error) throw new Error(`remoteUpsertNotification failed: ${error.message}`);
 }
