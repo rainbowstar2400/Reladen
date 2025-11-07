@@ -17,9 +17,19 @@ const TABLES: SyncPayload['table'][] = [
 
 // --- API 呼び出し ---
 async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 'table'>) {
+  // ★ 追加：アクセストークン取得（ログインしていない場合は未付与）
+  let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { data } = await supabaseClient?.auth.getSession()!;
+    const accessToken = data?.session?.access_token;
+    if (accessToken) {
+      headers = { ...headers, Authorization: `Bearer ${accessToken}` };
+    }
+  } catch { /* noop */ }
+
   const res = await fetch(`/api/sync/${table}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ ...body, table }),
   });
   if (!res.ok) throw new Error(`sync ${table} failed (${res.status})`);

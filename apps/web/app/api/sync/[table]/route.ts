@@ -5,8 +5,15 @@ import { createClient } from '@supabase/supabase-js';
 import { syncRequestSchema, syncResponseSchema, allowedTables, type AllowedTable } from '@/lib/schemas/server/sync';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
+
+/** リクエストの Authorization を伝播して「ユーザーとして」操作する */
+function createAuthedClient(req: NextRequest) {
+  const authz = req.headers.get('authorization') || '';
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: authz ? { Authorization: authz } : {} },
+  });
+}
 
 function jsonWithHeaders(data: unknown, status = 200, requestId?: string) {
   const headers = new Headers();
@@ -21,6 +28,8 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
   const clientIp = req.headers.get('x-forwarded-for') || 'unknown';
   const userAgent = req.headers.get('user-agent') || 'unknown';
   let table: AllowedTable | string = params.table;
+
+  const sb = createAuthedClient(req);
 
   try {
     // ---- 入力パース（URLのtableとBodyのtable整合もチェック） ----
@@ -55,7 +64,9 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
 
       const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
       if (error) {
-        throw new Error(`upsert failed: ${error.message}`);
+        const msg = error.message || '';
+        const isAuth = /JWT|permission|RLS|row level/i.test(msg);
+        throw new Response(JSON.stringify({ message: `upsert failed: ${msg}` }), { status: isAuth ? 401 : 400 });
       }
       pushed = rows.length;
     }
@@ -66,12 +77,12 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
 
     let cloud = [] as any[];
     if (since) {
-      const { data, error } = await sb
-        .from(table)
-        .select('*')
-        .gte('updated_at', since);
-      if (error) throw new Error(`select failed: ${error.message}`);
-      cloud = data ?? [];
+      const { data, error } = await sb.from(table).select('*').gte('updated_at', since);
+      if (error) {
+        const msg = error.message || '';
+        const isAuth = /JWT|permission|RLS|row level/i.test(msg);
+        throw new Response(JSON.stringify({ message: `select failed: ${msg}` }), { status: isAuth ? 401 : 400 });
+      }
     } else {
       // since未指定時の方針：初回は一旦空返却（全件取得を避ける）
       cloud = [];
@@ -95,10 +106,14 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     return jsonWithHeaders(resp, 200, requestId);
   } catch (e: any) {
     const durationMs = Date.now() - started;
+    const status = e instanceof Response ? e.status : 500;
+    const message = e instanceof Response ? 'upstream error' : (e?.message ?? 'internal error');
     console.error(JSON.stringify({
       lvl: 'error', at: 'sync.fail', requestId, clientIp, userAgent,
-      table, durationMs, message: e?.message, stack: e?.stack,
+      table, durationMs, status, message,
     }));
+    if (e instanceof Response) return e; // 401/400 をそのまま返す
     return jsonWithHeaders({ message: 'internal error', requestId }, 500, requestId);
   }
+
 }
