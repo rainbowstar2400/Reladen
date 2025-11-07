@@ -15,24 +15,27 @@ const TABLES: SyncPayload['table'][] = [
   'consult_answers', // ← 追加
 ];
 
-// --- API 呼び出し ---
+// ★ 追加：ヘルパー
+async function getAccessToken(): Promise<string | null> {
+  const sb = supabaseClient;
+  if (!sb) return null;
+  const { data, error } = await sb.auth.getSession();
+  if (error) return null;
+  return data?.session?.access_token ?? null;
+}
+
 // --- API 呼び出し ---
 async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 'table'>) {
-  // ★ 追加：アクセストークン取得（ログインしていない場合は未付与）
-  let headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  try {
-    const { data } = await supabaseClient?.auth.getSession()!;
-    const token = data?.session?.access_token;
-    if (token) headers.Authorization = `Bearer ${token}`;
-  } catch { /* noop */ }
+  // ★ 追加：Authorization ヘッダを付与
+  const token = await getAccessToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`/api/sync/${table}`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ ...body, table }),
   });
-
-  // ★ サーバーのエラーメッセージを拾って表示できるように
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`sync ${table} failed (${res.status}): ${text || res.statusText}`);
@@ -40,7 +43,6 @@ async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 't
   const json = await res.json();
   return syncPayloadSchema.parse(json);
 }
-
 
 type SyncResult =
   | { ok: true }
@@ -216,6 +218,16 @@ function useSyncInternal() {
     window.addEventListener('reladen:request-sync', onRequest);
     return () => window.removeEventListener('reladen:request-sync', onRequest);
   }, [syncAll]);
+
+  // ★ 追加：Auth 状態変化で同期をトリガ
+  useEffect(() => {
+    const sb = supabaseClient;
+    if (!sb) return;
+    const { data: sub } = sb.auth.onAuthStateChange((_event) => {
+      requestDebouncedSync(); // サインイン完了後に Authorization 付きで再同期
+    });
+    return () => sub?.subscription?.unsubscribe();
+  }, [requestDebouncedSync]);
 
   return useMemo(
     () => ({
