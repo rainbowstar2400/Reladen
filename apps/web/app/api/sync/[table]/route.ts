@@ -1,6 +1,6 @@
 // apps/web/app/api/sync/[table]/route.ts
 
-export const runtime = 'nodejs'; // Edge事故回避
+export const runtime = 'nodejs'; // ← 追加：Edge事故回避
 
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
@@ -8,9 +8,18 @@ import { createClient } from '@supabase/supabase-js';
 import { syncRequestSchema, syncResponseSchema, allowedTables, type AllowedTable } from '@/lib/schemas/server/sync';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
+const SUPABASE_ANON_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
 
-/** リクエストの Authorization を伝播して「ユーザーとして」操作する */
+function jsonWithHeaders(data: unknown, status = 200, requestId?: string) {
+  const headers = new Headers();
+  headers.set('Content-Type', 'application/json');            // ★ 明示
+  headers.set('X-Server-Time', new Date().toISOString());
+  if (requestId) headers.set('X-Request-Id', requestId);
+  return new Response(JSON.stringify(data), { status, headers });
+}
+
+// リクエスト毎に Authorization を伝播
 function createAuthedClient(req: NextRequest) {
   const authz = req.headers.get('authorization') || '';
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -18,20 +27,16 @@ function createAuthedClient(req: NextRequest) {
   });
 }
 
-// ★ Supabaseエラーを 400/401 に整形（RLS/JWT系は 401）
+// Supabaseエラーを 400/401 に成形
 function asHttpError(prefix: string, err: any) {
   const m = err?.message ?? String(err);
   const isAuth = /JWT|permission|RLS|row level|authorization/i.test(m);
   const status = isAuth ? 401 : 400;
-  return new Response(JSON.stringify({ message: `${prefix}: ${m}` }), { status });
+  return jsonWithHeaders({ message: `${prefix}: ${m}` }, status);
 }
 
-function jsonWithHeaders(data: unknown, status = 200, requestId?: string) {
-  const headers = new Headers();
-  headers.set('X-Server-Time', new Date().toISOString());
-  if (requestId) headers.set('X-Request-Id', requestId);
-  return new Response(JSON.stringify(data), { status, headers });
-}
+// residents の許可カラム（DBにあるものだけ）
+const RESIDENTS_ALLOWED = new Set(['id','name','updated_at','deleted','owner_id']);
 
 export async function POST(req: NextRequest, { params }: { params: { table: string } }) {
   const started = Date.now();
@@ -40,19 +45,16 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
   const userAgent = req.headers.get('user-agent') || 'unknown';
   let table: AllowedTable | string = params.table;
 
-  // ★ 必須環境変数チェック
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return jsonWithHeaders({ message: 'supabase env missing' }, 500, requestId);
   }
 
-  // ★ 認証付きクライアント
   const sb = createAuthedClient(req);
 
   try {
-    // ---- 入力パース ----
+    // --- 入力 ---
     const body = await req.json().catch(() => ({}));
     const parsed = syncRequestSchema.safeParse({ ...body, table });
-
     if (!parsed.success) {
       const errors = parsed.error.flatten();
       return jsonWithHeaders({ message: 'invalid payload', errors }, 400, requestId);
@@ -62,7 +64,7 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       return jsonWithHeaders({ message: 'table not allowed' }, 400, requestId);
     }
 
-    // ---- クライアントからの変更（push）を反映 ----
+    // --- push (upsert) ---
     const incoming = parsed.data.changes ?? [];
     let pushed = 0;
     if (incoming.length > 0) {
@@ -70,28 +72,24 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
         const d = { ...(c.data as Record<string, any>) };
         if (typeof d.deleted !== 'boolean') d.deleted = !!c.deleted;
 
-        // ★ residents: DB未定義/命名不一致フィールドを除外（当面の暫定）
         if (table === 'residents') {
+          // 1) まず camelCase のクライアント専用フィールドを除去
           delete d.activityTendency;
           delete d.sleepProfile;
-          // 将来: snake_case 保存に切替えるなら下記を有効化 + DB列追加
-          // if ('activityTendency' in d) { d.activity_tendency = d.activityTendency; delete d.activityTendency; }
-          // if ('sleepProfile' in d)     { d.sleep_profile     = d.sleepProfile;     delete d.sleepProfile;     }
+          // 2) 念のためホワイトリストでフィルタ
+          for (const k of Object.keys(d)) {
+            if (!RESIDENTS_ALLOWED.has(k)) delete d[k];
+          }
         }
         return d;
       });
 
       const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
-      if (error) {
-        const msg = error.message || '';
-        const isAuth = /JWT|permission|RLS|row level/i.test(msg);
-        throw new Response(JSON.stringify({ message: `upsert failed: ${msg}` }), { status: isAuth ? 401 : 400 });
-      }
+      if (error) throw asHttpError('upsert failed', error);
       pushed = rows.length;
     }
 
-    // ---- クラウドの変更（pull）を返す ----
-    // since がある場合のみ差分取得。無ければ「最新N件」などにしてもOK（ここではsince優先）
+    // --- pull (select) ---
     const since = (parsed.data.since && new Date(parsed.data.since).toISOString()) || null;
     let cloud: any[] = [];
     if (since) {
@@ -99,7 +97,7 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       if (error) throw asHttpError('select failed', error);
       cloud = data ?? [];
     } else {
-      cloud = []; // 初回全件は避ける方針
+      cloud = []; // 初回は全件返さない方針
     }
 
     const resp = syncResponseSchema.parse({
@@ -112,17 +110,17 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     });
 
     const durationMs = Date.now() - started;
-    console.log(JSON.stringify({ lvl: 'info', at: 'sync.ok', requestId, clientIp, userAgent, table, pushed, pulled: resp.changes.length, durationMs }));
-
+    console.log(JSON.stringify({ lvl:'info', at:'sync.ok', requestId, clientIp, userAgent, table, pushed, pulled: resp.changes.length, durationMs }));
     return jsonWithHeaders(resp, 200, requestId);
   } catch (e: any) {
     const durationMs = Date.now() - started;
-    const status = e instanceof Response ? e.status : 500;
-    const message = e instanceof Response ? await e.text().catch(() => '') : (e?.message ?? 'internal error');
-
-    console.error(JSON.stringify({ lvl: 'error', at: 'sync.fail', requestId, clientIp, userAgent, table, durationMs, status, message, stack: e?.stack }));
-
-    if (e instanceof Response) return e; // 400/401 をそのまま返す
-    return jsonWithHeaders({ message: 'internal error', requestId }, 500, requestId);
+    const isResp = e instanceof Response;
+    const status = isResp ? e.status : 500;
+    let body = { message: 'internal error', requestId };
+    if (isResp) {
+      try { body = JSON.parse(await e.text()); } catch { body = { message: 'upstream error', requestId }; }
+    }
+    console.error(JSON.stringify({ lvl:'error', at:'sync.fail', requestId, clientIp, userAgent, table, durationMs, status, body, stack: e?.stack }));
+    return jsonWithHeaders(body, status, requestId); // ★ 常に本文を返す
   }
 }
