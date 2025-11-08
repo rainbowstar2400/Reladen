@@ -1,5 +1,7 @@
 'use client';
 
+import React from 'react';
+
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Resident } from '@/types';
@@ -91,11 +93,6 @@ const residentFormSchema = z.object({
   sleepWakeTime: z.preprocess(
     v => (v === '' ? undefined : v),
     z.string().regex(/^\d{2}:\d{2}$/).optional()
-  ),
-
-  sleepPrepMinutes: z.preprocess(
-    v => (v === '' || v == null ? undefined : Number(v)),
-    z.number().int().min(0).max(180).optional()
   ),
 
 });
@@ -191,7 +188,7 @@ export function ResidentForm({
         ? {
           bedtime: values.sleepBedtime,
           wakeTime: values.sleepWakeTime,
-          prepMinutes: values.sleepPrepMinutes ?? 30,
+          prepMinutes: 30,
         }
         : undefined;
 
@@ -232,7 +229,6 @@ export function ResidentForm({
       activityTendency: saved.activityTendency ?? '',
       sleepBedtime: saved.sleepProfile?.bedtime ?? '',
       sleepWakeTime: saved.sleepProfile?.wakeTime ?? '',
-      sleepPrepMinutes: saved.sleepProfile?.prepMinutes ?? undefined,
     });
 
 
@@ -585,27 +581,6 @@ export function ResidentForm({
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="sleepPrepMinutes"
-              render={({ field }) => (
-                <FormItem className="space-y-2">
-                  <FormLabel>就寝準備（分・任意）</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={180}
-                      placeholder="例：30"
-                      value={field.value ?? ''}
-                      onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                      onBlur={field.onBlur}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
           </div>
 
           {/* 既定値プレビュー（sleepProfile未入力時に、活動傾向からの既定を見せるだけ） */}
@@ -613,7 +588,6 @@ export function ResidentForm({
             const t = form.watch('activityTendency') as ('morning'|'normal'|'night'|undefined);
             const bed = form.watch('sleepBedtime');
             const wake = form.watch('sleepWakeTime');
-            const prep = form.watch('sleepPrepMinutes');
 
             // sleepProfileを未入力で activityTendency が選ばれているときだけ表示
             if (t && !bed && !wake) {
@@ -630,13 +604,6 @@ export function ResidentForm({
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => router.push('/office/residents/diagnosis')}
-          >
-            MBTIを診断する
-          </Button>
           <Button type="submit" disabled={upsert.isPending}>
             {upsert.isPending ? '保存中…' : '保存'}
           </Button>
