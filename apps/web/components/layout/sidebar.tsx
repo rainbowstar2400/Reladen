@@ -15,8 +15,8 @@ const NAV_ITEMS = [
 ];
 
 const OFFICE_SUB = [
-  { href: '/residents', label: '住人一覧' },
-  { href: '/residents/new', label: '新規住人登録' },
+  { href: '/office/residents', label: '住人一覧' },
+  { href: '/office/new', label: '新規住人登録' },
   { href: '/office/presets', label: 'プリセット管理' },
 ];
 
