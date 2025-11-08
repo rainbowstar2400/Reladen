@@ -1,14 +1,12 @@
 'use client';
 
-import { useParams } from 'next/navigation';
 import { ResidentForm } from '@/components/forms/resident-form';
 import { useResident } from '@/lib/data/residents'; // データ取得フック
 import { Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
-export default function EditResidentPage() {
-  const params = useParams<{ id: string }>();
+export default function EditResidentPage({ params }: { params: { id: string } }) {
   const residentId = params.id;
   
   // ID に基づいて住人データを取得

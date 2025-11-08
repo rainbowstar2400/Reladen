@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useResident, useDeleteResident } from '@/lib/data/residents';
 import { useRelations } from '@/lib/data/relations';
 import { useFeelings } from '@/lib/data/feelings';
@@ -12,8 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, ArrowLeft, Pencil } from 'lucide-react'; // アイコンを追加
 import Link from 'next/link'; // Linkを追加
 
-export default function ResidentDetailPage() {
-  const params = useParams<{ id: string }>();
+export default function ResidentDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const residentId = params.id;
   const { data: resident, isLoading } = useResident(residentId);
