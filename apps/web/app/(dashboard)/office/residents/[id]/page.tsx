@@ -13,10 +13,6 @@ import { Loader2, ArrowLeft, Pencil } from 'lucide-react'; // アイコンを追
 import Link from 'next/link'; // Linkを追加
 
 export default function ResidentDetailPage({ params }: { params: { id: string } }) {
-  // --- ↓↓↓ デバッグここから ↓↓↓ ---
-  console.log('--- 詳細ページ ---');
-  console.log('受け取った params:', params);
-  // --- ↑↑↑ デバッグここまで ↑↑↑ ---
   const router = useRouter();
   const residentId = params.id;
   const { data: resident, isLoading } = useResident(residentId);
@@ -61,7 +57,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
         </Button>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
-            <Link href={`/office/residents/[id]/edit`} className="flex items-center gap-2">
+            <Link href={`/office/residents/${resident.id}/edit`} className="flex items-center gap-2">
               <Pencil className="h-4 w-4" />
               編集
             </Link>
