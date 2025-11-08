@@ -54,14 +54,11 @@ function SituationBadge({ situation }: { situation: Situation }) {
 /* ----------------------------
    住人タイル（カード風アイテム）
 ----------------------------- */
-// 今はモック（将来 Resident に置換）。status は暫定互換のため残す。
+// 住人タイル表示用の最小限の型
 type ResidentLite = {
   id: string;
   name: string;
-  status?: 'sleep' | 'active'; // ← 既存ダミー互換（データ未整備時のフォールバック用）
-  // 将来（実データ）:
-  activityTendency?: 'morning' | 'normal' | 'night';
-  sleepProfile?: { bedtime: string; wakeTime: string; prepMinutes: number };
+  // ★ 以前のダミーデータ互換 'status' プロパティは不要なため削除
 };
 
 function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation }) {
@@ -92,18 +89,12 @@ function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation 
    ページ本体
 ----------------------------- */
 export default function HomePage() {
-  // ✅ いまはモック。既存ダミーを維持しつつ「状況バッジ」を動かす
   // 実データ（IndexedDB）から取得
   const [residents, setResidents] = useState<Resident[]>([]);
 
-
-  // ✅ 実データ導入時の雛形（コメント解除で利用）
-  // const residentsFull: Resident[] = useResidents(); // ← 将来の取得フック
-  // const now = new Date(); // JST 運用（現実同期）
-
+  // 1分ごとに tick して再レンダを促す。都度 new Date() を評価して calcSituation に渡す。
   const [tick, setTick] = useState(0);
 
-  // いまはダミー status → Situation に丸める（将来 calcSituation に置換）
   // 1分ごとに tick して再レンダを促す
   useEffect(() => {
     const timer = setInterval(() => setTick((v) => v + 1), 60 * 1000);
@@ -142,7 +133,6 @@ export default function HomePage() {
         const lite: ResidentLite = {
           id: (r as any).id,
           name: (r as any).name ?? '',
-          // 旧ダミー互換の status は不要だが、型互換のため残せる
         };
         return { r: lite, sit };
       }),
@@ -173,6 +163,7 @@ export default function HomePage() {
 
         {/* みんなの様子 */}
         <SectionTitle>みんなの様子</SectionTitle>
+
         <div className="overflow-x-auto">
           <div className="flex gap-4 pb-2">
             {residentsWithSituation.length === 0 ? (
