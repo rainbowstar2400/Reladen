@@ -9,6 +9,8 @@
 import { startConversation } from "@/app/actions/conversation";
 import { listLocal } from "@/lib/db-local";
 import type { TopicThread } from "@repo/shared/types/conversation";
+import { selectConversationCandidates } from "@/lib/conversation/candidates";
+import type { Resident } from "@/types";
 
 export type SchedulerOptions = {
   /** 有効/無効（UIからも切替できるようにしておくと便利） */
@@ -23,7 +25,7 @@ export type SchedulerOptions = {
 
 const DEFAULTS: Required<SchedulerOptions> = {
   enabled: true,
-  baseIntervalMs: 90_000, // 90秒
+  baseIntervalMs: 90_000, // 会話生成間隔：90秒
   quietHours: [1, 6],     // 01:00-06:59 はスキップ（任意で調整）
   defaultParticipants: ["resident_A", "resident_B"],
 };
@@ -147,6 +149,22 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
 
       // 対象選定 → 会話開始
       const target = await pickThreadOrDefault(O.defaultParticipants);
+
+      // 選定された参加者が活動中か（寝ていないか）確認する
+      const allResidents = (await listLocal("residents")) as Resident[];
+      const now = new Date();
+      // 'candidates.ts' のロジックを使って活動中の住人リストを取得
+      const awakeCandidates = selectConversationCandidates(now, allResidents);
+      const awakeIds = new Set(awakeCandidates.map(r => r.id));
+
+      const [pA, pB] = target.participants;
+      if (!awakeIds.has(pA) || !awakeIds.has(pB)) {
+        // 参加者のどちらかが就寝中のため、会話をスキップ
+        console.log(`[Scheduler] Skipping conversation: ${pA} or ${pB} is sleeping.`);
+        refreshLock(); // スキップも「実行」とみなし、ロックを更新して次のインターバルまで待つ
+        scheduleNext();
+        return;
+      }
 
       await startConversation({
         threadId: target.threadId,         // 既存スレッドがあれば継続
