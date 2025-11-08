@@ -633,7 +633,7 @@ export function ResidentForm({
           <Button
             type="button"
             variant="secondary"
-            onClick={() => router.push('/residents/diagnosis')}
+            onClick={() => router.push('/office/residents/diagnosis')}
           >
             MBTIを診断する
           </Button>

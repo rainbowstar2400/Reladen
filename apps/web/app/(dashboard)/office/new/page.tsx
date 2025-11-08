@@ -13,7 +13,7 @@ export default function NewResidentPage() {
         <CardTitle>住人を追加</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResidentForm onSubmitted={() => router.push('/residents')} />
+        <ResidentForm onSubmitted={() => router.push('/office/residents')} />
       </CardContent>
     </Card>
   );

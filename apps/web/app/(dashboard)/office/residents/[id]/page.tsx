@@ -41,14 +41,14 @@ export default function ResidentDetailPage() {
       {/* --- ヘッダー（ボタン類） --- */}
       <div className="flex items-center justify-between">
         <Button variant="outline" asChild>
-          <Link href="/residents" className="flex items-center gap-2">
+          <Link href="/office/residents" className="flex items-center gap-2">
             <ArrowLeft className="h-4 w-4" />
             一覧に戻る
           </Link>
         </Button>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
-            <Link href={`/residents/${resident.id}/edit`} className="flex items-center gap-2">
+            <Link href={`/office/residents/[id]/edit`} className="flex items-center gap-2">
               <Pencil className="h-4 w-4" />
               編集
             </Link>
@@ -59,7 +59,7 @@ export default function ResidentDetailPage() {
               // 削除確認ダイアログ
               if (!window.confirm('本当に削除してよろしいですか？')) return;
               remove.mutate(resident.id, {
-                onSuccess: () => router.push('/residents'),
+                onSuccess: () => router.push('/office/residents'),
               });
             }}
             disabled={remove.isPending}

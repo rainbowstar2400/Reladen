@@ -15,7 +15,7 @@ export default function ResidentsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">住人一覧</h1>
         <Button asChild>
-          <Link href="/residents/new" className="flex items-center gap-2">
+          <Link href="/office/new" className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
             新規追加
           </Link>
@@ -37,11 +37,11 @@ export default function ResidentsPage() {
               {/* ボタン群（詳細、編集、削除） */}
               <div className="flex gap-2">
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/residents/${resident.id}`}>詳細</Link>
+                  <Link href={`/office/residents/[id]`}>詳細</Link>
                 </Button>
                 {/* 編集ボタンを追加（リンク先は詳細ページ） */}
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/residents/{resident.id}/edit`}>編集</Link>
+                  <Link href={`/office/residents/[id]/edit`}>編集</Link>
                 </Button>
                 <Button
                   variant="destructive"

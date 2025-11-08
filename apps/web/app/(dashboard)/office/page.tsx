@@ -25,8 +25,8 @@ export default function OfficePage() {
 
       {/* 大きめボタンを中央縦並び */}
       <div className="mx-auto flex max-w-2xl flex-col gap-8">
-        <Btn href="/residents" label="住人一覧" />
-        <Btn href="/residents/new" label="新規住人登録" />
+        <Btn href="/office/residents" label="住人一覧" />
+        <Btn href="/office/new" label="新規住人登録" />
         <Btn href="/office/presets" label="プリセット管理" />
       </div>
     </div>
