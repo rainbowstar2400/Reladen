@@ -13,6 +13,10 @@ import { Loader2, ArrowLeft, Pencil } from 'lucide-react'; // アイコンを追
 import Link from 'next/link'; // Linkを追加
 
 export default function ResidentDetailPage({ params }: { params: { id: string } }) {
+  // --- ↓↓↓ デバッグここから ↓↓↓ ---
+  console.log('--- 詳細ページ ---');
+  console.log('受け取った params:', params);
+  // --- ↑↑↑ デバッグここまで ↑↑↑ ---
   const router = useRouter();
   const residentId = params.id;
   const { data: resident, isLoading } = useResident(residentId);
@@ -37,6 +41,16 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
 
   return (
     <div className="space-y-6">
+      {/* --- ↓↓↓ デバッグここから ↓↓↓ --- */}
+      <div className="rounded-md border border-dashed border-destructive bg-muted p-4">
+        <p className="font-medium text-destructive">デバッグ情報（params の内容）:</p>
+        <pre className="mt-2 text-xs">
+          {JSON.stringify({ params }, null, 2)}
+        </pre>
+        <p className="mt-2 text-xs text-muted-foreground">
+        </p>
+      </div>
+      {/* --- ↑↑↑ デバッグここまで ↑↑↑ --- */}
       {/* --- ヘッダー（ボタン類） --- */}
       <div className="flex items-center justify-between">
         <Button variant="outline" asChild>
@@ -67,7 +81,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
           </Button>
         </div>
       </div>
-      
+
       {/* --- 住人名 --- */}
       <h1 className="text-2xl font-bold">{resident.name}</h1>
 
