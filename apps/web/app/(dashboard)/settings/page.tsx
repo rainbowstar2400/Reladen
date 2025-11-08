@@ -22,14 +22,6 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-10">
-      {/* セクション内リンク */}
-      <nav className="text-sm">
-        <ul className="flex flex-wrap gap-4">
-          <li><a href="#data" className="underline-offset-4 hover:underline">データ管理</a></li>
-          <li><a href="#a11y" className="underline-offset-4 hover:underline">アクセシビリティ</a></li>
-          <li><a href="#about" className="underline-offset-4 hover:underline">ゲームについて</a></li>
-        </ul>
-      </nav>
 
       {/* データ管理 */}
       <section id="data" className="scroll-mt-24">
@@ -141,7 +133,7 @@ export default function SettingsPage() {
           {/* アプリ情報 */}
           <Card><CardContent className="flex items-center justify-between py-3">
             <div className="font-medium">アプリ情報</div>
-            <div className="text-sm text-muted-foreground">Reladen　ver.0.10　制作：—</div>
+            <div className="text-sm text-muted-foreground">Reladen　ver.0.10　制作：優</div>
           </CardContent></Card>
 
           {/* プライバシーポリシー（内部遷移） */}
