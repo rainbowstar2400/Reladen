@@ -82,7 +82,7 @@ function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation 
 
       <div className="font-medium">{r.name}</div>
       <Button size="sm" disabled={disabled} className="min-w-20">
-        {disabled ? 'おやすみ中' : '話す'}
+        {disabled ? '就寝中' : '話す'}
       </Button>
     </div>
   );
@@ -173,13 +173,6 @@ export default function HomePage() {
 
         {/* みんなの様子 */}
         <SectionTitle>みんなの様子</SectionTitle>
-        <div className="overflow-x-auto">
-          <div className="flex gap-4 pb-2">
-            {residentsWithSituation.map(({ r, sit }) => (
-              <ResidentTile key={r.id} r={r} situation={sit} />
-            ))}
-          </div>
-        </div>
         <div className="overflow-x-auto">
           <div className="flex gap-4 pb-2">
             {residentsWithSituation.length === 0 ? (
