@@ -28,8 +28,20 @@ async function getAccessToken(): Promise<string | null> {
 async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 'table'>) {
   // ★ 追加：Authorization ヘッダを付与
   const token = await getAccessToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
+
+  // ▼▼▼【重要】ここを修正 ▼▼▼
+  // 認証トークンがまだ利用できない (競合状態) 場合、
+  // APIを呼び出すと 401 エラーになるため、ここでエラーを発生させて処理を中断する
+  if (!token) {
+    // このエラーは syncAll の catch ブロックで捕捉される
+    throw new Error('Auth session missing!');
+  }
+  // ▲▲▲ 修正完了 ▲▲▲
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`, // token が null でないことが保証された
+  };
 
   const res = await fetch(`/api/sync/${table}`, {
     method: 'POST',
@@ -141,6 +153,11 @@ function useSyncInternal() {
       console.error('Sync error:', err);
       setError(err?.message ?? 'unknown');
       setPhase('error');
+
+      // (★ 修正のポイント)
+      // "Auth session missing!" エラーの場合も、
+      // 認証状態が変化する (onAuthStateChange) か、
+      // 指数バックオフのリトライでトークンが取得できるようになるのを待ちます。
 
       // 追加: 指数バックオフ + ジッターで自動リトライ
       const MAX_RETRIES = 5;
