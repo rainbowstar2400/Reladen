@@ -14,8 +14,8 @@ export default function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  // ★ 修正: `isPending` ではなく `ready` を受け取る
-  const { ready } = useAuth();
+  // ★ 修正: `ready` に加えて `user` も取得
+  const { ready, user } = useAuth();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -23,8 +23,8 @@ export default function DashboardLayout({
       <div className="grid flex-1 grid-cols-1 md:grid-cols-[16rem_1fr]">
         <Sidebar />
 
-        {/* ★ 修正: 認証準備完了 (ready=true) の時だけ RealtimeSubscriber を描画 */}
-        {ready && <RealtimeSubscriber />}
+        {/* ★ 修正: 準備完了(ready) かつ ユーザーが存在する(user) の時だけ描画 */}
+        {ready && user && <RealtimeSubscriber />}
 
         <MotionMain>{children}</MotionMain>
       </div>
