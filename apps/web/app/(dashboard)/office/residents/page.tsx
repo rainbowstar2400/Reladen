@@ -37,11 +37,11 @@ export default function ResidentsPage() {
               {/* ボタン群（詳細、編集、削除） */}
               <div className="flex gap-2">
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/office/residents/[id]`}>詳細</Link>
+                  <Link href={`/office/residents/${resident.id}`}>詳細</Link>
                 </Button>
                 {/* 編集ボタンを追加（リンク先は詳細ページ） */}
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/office/residents/[id]/edit`}>編集</Link>
+                  <Link href={`/office/residents/${resident.id}/edit`}>編集</Link>
                 </Button>
                 <Button
                   variant="destructive"
