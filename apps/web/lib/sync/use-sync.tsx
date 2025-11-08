@@ -180,11 +180,13 @@ function useSyncInternal() {
 
   }, [lastSyncedAt]);
 
+  /*
   // 初回マウント時：1回だけ同期
   useEffect(() => {
     let t = window.setTimeout(() => { void syncAll(); }, 0);
     return () => window.clearTimeout(t);
   }, [syncAll]);
+  */
 
   // online/offline での同期（重複登録・多重実行を避ける）
   useEffect(() => {
