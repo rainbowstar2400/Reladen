@@ -29,7 +29,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   }
 
   if (!resident) {
-    return <p className="text-sm text-muted-foreground">住人が見つかりませんでした。</p>;
+    return <p className="text-sm text-muted-foreground">住人が見つかりません。</p>;
   }
 
   const relatedRelations = relations?.filter((relation) => [relation.a_id, relation.b_id].includes(residentId)) ?? [];
@@ -37,16 +37,6 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
 
   return (
     <div className="space-y-6">
-      {/* --- ↓↓↓ デバッグここから ↓↓↓ --- */}
-      <div className="rounded-md border border-dashed border-destructive bg-muted p-4">
-        <p className="font-medium text-destructive">デバッグ情報（params の内容）:</p>
-        <pre className="mt-2 text-xs">
-          {JSON.stringify({ params }, null, 2)}
-        </pre>
-        <p className="mt-2 text-xs text-muted-foreground">
-        </p>
-      </div>
-      {/* --- ↑↑↑ デバッグここまで ↑↑↑ --- */}
       {/* --- ヘッダー（ボタン類） --- */}
       <div className="flex items-center justify-between">
         <Button variant="outline" asChild>
