@@ -16,7 +16,7 @@ export default function EditResidentPage({ params }: { params: { id: string } })
     <div className="space-y-6">
       <Button variant="outline" asChild>
         {/* 詳細ページに戻るリンク */}
-        <Link href={`/office/residents/[id]`} className="flex items-center gap-2">
+        <Link href={`/office/residents/${residentId}`} className="flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" />
           詳細に戻る
         </Link>
