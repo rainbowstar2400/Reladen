@@ -13,7 +13,7 @@ const SUPABASE_ANON_KEY =
 
 function jsonWithHeaders(data: unknown, status = 200, requestId?: string) {
   const headers = new Headers();
-  headers.set('Content-Type', 'application/json');            // ★ 明示
+  headers.set('Content-Type', 'application/json'); // ★ 明示
   headers.set('X-Server-Time', new Date().toISOString());
   if (requestId) headers.set('X-Request-Id', requestId);
   return new Response(JSON.stringify(data), { status, headers });
@@ -36,7 +36,8 @@ function asHttpError(prefix: string, err: any) {
 }
 
 // residents の許可カラム（DBにあるものだけ）
-const RESIDENTS_ALLOWED = new Set(['id','name','updated_at','deleted','owner_id']);
+const RESIDENTS_ALLOWED = new Set(['id', 'name', 'updated_at', 'deleted', 'owner_id']);
+// 補足: RLSポリシーのため、'owner_id' は必須
 
 export async function POST(req: NextRequest, { params }: { params: { table: string } }) {
   const started = Date.now();
@@ -64,6 +65,17 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       return jsonWithHeaders({ message: 'table not allowed' }, 400, requestId);
     }
 
+    // --- ★ 修正点 1: 認証ユーザー情報を取得 ---
+    // RLSポリシーを満たすため、ここでユーザーIDを取得する
+    const {
+      data: { user },
+      error: authError,
+    } = await sb.auth.getUser();
+    if (authError || !user) {
+      return jsonWithHeaders({ message: 'auth error: ' + (authError?.message ?? 'no user') }, 401, requestId);
+    }
+    // --- ★ 修正完了 (1) ---
+
     // --- push (upsert) ---
     const incoming = parsed.data.changes ?? [];
     let pushed = 0;
@@ -71,6 +83,12 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       const rows = incoming.map((c) => {
         const d = { ...(c.data as Record<string, any>) };
         if (typeof d.deleted !== 'boolean') d.deleted = !!c.deleted;
+
+        // --- ★ 修正点 2: owner_id を強制上書き ---
+        // クライアント側のデータに関わらず、サーバー側で認証ユーザーIDを owner_id として設定する
+        // これにより、RLSポリシー (INSERT/UPDATE) を確実に満たす
+        d.owner_id = user.id;
+        // --- ★ 修正完了 (2) ---
 
         if (table === 'residents') {
           // 1) まず camelCase のクライアント専用フィールドを除去
@@ -110,7 +128,7 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     });
 
     const durationMs = Date.now() - started;
-    console.log(JSON.stringify({ lvl:'info', at:'sync.ok', requestId, clientIp, userAgent, table, pushed, pulled: resp.changes.length, durationMs }));
+    console.log(JSON.stringify({ lvl: 'info', at: 'sync.ok', requestId, clientIp, userAgent, table, pushed, pulled: resp.changes.length, durationMs }));
     return jsonWithHeaders(resp, 200, requestId);
   } catch (e: any) {
     const durationMs = Date.now() - started;
@@ -118,9 +136,13 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     const status = isResp ? e.status : 500;
     let body = { message: 'internal error', requestId };
     if (isResp) {
-      try { body = JSON.parse(await e.text()); } catch { body = { message: 'upstream error', requestId }; }
+      try {
+        body = JSON.parse(await e.text());
+      } catch {
+        body = { message: 'upstream error', requestId };
+      }
     }
-    console.error(JSON.stringify({ lvl:'error', at:'sync.fail', requestId, clientIp, userAgent, table, durationMs, status, body, stack: e?.stack }));
+    console.error(JSON.stringify({ lvl: 'error', at: 'sync.fail', requestId, clientIp, userAgent, table, durationMs, status, body, stack: e?.stack }));
     return jsonWithHeaders(body, status, requestId); // ★ 常に本文を返す
   }
 }
