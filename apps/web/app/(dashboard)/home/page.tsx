@@ -101,21 +101,23 @@ export default function HomePage() {
   // const residentsFull: Resident[] = useResidents(); // ← 将来の取得フック
   // const now = new Date(); // JST 運用（現実同期）
 
-  // いまはダミー status → Situation に丸める（将来 calcSituation に置換）
-  // 1分ごとに tick して再レンダを促す。都度 new Date() を評価して calcSituation に渡す。
   const [tick, setTick] = useState(0);
+
+  // いまはダミー status → Situation に丸める（将来 calcSituation に置換）
+  // 1分ごとに tick して再レンダを促す
   useEffect(() => {
     const timer = setInterval(() => setTick((v) => v + 1), 60 * 1000);
     return () => clearInterval(timer);
+  }, []);
 
-    useEffect(() => {
-      let alive = true;
-      (async () => {
-        const rows = await listLocal('residents');
-        if (alive) setResidents(rows as Resident[]);
-      })();
-      return () => { alive = false; };
-    }, []);
+  // マウント時に IndexedDB から住人を読み込む
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const rows = await listLocal('residents');
+      if (alive) setResidents(rows as Resident[]);
+    })();
+    return () => { alive = false; };
   }, []);
 
   const now = new Date();
