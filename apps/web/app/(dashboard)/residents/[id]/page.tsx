@@ -6,10 +6,11 @@ import { useRelations } from '@/lib/data/relations';
 import { useFeelings } from '@/lib/data/feelings';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ResidentForm } from '@/components/forms/resident-form';
+// import { ResidentForm } from '@/components/forms/resident-form'; // フォームを削除
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Pencil } from 'lucide-react'; // アイコンを追加
+import Link from 'next/link'; // Linkを追加
 
 export default function ResidentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -37,19 +38,41 @@ export default function ResidentDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* --- ヘッダー（ボタン類） --- */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{resident.name}</h1>
-        <Button
-          variant="destructive"
-          onClick={() => {
-            remove.mutate(resident.id, {
-              onSuccess: () => router.push('/residents'),
-            });
-          }}
-        >
-          削除
+        <Button variant="outline" asChild>
+          <Link href="/residents" className="flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            一覧に戻る
+          </Link>
         </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/residents/${resident.id}/edit`} className="flex items-center gap-2">
+              <Pencil className="h-4 w-4" />
+              編集
+            </Link>
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              // 削除確認ダイアログ
+              if (!window.confirm('本当に削除してよろしいですか？')) return;
+              remove.mutate(resident.id, {
+                onSuccess: () => router.push('/residents'),
+              });
+            }}
+            disabled={remove.isPending}
+          >
+            削除
+          </Button>
+        </div>
       </div>
+      
+      {/* --- 住人名 --- */}
+      <h1 className="text-2xl font-bold">{resident.name}</h1>
+
+      {/* --- タブ（詳細情報） --- */}
       <Tabs defaultValue="profile">
         <TabsList>
           <TabsTrigger value="profile">プロフィール</TabsTrigger>
@@ -111,14 +134,17 @@ export default function ResidentDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
-      <Card>
+
+      {/* --- 編集フォームのCardを削除 --- */}
+      {/* <Card>
         <CardHeader>
           <CardTitle>編集</CardTitle>
         </CardHeader>
         <CardContent>
           <ResidentForm defaultValues={resident} />
         </CardContent>
-      </Card>
+      </Card> 
+      */}
     </div>
   );
 }
