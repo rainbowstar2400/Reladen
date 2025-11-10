@@ -339,9 +339,9 @@ export function ResidentForm({
   const firstPersonPresetLabels = useMemo(() => firstPersonPresets.map(p => p.label), [firstPersonPresets]);
 
   // 「手動入力」モードかどうかを判定
-  const isSpeechManual = !watchSpeechPreset || !speechPresetLabels.includes(watchSpeechPreset);
-  const isOccupationManual = !watchOccupation || !occupationPresetLabels.includes(watchOccupation);
-  const isFirstPersonManual = !watchFirstPerson || !firstPersonPresetLabels.includes(watchFirstPerson);
+  const isSpeechManual = watchSpeechPreset === MANUAL_INPUT_KEY || (watchSpeechPreset != null && watchSpeechPreset !== '' && !speechPresetLabels.includes(watchSpeechPreset));
+  const isOccupationManual = watchOccupation === MANUAL_INPUT_KEY || (watchOccupation != null && watchOccupation !== '' && !occupationPresetLabels.includes(watchOccupation));
+  const isFirstPersonManual = watchFirstPerson === MANUAL_INPUT_KEY || (watchFirstPerson != null && watchFirstPerson !== '' && !firstPersonPresetLabels.includes(watchFirstPerson));
 
   return (
     <Form {...form}>
@@ -479,11 +479,13 @@ export function ResidentForm({
                       form.setValue('speechPresetDescription', preset?.description ?? '');
                     }
                   }}
+                  // ★ 8. value のロジックを修正
+                  // (手動モードならMANUAL_INPUT_KEY、そうでなければ現在の値(空も含む))
                   value={isSpeechManual ? MANUAL_INPUT_KEY : field.value ?? ''}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="プリセットを選択..." />
+                      <SelectValue placeholder="（未選択）" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
@@ -564,7 +566,8 @@ export function ResidentForm({
               <FormLabel className="text-sm text-muted-foreground">特徴</FormLabel>
               <FormControl>
                 <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
-                  {form.watch('speechPresetDescription') || '（特徴はありません）'}
+                  {/* ★ 9. watchする値が空（未選択）の場合の表示を修正 */}
+                  {form.watch('speechPresetDescription') || '（プリセットを選択すると特徴が表示されます）'}
                 </p>
               </FormControl>
             </FormItem>
@@ -652,7 +655,7 @@ export function ResidentForm({
               />
             </div>
 
-            {/* ★ 9. 職業 (Select + Manual UI) */}
+            {/* ★ 10. 職業 (Select + Manual UI) */}
             <div className="md:col-span-5 min-w-0 space-y-3">
               <FormField
                 control={form.control}
@@ -663,19 +666,17 @@ export function ResidentForm({
                     <Select
                       onValueChange={(value) => {
                         if (value === MANUAL_INPUT_KEY) {
-                          field.onChange(''); // 手動入力モードへ
+                          field.onChange('');
                         } else {
-                          field.onChange(value); // プリセットのラベルを選択
+                          field.onChange(value);
                         }
                       }}
-                      // ★ 
-                      // プリセットにある値ならその値、
-                      // それ以外（手動入力中 or 非管理プリセット読込）なら 'manual' を示す
+                      // ★ 11. value のロジックを修正
                       value={isOccupationManual ? MANUAL_INPUT_KEY : field.value ?? ''}
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="プリセットを選択..." />
+                          <SelectValue placeholder="（未選択）" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -693,12 +694,11 @@ export function ResidentForm({
                 )}
               />
 
-              {/* ★ 手動入力が選択された時だけ表示 */}
               {isOccupationManual && (
                 <div className="space-y-3 pl-2 border-l-2 border-dashed">
                   <FormField
                     control={form.control}
-                    name="occupation" // 同じ 'occupation' フィールドを操作
+                    name="occupation"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-sm text-muted-foreground">手動入力</FormLabel>
@@ -747,16 +747,17 @@ export function ResidentForm({
                 <Select
                   onValueChange={(value) => {
                     if (value === MANUAL_INPUT_KEY) {
-                      field.onChange(''); // 手動入力モードへ
+                      field.onChange('');
                     } else {
-                      field.onChange(value); // プリセットのラベルを選択
+                      field.onChange(value);
                     }
                   }}
+                  // ★ 13. value のロジックを修正
                   value={isFirstPersonManual ? MANUAL_INPUT_KEY : field.value ?? ''}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="プリセットを選択..." />
+                      <SelectValue placeholder="（未選択）" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
@@ -774,7 +775,6 @@ export function ResidentForm({
             )}
           />
 
-          {/* ★ 手動入力が選択された時だけ表示 */}
           {isFirstPersonManual && (
             <div className="space-y-3 pl-2 border-l-2 border-dashed">
               <FormField
