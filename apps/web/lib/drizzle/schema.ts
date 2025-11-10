@@ -17,6 +17,7 @@ export const residents = pgTable('residents', {
   name: text('name').notNull(),
   mbti: text('mbti'),
   traits: jsonb('traits'),
+  speechPreset: text('speech_preset'), // ★ 追加 (話し方プリセット)
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
   ownerId: uuid('owner_id'),
@@ -47,6 +48,7 @@ export const relations = pgTable(
   })
 );
 
+// ... (feelings, events テーブルは変更なし) ...
 export const feelings = pgTable(
   'feelings',
   {
@@ -75,6 +77,7 @@ export const events = pgTable('events', {
   byUpdated: index('events_updated_idx').on(t.updatedAt),
 }));
 
+// ... (residentsRelations, relationsResidents, feelingsRelations, topicThreads, beliefs, notifications テーブルは変更なし) ...
 export const residentsRelations = createRelations(residents, ({ many }) => ({
   relations: many(relations),
   feelingsFrom: many(feelings, { relationName: 'feelings_from' }),
@@ -142,4 +145,33 @@ export const notifications = pgTable('notifications', {
   statusIdx: index('notifications_status_idx').on(t.status),
   occurredIdx: index('notifications_occurred_idx').on(t.occurredAt),
   updatedIdx: index('notifications_updated_idx').on(t.updatedAt),
+}));
+
+/**
+ * @description プリセットのカテゴリ
+ * - speech: 話し方
+ * - occupation: 職業
+ * - first_person: 一人称
+ */
+export const presetCategoryEnum = pgEnum('preset_category', [
+  'speech',
+  'occupation',
+  'first_person',
+]);
+
+/**
+ * @description ユーザーが管理するプリセット
+ */
+export const presets = pgTable('presets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  category: presetCategoryEnum('category').notNull(), // 'speech' | 'occupation' | 'first_person'
+  value: text('value').notNull(), // DBに保存される値 (e.g., 'polite', 'student', '私')
+  label: text('label').notNull(), // UIに表示されるラベル (e.g., 'ていねい', '学生', '私')
+  ownerId: uuid('owner_id'), // 将来的にユーザーごとに管理する場合
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deleted: boolean('deleted').notNull().default(false),
+}, (t) => ({
+  categoryIdx: index('presets_category_idx').on(t.category),
+  // value はカテゴリ内でユニーク（ownerId が null の場合はグローバルでユニーク）
+  uniquePreset: { columns: [t.category, t.value, t.ownerId], isUnique: true },
 }));

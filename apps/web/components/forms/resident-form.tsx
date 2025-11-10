@@ -15,6 +15,8 @@ import { QUESTIONS, calculateMbti, type Answer } from '@/lib/mbti';
 import { useRouter } from 'next/navigation';
 import { defaultSleepByTendency } from '@/lib/schedule';
 import { ClickableRatingBox } from '@/components/ui/clickable-rating-box';
+// ★ TODO: 将来的には usePresets フックなどから動的に取得する
+// import { usePresets } from '@/lib/data/presets';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
 const MBTI_TYPES = [
@@ -30,6 +32,28 @@ const SPEECH_PRESETS = [
   { value: 'blunt', label: '素っ気ない' },
   { value: 'soft', label: 'やわらかい' },
 ] as const;
+
+// ★ 追加: 職業プリセット (z.enum から移行)
+const OCCUPATION_PRESETS = [
+  { value: 'student', label: '学生' },
+  { value: 'office', label: '会社員' },
+  { value: 'engineer', label: 'エンジニア' },
+  { value: 'teacher', label: '教員' },
+  { value: 'parttimer', label: 'パート・アルバイト' },
+  { value: 'freelancer', label: 'フリーランス' },
+  { value: 'unemployed', label: '無職' },
+  { value: 'other', label: 'その他' },
+] as const;
+
+// ★ 追加: 一人称プリセット (z.enum から移行)
+const FIRST_PERSON_PRESETS = [
+  { value: '私', label: '私' },
+  { value: '僕', label: '僕' },
+  { value: '俺', label: '俺' },
+  { value: 'うち', label: 'うち' },
+  { value: '自分', label: '自分' },
+] as const;
+
 
 // traits の初期値（未設定でも落ちないように）
 const DEFAULT_TRAITS = {
@@ -52,7 +76,7 @@ const residentFormSchema = z.object({
     activity: z.number().int().min(1).max(5),
     expressiveness: z.number().int().min(1).max(5),
   }),
-  // 追加：話し方プリセット（未設定可）
+  // 変更なし: すでに string
   speechPreset: z.string().optional().nullable(),
   // 追加：プレイヤーへの信頼度（表示専用）
   trustToPlayer: z.number().min(0).max(100).optional(),
@@ -63,15 +87,23 @@ const residentFormSchema = z.object({
     z.enum(['male', 'female', 'nonbinary', 'other']).optional()
   ),
 
+  // ★ 変更: z.enum から z.string に変更 (自由記述対応)
+  occupation: z.string().optional().nullable(),
+  /*
   occupation: z.preprocess(
     v => (v === '' || v == null ? undefined : v),
     z.enum(['student', 'office', 'engineer', 'teacher', 'parttimer', 'freelancer', 'unemployed', 'other']).optional()
   ),
+  */
 
+  // ★ 変更: z.enum から z.string に変更 (自由記述対応)
+  firstPerson: z.string().optional().nullable(),
+  /*
   firstPerson: z.preprocess(
     v => (v === '' || v == null ? undefined : v),
     z.enum(['私', '僕', '俺', 'うち', '自分']).optional()
   ),
+  */
 
 
   age: z.preprocess(
@@ -82,6 +114,7 @@ const residentFormSchema = z.object({
   interests: z.array(z.object({ value: z.string() })).optional(),
 
   // --- 活動傾向・睡眠関連 ---
+  // ... (以下、変更なし) ...
   activityTendency: z.preprocess(
     v => (v === '' ? undefined : v),
     z.enum(['morning', 'normal', 'night']).optional()
@@ -109,7 +142,18 @@ export function ResidentForm({
   onSubmitted?: () => void;
 }) {
   const router = useRouter();
+
+  // ★ TODO: 将来的には usePresets フックなどから動的に取得する
+  // const { data: speechPresets = SPEECH_PRESETS } = usePresets('speech');
+  // const { data: occupationPresets = OCCUPATION_PRESETS } = usePresets('occupation');
+  // const { data: firstPersonPresets = FIRST_PERSON_PRESETS } = usePresets('first_person');
+  // ※ ここではひとまず固定配列をそのまま使います
+  const speechPresets = SPEECH_PRESETS;
+  const occupationPresets = OCCUPATION_PRESETS;
+  const firstPersonPresets = FIRST_PERSON_PRESETS;
+
   const form = useForm<ResidentFormValues>({
+    // ... (defaultValues の設定は変更なし) ...
     resolver: zodResolver(residentFormSchema),
     defaultValues: useMemo(() => {
       // traits はオブジェクトとして持つ（未設定なら既定値をセット）
@@ -129,9 +173,9 @@ export function ResidentForm({
         interests: defaultValues?.interests?.map(val => ({ value: val })) ?? [],
       };
     }, [defaultValues]),
-
   });
 
+  // ... (診断パネルのロジックは変更なし) ...
   // 診断パネルの開閉と、各設問のスコア（1〜5、初期値は中立3）
   const [showDiagnosis, setShowDiagnosis] = useState(false);
   const [diagScores, setDiagScores] = useState<Record<string, number>>(
@@ -157,26 +201,36 @@ export function ResidentForm({
   const upsert = useUpsertResident();
 
   async function handleSubmit(values: ResidentFormValues) {
-    // MBTI: 空文字は undefined、非空は MBTI列挙に合わせる
+    // MBTI: (変更なし)
     const normalizedMbti: (typeof MBTI_TYPES)[number] | undefined =
       values.mbti && values.mbti.trim().length > 0
         ? (values.mbti as (typeof MBTI_TYPES)[number])
         : undefined;
 
-    // speechPreset: 空/null は undefined、非空は union に合わせる
-    const normalizedSpeech: (typeof SPEECH_PRESETS)[number]['value'] | undefined =
+    // ★ 変更: speechPreset: enum へのキャストを削除。文字列をそのまま使う
+    const normalizedSpeech: string | undefined =
       typeof values.speechPreset === 'string' && values.speechPreset.trim().length > 0
-        ? (values.speechPreset as (typeof SPEECH_PRESETS)[number]['value'])
+        ? values.speechPreset.trim()
         : undefined;
 
     const gender = values.gender as ('male' | 'female' | 'nonbinary' | 'other') | undefined;
-    const occupation = values.occupation as ('student' | 'office' | 'engineer' | 'teacher' | 'parttimer' | 'freelancer' | 'unemployed' | 'other') | undefined;
-    const firstPerson = values.firstPerson as ('私' | '僕' | '俺' | 'うち' | '自分') | undefined;
 
-    // ★ { value: string }[] から string[] に変換
+    // ★ 変更: occupation: enum へのキャストを削除。文字列をそのまま使う
+    const occupation: string | undefined =
+      typeof values.occupation === 'string' && values.occupation.trim().length > 0
+        ? values.occupation.trim()
+        : undefined;
+
+    // ★ 変更: firstPerson: enum へのキャストを削除。文字列をそのまま使う
+    const firstPerson: string | undefined =
+      typeof values.firstPerson === 'string' && values.firstPerson.trim().length > 0
+        ? values.firstPerson.trim()
+        : undefined;
+
+    // ★ { value: string }[] から string[] に変換 (変更なし)
     const interests = values.interests?.map(item => item.value).filter(Boolean) ?? [];
 
-    // 活動傾向
+    // 活動傾向 (変更なし)
     const activityTendency = values.activityTendency as ('morning' | 'normal' | 'night') | undefined;
 
     const sleepProfile =
@@ -198,8 +252,8 @@ export function ResidentForm({
 
       gender,
       age: typeof values.age === 'number' ? values.age : undefined,
-      occupation,
-      firstPerson,
+      occupation, // ★ 変更後の文字列
+      firstPerson, // ★ 変更後の文字列
       interests: interests.length > 0 ? interests : undefined,
       activityTendency,
       ...(sleepProfile ? { sleepProfile } : {}),
@@ -207,6 +261,7 @@ export function ResidentForm({
 
     const saved = await upsert.mutateAsync(payload);
 
+    // form.reset (変更なし)
     form.reset({
       id: saved.id,
       name: saved.name,
@@ -231,6 +286,7 @@ export function ResidentForm({
     onSubmitted?.();
   }
 
+  // ... (useFieldArray, newInterest のロジックは変更なし) ...
   // ★ 追加: 興味・関心 (useFieldArray)
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -240,9 +296,11 @@ export function ResidentForm({
   // ★ 追加: 新しく追加する興味・関心の入力値を管理
   const [newInterest, setNewInterest] = useState('');
 
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+        {/* ... (name, mbti フィールドは変更なし) ... */}
         <FormField
           control={form.control}
           name="name"
@@ -316,6 +374,8 @@ export function ResidentForm({
             );
           }}
         />
+
+        {/* ★ 変更: speechPreset を <select> から <Input> + <datalist> に変更 */}
         <FormField
           control={form.control}
           name="speechPreset"
@@ -325,26 +385,30 @@ export function ResidentForm({
               <FormItem className="space-y-2">
                 <FormLabel>話し方プリセット</FormLabel>
                 <FormControl>
-                  <select
-                    className="w-full rounded border px-3 py-2"
-                    name={field.name}
-                    ref={field.ref}
-                    value={v}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    onBlur={field.onBlur}
-                  >
-                    <option value="">（未設定）</option>
-                    <option value="polite">ていねい</option>
-                    <option value="casual">くだけた</option>
-                    <option value="blunt">素っ気ない</option>
-                    <option value="soft">やわらかい</option>
-                  </select>
+                  <>
+                    <Input
+                      placeholder="例：polite (ていねい)"
+                      list="speech-preset-options"
+                      {...field}
+                      value={v}
+                      onChange={(e) => field.onChange(e.target.value)}
+                    />
+                    <datalist id="speech-preset-options">
+                      {speechPresets.map((preset) => (
+                        <option key={preset.value} value={preset.value}>
+                          {preset.label}
+                        </option>
+                      ))}
+                    </datalist>
+                  </>
                 </FormControl>
                 <FormMessage />
               </FormItem>
             );
           }}
         />
+
+        {/* ... (性格 traits セクションは変更なし) ... */}
         <div className="space-y-4">
           <h3 className="text-sm font-semibold">性格（1〜5）</h3>
           {([
@@ -388,7 +452,7 @@ export function ResidentForm({
           {/* 性別・年齢・職業を横並び（レスポンシブ） */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-x-6 gap-y-4 md:items-start">
 
-            {/* 性別（md: 4カラム） */}
+            {/* 性別（md: 4カラム） (変更なし) */}
             <div className="md:col-span-4 min-w-0">
               <FormField
                 control={form.control}
@@ -422,7 +486,7 @@ export function ResidentForm({
               />
             </div>
 
-            {/* 年齢（md: 3カラム） */}
+            {/* 年齢（md: 3カラム） (変更なし) */}
             <div className="md:col-span-3 min-w-0">
               <FormField
                 control={form.control}
@@ -462,7 +526,7 @@ export function ResidentForm({
               />
             </div>
 
-            {/* 職業（md: 5カラム） */}
+            {/* ★ 変更: 職業（md: 5カラム）を <select> から <Input> + <datalist> に変更 */}
             <div className="md:col-span-5 min-w-0">
               <FormField
                 control={form.control}
@@ -473,24 +537,23 @@ export function ResidentForm({
                     <FormItem className="space-y-2">
                       <FormLabel className="block">職業</FormLabel>
                       <FormControl>
-                        <select
-                          className="w-full rounded border px-3 py-2"
-                          name={field.name}
-                          ref={field.ref}
-                          value={v}
-                          onChange={(e) => field.onChange(e.target.value)}
-                          onBlur={field.onBlur}
-                        >
-                          <option value="">（未設定）</option>
-                          <option value="student">学生</option>
-                          <option value="office">会社員</option>
-                          <option value="engineer">エンジニア</option>
-                          <option value="teacher">教員</option>
-                          <option value="parttimer">パート・アルバイト</option>
-                          <option value="freelancer">フリーランス</option>
-                          <option value="unemployed">無職</option>
-                          <option value="other">その他</option>
-                        </select>
+                        <>
+                          <Input
+                            placeholder="例：student (学生)"
+                            list="occupation-options"
+                            className="w-full"
+                            {...field}
+                            value={v}
+                            onChange={(e) => field.onChange(e.target.value)}
+                          />
+                          <datalist id="occupation-options">
+                            {occupationPresets.map((preset) => (
+                              <option key={preset.value} value={preset.value}>
+                                {preset.label}
+                              </option>
+                            ))}
+                          </datalist>
+                        </>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -501,7 +564,7 @@ export function ResidentForm({
           </div>
         </div>
 
-        {/* 一人称（ユーザー指定：私／僕／俺／うち／自分） */}
+        {/* ★ 変更: 一人称 を <select> から <Input> + <datalist> に変更 */}
         <FormField
           control={form.control}
           name="firstPerson"
@@ -511,21 +574,23 @@ export function ResidentForm({
               <FormItem className="space-y-2">
                 <FormLabel>一人称</FormLabel>
                 <FormControl>
-                  <select
-                    className="w-full rounded border px-3 py-2"
-                    name={field.name}
-                    ref={field.ref}
-                    value={v}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    onBlur={field.onBlur}
-                  >
-                    <option value="">（未設定）</option>
-                    <option value="私">私</option>
-                    <option value="僕">僕</option>
-                    <option value="俺">俺</option>
-                    <option value="うち">うち</option>
-                    <option value="自分">自分</option>
-                  </select>
+                  <>
+                    <Input
+                      placeholder="例：私"
+                      list="first-person-options"
+                      className="w-full"
+                      {...field}
+                      value={v}
+                      onChange={(e) => field.onChange(e.target.value)}
+                    />
+                    <datalist id="first-person-options">
+                      {firstPersonPresets.map((preset) => (
+                        <option key={preset.value} value={preset.value}>
+                          {preset.label}
+                        </option>
+                      ))}
+                    </datalist>
+                  </>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -533,6 +598,7 @@ export function ResidentForm({
           }}
         />
 
+        {/* ... (興味関心、活動傾向、保存ボタン、診断パネル は変更なし) ... */}
         {/* 興味関心（カンマ区切り） */}
         <div className="space-y-2">
           <FormLabel>興味・関心</FormLabel>
