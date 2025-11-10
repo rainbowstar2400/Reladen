@@ -14,6 +14,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { QUESTIONS, calculateMbti, type Answer } from '@/lib/mbti';
 import { useRouter } from 'next/navigation';
 import { defaultSleepByTendency } from '@/lib/schedule';
+import { ClickableRatingBox } from '@/components/ui/clickable-rating-box';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
 const MBTI_TYPES = [
@@ -77,7 +78,7 @@ const residentFormSchema = z.object({
     v => (v === '' || v == null ? undefined : Number(v)),
     z.number().int().min(0).max(120).optional()
   ),
-  
+
   interests: z.array(z.object({ value: z.string() })).optional(),
 
   // --- 活動傾向・睡眠関連 ---
@@ -387,215 +388,210 @@ export function ResidentForm({
           ))}
         </div>
 
-        {/* 背景情報 */}
+        {/* 基本情報 */}
         <div className="space-y-4 pt-2 border-t">
-          <h3 className="text-sm font-semibold">背景情報</h3>
+          <h3 className="text-sm font-semibold">基本情報</h3>
 
-          {/* 背景情報 */}
-          <div className="space-y-4 pt-2 border-t">
-            <h3 className="text-sm font-semibold">背景情報</h3>
+          {/* 性別・年齢・職業を横並び（レスポンシブ） */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-x-6 gap-y-4 md:items-start">
 
-            {/* 性別・年齢・職業を横並び（レスポンシブ） */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-x-6 gap-y-4 md:items-start">
-
-              {/* 性別（md: 4カラム） */}
-              <div className="md:col-span-4 min-w-0">
-                <FormField
-                  control={form.control}
-                  name="gender"
-                  render={({ field }) => {
-                    const v = field.value ?? '';
-                    return (
-                      <FormItem className="space-y-2">
-                        {/* ラベルは常に上段に出す */}
-                        <FormLabel className="block">性別</FormLabel>
-                        <FormControl>
-                          <select
-                            className="w-[150px] rounded border px-3 py-2"
-                            name={field.name}
-                            ref={field.ref}
-                            value={v}
-                            onChange={(e) => field.onChange(e.target.value)}
-                            onBlur={field.onBlur}
-                          >
-                            <option value="">（未設定）</option>
-                            <option value="male">男性</option>
-                            <option value="female">女性</option>
-                            <option value="nonbinary">ノンバイナリ</option>
-                            <option value="other">その他</option>
-                          </select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-              </div>
-
-              {/* 年齢（md: 3カラム） */}
-              <div className="md:col-span-3 min-w-0">
-                <FormField
-                  control={form.control}
-                  name="age"
-                  render={({ field }) => (
+            {/* 性別（md: 4カラム） */}
+            <div className="md:col-span-4 min-w-0">
+              <FormField
+                control={form.control}
+                name="gender"
+                render={({ field }) => {
+                  const v = field.value ?? '';
+                  return (
                     <FormItem className="space-y-2">
-                      <FormLabel className="block">年齢</FormLabel>
+                      {/* ラベルは常に上段に出す */}
+                      <FormLabel className="block">性別</FormLabel>
                       <FormControl>
-                        <>
-                          <Input
-                            list="age-options"
-                            placeholder="例：20"
-                            value={field.value ?? ''}
-                            onChange={(e) =>
-                              field.onChange(e.target.value === '' ? '' : Number(e.target.value))
-                            }
-                            onBlur={field.onBlur}
-                            inputMode="numeric"
-                            type="text"
-                            pattern="^\d{1,3}$"
-                            className="w-[100px]"
-                            aria-describedby="age-help"
-                          />
-                          <datalist id="age-options">
-                            {Array.from({ length: 120 }, (_, i) => i + 1).map((n) => (
-                              <option key={n} value={n} />
-                            ))}
-                          </datalist>
-                          <p id="age-help" className="text-xs text-muted-foreground mt-1">
-                            直接入力（半角数字）も、リスト（1〜120）からの選択もできます。
-                          </p>
-                        </>
+                        <select
+                          className="w-[150px] rounded border px-3 py-2"
+                          name={field.name}
+                          ref={field.ref}
+                          value={v}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          onBlur={field.onBlur}
+                        >
+                          <option value="">（未設定）</option>
+                          <option value="male">男性</option>
+                          <option value="female">女性</option>
+                          <option value="nonbinary">なし</option>
+                          <option value="other">その他</option>
+                        </select>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
-                  )}
-                />
-              </div>
-
-              {/* 職業（md: 5カラム） */}
-              <div className="md:col-span-5 min-w-0">
-                <FormField
-                  control={form.control}
-                  name="occupation"
-                  render={({ field }) => {
-                    const v = field.value ?? '';
-                    return (
-                      <FormItem className="space-y-2">
-                        <FormLabel className="block">職業</FormLabel>
-                        <FormControl>
-                          <select
-                            className="w-full rounded border px-3 py-2"
-                            name={field.name}
-                            ref={field.ref}
-                            value={v}
-                            onChange={(e) => field.onChange(e.target.value)}
-                            onBlur={field.onBlur}
-                          >
-                            <option value="">（未設定）</option>
-                            <option value="student">学生</option>
-                            <option value="office">会社員</option>
-                            <option value="engineer">エンジニア</option>
-                            <option value="teacher">教員</option>
-                            <option value="parttimer">パート・アルバイト</option>
-                            <option value="freelancer">フリーランス</option>
-                            <option value="unemployed">無職</option>
-                            <option value="other">その他</option>
-                          </select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-              </div>
-
-            </div>
-          </div>
-
-          {/* 一人称（ユーザー指定：私／僕／俺／うち／自分） */}
-          <FormField
-            control={form.control}
-            name="firstPerson"
-            render={({ field }) => {
-              const v = field.value ?? '';
-              return (
-                <FormItem className="space-y-2">
-                  <FormLabel>一人称</FormLabel>
-                  <FormControl>
-                    <select
-                      className="w-full rounded border px-3 py-2"
-                      name={field.name}
-                      ref={field.ref}
-                      value={v}
-                      onChange={(e) => field.onChange(e.target.value)}
-                      onBlur={field.onBlur}
-                    >
-                      <option value="">（未設定）</option>
-                      <option value="私">私</option>
-                      <option value="僕">僕</option>
-                      <option value="俺">俺</option>
-                      <option value="うち">うち</option>
-                      <option value="自分">自分</option>
-                    </select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
-          />
-
-          {/* 興味関心（カンマ区切り） */}
-          <div className="space-y-2">
-            <FormLabel>興味・関心</FormLabel>
-            {/* 追加用の入力フィールドとボタン */}
-            <div className="flex gap-2">
-              <Input
-                placeholder="例：音楽"
-                value={newInterest}
-                onChange={(e) => setNewInterest(e.target.value)}
-                // エンターキーでも追加できるように
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newInterest) {
-                    e.preventDefault();
-                    append({ value: newInterest }); // ★ オブジェクトに変更
-                    setNewInterest('');
-                  }
+                  );
                 }}
               />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={!newInterest}
-                onClick={() => {
-                  if (newInterest) {
-                    append({ value: newInterest }); // ★ オブジェクトに変更
-                    setNewInterest('');
-                  }
+            </div>
+
+            {/* 年齢（md: 3カラム） */}
+            <div className="md:col-span-3 min-w-0">
+              <FormField
+                control={form.control}
+                name="age"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel className="block">年齢</FormLabel>
+                    <FormControl>
+                      <>
+                        <Input
+                          list="age-options"
+                          placeholder="例：20"
+                          value={field.value ?? ''}
+                          onChange={(e) =>
+                            field.onChange(e.target.value === '' ? '' : Number(e.target.value))
+                          }
+                          onBlur={field.onBlur}
+                          inputMode="numeric"
+                          type="text"
+                          pattern="^\d{1,3}$"
+                          className="w-[100px]"
+                          aria-describedby="age-help"
+                        />
+                        <datalist id="age-options">
+                          {Array.from({ length: 120 }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n} />
+                          ))}
+                        </datalist>
+                        <p id="age-help" className="text-xs text-muted-foreground mt-1">
+                          直接入力（半角数字）も、リスト（1〜120）からの選択もできます。
+                        </p>
+                      </>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* 職業（md: 5カラム） */}
+            <div className="md:col-span-5 min-w-0">
+              <FormField
+                control={form.control}
+                name="occupation"
+                render={({ field }) => {
+                  const v = field.value ?? '';
+                  return (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="block">職業</FormLabel>
+                      <FormControl>
+                        <select
+                          className="w-full rounded border px-3 py-2"
+                          name={field.name}
+                          ref={field.ref}
+                          value={v}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          onBlur={field.onBlur}
+                        >
+                          <option value="">（未設定）</option>
+                          <option value="student">学生</option>
+                          <option value="office">会社員</option>
+                          <option value="engineer">エンジニア</option>
+                          <option value="teacher">教員</option>
+                          <option value="parttimer">パート・アルバイト</option>
+                          <option value="freelancer">フリーランス</option>
+                          <option value="unemployed">無職</option>
+                          <option value="other">その他</option>
+                        </select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  );
                 }}
-              >
-                追加
-              </Button>
+              />
             </div>
 
-            {/* 追加された項目のリスト */}
-            <div className="flex flex-wrap gap-2 pt-2">
-              {fields.map((field, index) => (
-                <div key={field.id} className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm">
-                  <span>{field.value}</span>
-                  <button type="button" onClick={() => remove(index)} className="ml-1 font-bold text-muted-foreground hover:text-destructive">
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* react-hook-form の FieldArray を使う場合、<FormField> は不要だが、
-                エラー（例：配列が長すぎる等）を表示したい場合は <FormMessage> をここに配置する */}
-            <FormMessage />
           </div>
         </div>
 
-        {/* 活動傾向と睡眠 */}
+        {/* 一人称（ユーザー指定：私／僕／俺／うち／自分） */}
+        <FormField
+          control={form.control}
+          name="firstPerson"
+          render={({ field }) => {
+            const v = field.value ?? '';
+            return (
+              <FormItem className="space-y-2">
+                <FormLabel>一人称</FormLabel>
+                <FormControl>
+                  <select
+                    className="w-full rounded border px-3 py-2"
+                    name={field.name}
+                    ref={field.ref}
+                    value={v}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    onBlur={field.onBlur}
+                  >
+                    <option value="">（未設定）</option>
+                    <option value="私">私</option>
+                    <option value="僕">僕</option>
+                    <option value="俺">俺</option>
+                    <option value="うち">うち</option>
+                    <option value="自分">自分</option>
+                  </select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+
+        {/* 興味関心（カンマ区切り） */}
+        <div className="space-y-2">
+          <FormLabel>興味・関心</FormLabel>
+          {/* 追加用の入力フィールドとボタン */}
+          <div className="flex gap-2">
+            <Input
+              placeholder="例：音楽"
+              value={newInterest}
+              onChange={(e) => setNewInterest(e.target.value)}
+              // エンターキーでも追加できるように
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newInterest) {
+                  e.preventDefault();
+                  append({ value: newInterest }); // ★ オブジェクトに変更
+                  setNewInterest('');
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!newInterest}
+              onClick={() => {
+                if (newInterest) {
+                  append({ value: newInterest }); // ★ オブジェクトに変更
+                  setNewInterest('');
+                }
+              }}
+            >
+              追加
+            </Button>
+          </div>
+
+          {/* 追加された項目のリスト */}
+          <div className="flex flex-wrap gap-2 pt-2">
+            {fields.map((field, index) => (
+              <div key={field.id} className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm">
+                <span>{field.value}</span>
+                <button type="button" onClick={() => remove(index)} className="ml-1 font-bold text-muted-foreground hover:text-destructive">
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* react-hook-form の FieldArray を使う場合、<FormField> は不要だが、
+                エラー（例：配列が長すぎる等）を表示したい場合は <FormMessage> をここに配置する */}
+          <FormMessage />
+        </div>
+
+        {/* 活動傾向 */}
         <div className="space-y-4 pt-2 border-t">
           <h3 className="text-sm font-semibold">活動傾向と睡眠</h3>
 
@@ -699,6 +695,16 @@ export function ResidentForm({
           </Button>
         </div>
       </form>
+
+      {/* --- ★ 修正箇所 --- */}
+      {/* * 1. 763行目あたりにあった、外側の {showDiagnosis && (<> ... </Backdrop>)} を削除
+        * 2. 770行目あたりにあった、内側の {showDiagnosis && (<> ... </Backdrop>)} を削除
+        * 3. 診断パネル (<aside>...</aside>) を <></> で囲み、
+        * オリジナルのファイル と同じく
+        * <form> タグの外側、<Form> タグの内側に配置
+        * 4. 849-851行目あたりに紛れ込んでいた </Form> ); } を削除
+      */}
+
       {showDiagnosis && (
         <>
           {/* Backdrop（背景クリックで閉じる） */}
@@ -715,6 +721,7 @@ export function ResidentForm({
             role="dialog"
             aria-modal="true"
           >
+            {/* ... (パネルのヘッダー) ... */}
             <div className="flex items-center justify-between border-b px-4 py-3">
               <h3 className="text-sm font-semibold">MBTI 診断</h3>
               <button
@@ -728,20 +735,14 @@ export function ResidentForm({
 
             <div className="flex h-[calc(100svh-48px-64px)] flex-col gap-4 overflow-y-auto px-4 py-4">
               {/* 質問リスト（スライダー） */}
-              {QUESTIONS.map(q => (
+              {QUESTIONS.map((q) => (
                 <div key={q.id} className="grid grid-cols-5 items-center gap-3">
                   <div className="col-span-3 text-sm">{q.text}</div>
-                  <input
-                    className="col-span-1 w-full"
-                    type="range"
-                    min={1}
-                    max={5}
-                    step={1}
-                    value={diagScores[q.id]}
-                    onChange={(e) => onDiagScoreChange(q.id, Number(e.target.value))}
-                  />
-                  <div className="col-span-1 text-right text-sm tabular-nums">
-                    {diagScores[q.id]}
+                  <div className="col-span-2">
+                    <ClickableRatingBox
+                      value={diagScores[q.id]}
+                      onChange={(newValue) => onDiagScoreChange(q.id, newValue)}
+                    />
                   </div>
                 </div>
               ))}
@@ -773,9 +774,8 @@ export function ResidentForm({
               </Button>
             </div>
           </aside>
-        </>
+        </> // <-- ここが `showDiagnosis` の閉じタグ
       )}
-
-    </Form>
+    </Form> // <-- ここが `Form` の閉じタグ
   );
 }
