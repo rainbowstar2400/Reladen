@@ -14,7 +14,6 @@ import { useMemo, useState, useEffect } from 'react';
 import { QUESTIONS, calculateMbti, type Answer } from '@/lib/mbti';
 import { useRouter } from 'next/navigation';
 import { defaultSleepByTendency } from '@/lib/schedule';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
 const MBTI_TYPES = [
@@ -259,34 +258,33 @@ export function ResidentForm({
             const v = field.value ?? ''; // null/undefined→空文字
             return (
               <FormItem className="space-y-2">
-                <FormLabel>MBTI（診断 または 手動で選択）</FormLabel>
+                <FormLabel>MBTI</FormLabel>
                 <FormControl>
-                  <Tabs defaultValue="manual" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="manual">手動で選択</TabsTrigger>
-                      <TabsTrigger value="diagnose">診断する</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="manual" className="mt-4">
-                      <select
-                        className="w-full rounded border px-3 py-2"
-                        name={field.name}
-                        ref={field.ref}
-                        value={v}
-                        onChange={(e) => field.onChange(e.target.value)}
-                        onBlur={field.onBlur}
-                      >
-                        <option value="">（未設定）</option>
-                        {MBTI_TYPES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </TabsContent>
-                    <TabsContent value="diagnose" className="mt-4">
-                      <Button type="button" variant="secondary" className="w-full" onClick={() => setShowDiagnosis(true)}>
-                        診断パネルを開く
-                      </Button>
-                    </TabsContent>
-                  </Tabs>
+                  <div className="flex gap-2">
+                    <select
+                      className="w-full rounded border px-3 py-2"
+                      name={field.name}
+                      ref={field.ref}
+                      value={v}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      onBlur={field.onBlur}
+                    >
+                      <option value="">（未設定）</option>
+                      {[
+                        'INTJ', 'INTP', 'ENTJ', 'ENTP',
+                        'INFJ', 'INFP', 'ENFJ', 'ENFP',
+                        'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
+                        'ISTP', 'ISFP', 'ESTP', 'ESFP',
+                      ].map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+
+                    {/* ← これが診断パネルのトグル */}
+                    <Button type="button" variant="secondary" onClick={() => setShowDiagnosis(true)}>
+                      診断
+                    </Button>
+                  </div>
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -587,7 +585,7 @@ export function ResidentForm({
 
           {/* 既定値プレビュー（sleepProfile未入力時に、活動傾向からの既定を見せるだけ） */}
           {(() => {
-            const t = form.watch('activityTendency') as ('morning' | 'normal' | 'night' | undefined);
+            const t = form.watch('activityTendency') as ('morning'|'normal'|'night'|undefined);
             const bed = form.watch('sleepBedtime');
             const wake = form.watch('sleepWakeTime');
 
