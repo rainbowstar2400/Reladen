@@ -252,12 +252,11 @@ export function ResidentForm({
           )}
         />
         {/* --- MBTI（診断 または手動で選択） --- */}
-        {/* --- MBTI（診断 または手動で選択） --- */}
         <FormField
           control={form.control}
           name="mbti"
           render={({ field }) => {
-            const v = field.value ?? ''; // null/undefined→空文字
+            const v = field.value ?? '';
             return (
               <FormItem className="space-y-2">
                 <FormLabel className="text-base font-semibold">
@@ -265,31 +264,24 @@ export function ResidentForm({
                 </FormLabel>
 
                 <FormControl>
-                  {/* === レイアウト全体 === */}
-                  <div className="flex items-center justify-between w-full gap-4">
-                    {/* 左側：診断ボタン */}
-                    <div className="flex-shrink-0">
-                      <Button
-                        type="button"
-                        onClick={() => setShowDiagnosis(true)}
-                        className="bg-black text-white hover:bg-black/90 px-5 py-2"
-                      >
-                        診断する
-                      </Button>
-                    </div>
+                  <div className="flex items-center justify-between w-full">
+                    {/* 左：診断ボタン */}
+                    <Button
+                      type="button"
+                      onClick={() => setShowDiagnosis(true)}
+                      className="bg-black text-white hover:bg-black/90 px-5 py-2"
+                    >
+                      診断する
+                    </Button>
 
-                    {/* 中央：手動選択ラベル */}
-                    <div className="flex-grow text-center">
+                    {/* 右：ラベル＋セレクトを横並びで中央寄せ */}
+                    <div className="flex items-center gap-2">
                       <label
                         htmlFor="mbti-select"
                         className="text-sm text-gray-700 whitespace-nowrap"
                       >
                         手動で選択：
                       </label>
-                    </div>
-
-                    {/* 右側：セレクトボックス */}
-                    <div className="flex-shrink-0">
                       <select
                         id="mbti-select"
                         className="rounded border px-3 py-2 min-w-[140px]"
@@ -307,7 +299,9 @@ export function ResidentForm({
                           'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
                           'ISTP', 'ISFP', 'ESTP', 'ESFP',
                         ].map((t) => (
-                          <option key={t} value={t}>{t}</option>
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -319,7 +313,6 @@ export function ResidentForm({
             );
           }}
         />
-
 
         <FormField
           control={form.control}
