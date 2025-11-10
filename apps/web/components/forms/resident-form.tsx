@@ -387,115 +387,125 @@ export function ResidentForm({
         <div className="space-y-4 pt-2 border-t">
           <h3 className="text-sm font-semibold">背景情報</h3>
 
-          {/* 性別 */}
-          <FormField
-            control={form.control}
-            name="gender"
-            render={({ field }) => {
-              const v = field.value ?? '';
-              return (
-                <FormItem className="space-y-2">
-                  <FormLabel>性別</FormLabel>
-                  <FormControl>
-                    <select
-                      className="w-full rounded border px-3 py-2"
-                      name={field.name}
-                      ref={field.ref}
-                      value={v}
-                      onChange={(e) => field.onChange(e.target.value)}
-                      onBlur={field.onBlur}
-                    >
-                      <option value="">（未設定）</option>
-                      <option value="male">男性</option>
-                      <option value="female">女性</option>
-                      <option value="nonbinary">ノンバイナリ</option>
-                      <option value="other">その他</option>
-                    </select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
-          />
+          {/* 背景情報 */}
+          <div className="space-y-4 pt-2 border-t">
+            <h3 className="text-sm font-semibold">背景情報</h3>
 
-          {/* 年齢（手入力 + リスト選択） */}
-          <FormField
-            control={form.control}
-            name="age"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel>年齢</FormLabel>
-                <FormControl>
-                  <>
-                    <Input
-                      // Chrome/Edgeでは list + datalist で候補が表示されます
-                      list="age-options"
-                      placeholder="例：20（手入力も可）"
-                      value={field.value ?? ''}
-                      // 空文字は ''、それ以外は Number に正規化
-                      onChange={(e) =>
-                        field.onChange(e.target.value === '' ? '' : Number(e.target.value))
-                      }
-                      onBlur={field.onBlur}
-                      // モバイルでも数字キーボードを出す
-                      inputMode="numeric"
-                      // iOS Safari での互換性も考えて type="text" を維持（datalist との相性を優先）
-                      // type="number" にしたい場合は Safari で候補が出ない点にご注意ください
-                      type="text"
-                      pattern="^\d{1,3}$"
-                      className="w-[160px]"
-                      aria-describedby="age-help"
-                    />
-                    <datalist id="age-options">
-                      {/* 1〜120 の候補（クリック/Enterで確定）。0は候補に出さず、必要な人は手入力で対応 */}
-                      {Array.from({ length: 120 }, (_, i) => i + 1).map((n) => (
-                        <option key={n} value={n} />
-                      ))}
-                    </datalist>
-                    <p id="age-help" className="text-xs text-muted-foreground mt-1">
-                      直接入力も、候補リスト（1〜120）からの選択もできます。
-                    </p>
-                  </>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+            {/* 性別・年齢・職業を横並び（レスポンシブ） */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-6 items-end">
 
-          {/* 職業 */}
-          <FormField
-            control={form.control}
-            name="occupation"
-            render={({ field }) => {
-              const v = field.value ?? '';
-              return (
-                <FormItem className="space-y-2">
-                  <FormLabel>職業</FormLabel>
-                  <FormControl>
-                    <select
-                      className="w-full rounded border px-3 py-2"
-                      name={field.name}
-                      ref={field.ref}
-                      value={v}
-                      onChange={(e) => field.onChange(e.target.value)}
-                      onBlur={field.onBlur}
-                    >
-                      <option value="">（未設定）</option>
-                      <option value="student">学生</option>
-                      <option value="office">会社員</option>
-                      <option value="engineer">エンジニア</option>
-                      <option value="teacher">教員</option>
-                      <option value="parttimer">パート・アルバイト</option>
-                      <option value="freelancer">フリーランス</option>
-                      <option value="unemployed">無職</option>
-                      <option value="other">その他</option>
-                    </select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
-          />
+              {/* 性別（md: 4カラム） */}
+              <div className="md:col-span-4 min-w-0">
+                <FormField
+                  control={form.control}
+                  name="gender"
+                  render={({ field }) => {
+                    const v = field.value ?? '';
+                    return (
+                      <FormItem className="space-y-2">
+                        <FormLabel>性別</FormLabel>
+                        <FormControl>
+                          <select
+                            className="w-[200px] rounded border px-3 py-2"
+                            name={field.name}
+                            ref={field.ref}
+                            value={v}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            onBlur={field.onBlur}
+                          >
+                            <option value="">（未設定）</option>
+                            <option value="male">男性</option>
+                            <option value="female">女性</option>
+                            <option value="nonbinary">ノンバイナリ</option>
+                            <option value="other">その他</option>
+                          </select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+              </div>
+
+              {/* 年齢（md: 3カラム） */}
+              <div className="md:col-span-3 min-w-0">
+                <FormField
+                  control={form.control}
+                  name="age"
+                  render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel>年齢</FormLabel>
+                      <FormControl>
+                        <>
+                          <Input
+                            list="age-options"
+                            placeholder="例：20"
+                            value={field.value ?? ''}
+                            onChange={(e) =>
+                              field.onChange(e.target.value === '' ? '' : Number(e.target.value))
+                            }
+                            onBlur={field.onBlur}
+                            inputMode="numeric"
+                            type="text"                 // datalist互換優先
+                            pattern="^\d{1,3}$"
+                            className="w-[140px]"
+                            aria-describedby="age-help"
+                          />
+                          <datalist id="age-options">
+                            {Array.from({ length: 120 }, (_, i) => i + 1).map((n) => (
+                              <option key={n} value={n} />
+                            ))}
+                          </datalist>
+                          <p id="age-help" className="text-xs text-muted-foreground mt-1">
+                            直接入力（半角数字）も、リスト（1〜120）からの選択もできます。
+                          </p>
+                        </>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* 職業（md: 5カラム） */}
+              <div className="md:col-span-5 min-w-0">
+                <FormField
+                  control={form.control}
+                  name="occupation"
+                  render={({ field }) => {
+                    const v = field.value ?? '';
+                    return (
+                      <FormItem className="space-y-2">
+                        <FormLabel>職業</FormLabel>
+                        <FormControl>
+                          <select
+                            className="w-[200px] rounded border px-3 py-2"
+                            name={field.name}
+                            ref={field.ref}
+                            value={v}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            onBlur={field.onBlur}
+                          >
+                            <option value="">（未設定）</option>
+                            <option value="student">学生</option>
+                            <option value="office">会社員</option>
+                            <option value="engineer">エンジニア</option>
+                            <option value="teacher">教員</option>
+                            <option value="parttimer">パート・アルバイト</option>
+                            <option value="freelancer">フリーランス</option>
+                            <option value="unemployed">無職</option>
+                            <option value="other">その他</option>
+                          </select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+              </div>
+
+            </div>
+          </div>
 
           {/* 一人称（ユーザー指定：私／僕／俺／うち／自分） */}
           <FormField
