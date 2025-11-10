@@ -15,6 +15,7 @@ import { QUESTIONS, calculateMbti, type Answer } from '@/lib/mbti';
 import { useRouter } from 'next/navigation';
 import { defaultSleepByTendency } from '@/lib/schedule';
 import { ClickableRatingBox } from '@/components/ui/clickable-rating-box';
+import { Switch } from '@/components/ui/switch'
 // ★ TODO: 将来的には usePresets フックなどから動的に取得する
 // import { usePresets } from '@/lib/data/presets';
 
@@ -26,35 +27,6 @@ const MBTI_TYPES = [
   'ISTP', 'ISFP', 'ESTP', 'ESFP',
 ] as const;
 
-const SPEECH_PRESETS = [
-  { value: 'polite', label: 'ていねい' },
-  { value: 'casual', label: 'くだけた' },
-  { value: 'blunt', label: '素っ気ない' },
-  { value: 'soft', label: 'やわらかい' },
-] as const;
-
-// ★ 追加: 職業プリセット (z.enum から移行)
-const OCCUPATION_PRESETS = [
-  { value: 'student', label: '学生' },
-  { value: 'office', label: '会社員' },
-  { value: 'engineer', label: 'エンジニア' },
-  { value: 'teacher', label: '教員' },
-  { value: 'parttimer', label: 'パート・アルバイト' },
-  { value: 'freelancer', label: 'フリーランス' },
-  { value: 'unemployed', label: '無職' },
-  { value: 'other', label: 'その他' },
-] as const;
-
-// ★ 追加: 一人称プリセット (z.enum から移行)
-const FIRST_PERSON_PRESETS = [
-  { value: '私', label: '私' },
-  { value: '僕', label: '僕' },
-  { value: '俺', label: '俺' },
-  { value: 'うち', label: 'うち' },
-  { value: '自分', label: '自分' },
-] as const;
-
-
 // traits の初期値（未設定でも落ちないように）
 const DEFAULT_TRAITS = {
   sociability: 3,    // 社交性
@@ -64,11 +36,30 @@ const DEFAULT_TRAITS = {
   expressiveness: 3, // 表現力
 } as const;
 
+// DBから取得した「管理プリセット (isManaged: true)」のモックデータ
+type ManagedPreset = { id: string; label: string };
+const MOCK_MANAGED_PRESETS: Record<'speech' | 'occupation' | 'first_person', ManagedPreset[]> = {
+  speech: [
+    { id: 'uuid-s1', label: 'ていねい' },
+    { id: 'uuid-s2', label: 'くだけた' },
+  ],
+  occupation: [
+    { id: 'uuid-o1', label: '学生' },
+    { id: 'uuid-o2', label: '会社員' },
+    { id: 'uuid-o3', label: 'エンジニア' },
+  ],
+  first_person: [
+    { id: 'uuid-f1', label: '私' },
+    { id: 'uuid-f2', label: '僕' },
+  ],
+};
+
+// フォームのZodスキーマ。DBスキーマ (Resident) とは異なる。
+// ここでは「ラベル」（文字列）と「管理フラグ」を保持する。
 const residentFormSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1, '名前は必須です'),
   mbti: z.string().optional().nullable(),
-  // JSONではなく、5項目の数値スライダー（1〜5）
   traits: z.object({
     sociability: z.number().int().min(1).max(5),
     empathy: z.number().int().min(1).max(5),
@@ -76,50 +67,32 @@ const residentFormSchema = z.object({
     activity: z.number().int().min(1).max(5),
     expressiveness: z.number().int().min(1).max(5),
   }),
-  // 変更なし: すでに string
-  speechPreset: z.string().optional().nullable(),
-  // 追加：プレイヤーへの信頼度（表示専用）
   trustToPlayer: z.number().min(0).max(100).optional(),
 
-  // --- 背景情報 ---
+  // --- プリセット項目 (ラベル) ---
+  speechPreset: z.string().optional().nullable(),
+  occupation: z.string().optional().nullable(),
+  firstPerson: z.string().optional().nullable(),
+
+  // --- プリセット管理フラグ ---
+  isSpeechPresetManaged: z.boolean().default(false),
+  isOccupationManaged: z.boolean().default(false),
+  isFirstPersonManaged: z.boolean().default(false),
+
+  // --- その他 (変更なし) ---
   gender: z.preprocess(
     v => (v === '' || v == null ? undefined : v),
     z.enum(['male', 'female', 'nonbinary', 'other']).optional()
   ),
-
-  // ★ 変更: z.enum から z.string に変更 (自由記述対応)
-  occupation: z.string().optional().nullable(),
-  /*
-  occupation: z.preprocess(
-    v => (v === '' || v == null ? undefined : v),
-    z.enum(['student', 'office', 'engineer', 'teacher', 'parttimer', 'freelancer', 'unemployed', 'other']).optional()
-  ),
-  */
-
-  // ★ 変更: z.enum から z.string に変更 (自由記述対応)
-  firstPerson: z.string().optional().nullable(),
-  /*
-  firstPerson: z.preprocess(
-    v => (v === '' || v == null ? undefined : v),
-    z.enum(['私', '僕', '俺', 'うち', '自分']).optional()
-  ),
-  */
-
-
   age: z.preprocess(
     v => (v === '' || v == null ? undefined : Number(v)),
     z.number().int().min(0).max(120).optional()
   ),
-
   interests: z.array(z.object({ value: z.string() })).optional(),
-
-  // --- 活動傾向・睡眠関連 ---
-  // ... (以下、変更なし) ...
   activityTendency: z.preprocess(
     v => (v === '' ? undefined : v),
     z.enum(['morning', 'normal', 'night']).optional()
   ),
-
   sleepBedtime: z.preprocess(
     v => (v === '' ? undefined : v),
     z.string().regex(/^\d{2}:\d{2}$/).optional()
@@ -128,13 +101,54 @@ const residentFormSchema = z.object({
     v => (v === '' ? undefined : v),
     z.string().regex(/^\d{2}:\d{2}$/).optional()
   ),
-
 });
 
 type ResidentFormValues = z.infer<typeof residentFormSchema>;
 
-export function ResidentForm({
+// ★ 変更:
+// 実際のバックエンドロジック (useUpsertPreset) のモック。
+// フォームの 'handleSubmit' でこのロジックを呼び出し、ラベルをUUIDに変換する。
+const findOrCreatePreset = async (
+  label: string | undefined | null,
+  category: 'speech' | 'occupation' | 'first_person',
+  isManaged: boolean
+): Promise<string | undefined> => { // UUID を返す
+  if (!label || label.trim().length === 0) {
+    return undefined;
+  }
+  const trimmedLabel = label.trim();
 
+  // 1. 既存のプリセット（管理・非管理問わず）にラベルがあるか探す（モック）
+  // (実際にはDBを検索)
+  const allPresets = [
+    ...MOCK_MANAGED_PRESETS[category],
+    // 非管理プリセットのモック
+    { id: 'uuid-o4', label: '浪人生' },
+    { id: 'uuid-f3', label: '拙者' },
+  ];
+
+  const existing = allPresets.find(p => p.label === trimmedLabel);
+
+  if (existing) {
+    // 2. 存在する場合
+    // 2a. 「プリセット登録」がONにされたが、まだ 'isManaged: false' だった場合
+    // (ここでは isManaged の更新ロジックは省略し、IDを返すだけ)
+    if (isManaged) {
+      // TODO: API 呼び出し (updatePreset(existing.id, { isManaged: true }))
+      console.log(`Preset ${trimmedLabel} (${existing.id}) を 'managed' に更新 (モック)`);
+    }
+    return existing.id; // 既存のUUIDを返す
+  }
+
+  // 3. 存在しない場合 (新規作成)
+  const newId = crypto.randomUUID();
+  // TODO: API 呼び出し (createPreset({ label: trimmedLabel, category, isManaged }))
+  console.log(`Preset ${trimmedLabel} を新規作成 (isManaged: ${isManaged}) (ID: ${newId}) (モック)`);
+  // 新しいUUIDを返す
+  return newId;
+};
+
+export function ResidentForm({
   defaultValues,
   onSubmitted,
 }: {
@@ -143,33 +157,42 @@ export function ResidentForm({
 }) {
   const router = useRouter();
 
-  // ★ TODO: 将来的には usePresets フックなどから動的に取得する
-  // const { data: speechPresets = SPEECH_PRESETS } = usePresets('speech');
-  // const { data: occupationPresets = OCCUPATION_PRESETS } = usePresets('occupation');
-  // const { data: firstPersonPresets = FIRST_PERSON_PRESETS } = usePresets('first_person');
-  // ※ ここではひとまず固定配列をそのまま使います
-  const speechPresets = SPEECH_PRESETS;
-  const occupationPresets = OCCUPATION_PRESETS;
-  const firstPersonPresets = FIRST_PERSON_PRESETS;
+  // ★ 変更: モックデータを読み込む
+  const speechPresets = MOCK_MANAGED_PRESETS.speech;
+  const occupationPresets = MOCK_MANAGED_PRESETS.occupation;
+  const firstPersonPresets = MOCK_MANAGED_PRESETS.first_person;
 
   const form = useForm<ResidentFormValues>({
     // ... (defaultValues の設定は変更なし) ...
     resolver: zodResolver(residentFormSchema),
     defaultValues: useMemo(() => {
-      // traits はオブジェクトとして持つ（未設定なら既定値をセット）
+      // ★ 変更:
+      // defaultValues (DB) から フォーム (FormValues) への変換
+      // DBの speechPreset (UUID) から、対応する「ラベル」を引く必要がある
+      // (ここではモックデータで「ていねい」に決め打ち)
+      const defaultSpeechLabel = defaultValues?.speechPreset === 'uuid-s1' ? 'ていねい' : '';
+      const defaultOccLabel = defaultValues?.occupation === 'uuid-o1' ? '学生' : '';
+      const defaultFpLabel = defaultValues?.firstPerson === 'uuid-f1' ? '私' : '';
+
       const traitsObj =
         defaultValues?.traits && typeof defaultValues.traits === 'object'
           ? (defaultValues.traits as any)
           : { ...DEFAULT_TRAITS };
 
       return {
-        ...defaultValues, // ★ スプレッドを先頭に移動
+        ...defaultValues,
         name: defaultValues?.name ?? '',
         mbti: defaultValues?.mbti ?? '',
-        speechPreset: defaultValues?.speechPreset ?? '',
-        trustToPlayer: defaultValues?.trustToPlayer ?? 50,
         traits: traitsObj,
-        // ★ 最後に 'interests' を正しい型で上書き
+        trustToPlayer: defaultValues?.trustToPlayer ?? 50,
+        // ★ フォームにはラベルを設定
+        speechPreset: defaultSpeechLabel,
+        occupation: defaultOccLabel,
+        firstPerson: defaultFpLabel,
+        // ★ 管理フラグはデフォルトOFF
+        isSpeechPresetManaged: false,
+        isOccupationManaged: false,
+        isFirstPersonManaged: false,
         interests: defaultValues?.interests?.map(val => ({ value: val })) ?? [],
       };
     }, [defaultValues]),
@@ -201,38 +224,21 @@ export function ResidentForm({
   const upsert = useUpsertResident();
 
   async function handleSubmit(values: ResidentFormValues) {
-    // MBTI: (変更なし)
+    // ★ 1. フォームの「ラベル」から UUID を非同期で取得/作成
+    const [speechPresetId, occupationId, firstPersonId] = await Promise.all([
+      findOrCreatePreset(values.speechPreset, 'speech', values.isSpeechPresetManaged),
+      findOrCreatePreset(values.occupation, 'occupation', values.isOccupationManaged),
+      findOrCreatePreset(values.firstPerson, 'first_person', values.isFirstPersonManaged),
+    ]);
+
+    // ★ 2. 他の項目を正規化 (変更なし)
     const normalizedMbti: (typeof MBTI_TYPES)[number] | undefined =
       values.mbti && values.mbti.trim().length > 0
         ? (values.mbti as (typeof MBTI_TYPES)[number])
         : undefined;
-
-    // ★ 変更: speechPreset: enum へのキャストを削除。文字列をそのまま使う
-    const normalizedSpeech: string | undefined =
-      typeof values.speechPreset === 'string' && values.speechPreset.trim().length > 0
-        ? values.speechPreset.trim()
-        : undefined;
-
     const gender = values.gender as ('male' | 'female' | 'nonbinary' | 'other') | undefined;
-
-    // ★ 変更: occupation: enum へのキャストを削除。文字列をそのまま使う
-    const occupation: string | undefined =
-      typeof values.occupation === 'string' && values.occupation.trim().length > 0
-        ? values.occupation.trim()
-        : undefined;
-
-    // ★ 変更: firstPerson: enum へのキャストを削除。文字列をそのまま使う
-    const firstPerson: string | undefined =
-      typeof values.firstPerson === 'string' && values.firstPerson.trim().length > 0
-        ? values.firstPerson.trim()
-        : undefined;
-
-    // ★ { value: string }[] から string[] に変換 (変更なし)
     const interests = values.interests?.map(item => item.value).filter(Boolean) ?? [];
-
-    // 活動傾向 (変更なし)
     const activityTendency = values.activityTendency as ('morning' | 'normal' | 'night') | undefined;
-
     const sleepProfile =
       values.sleepBedtime && values.sleepWakeTime
         ? {
@@ -242,18 +248,20 @@ export function ResidentForm({
         }
         : undefined;
 
-    // ↑ 正規化済みの値だけを使って payload を明示的に組む（...values は使わない）
-    const payload = {
+    // ★ 3. 最終的なペイロード (DBの型) を作成
+    const payload: Partial<Resident> = {
       id: values.id,
       name: values.name,
       mbti: normalizedMbti,
       traits: values.traits,
-      ...(normalizedSpeech !== undefined ? { speechPreset: normalizedSpeech } : {}),
+
+      // ★ ここに変換後の UUID をセット
+      speechPreset: speechPresetId,
+      occupation: occupationId,
+      firstPerson: firstPersonId,
 
       gender,
       age: typeof values.age === 'number' ? values.age : undefined,
-      occupation, // ★ 変更後の文字列
-      firstPerson, // ★ 変更後の文字列
       interests: interests.length > 0 ? interests : undefined,
       activityTendency,
       ...(sleepProfile ? { sleepProfile } : {}),
@@ -261,27 +269,36 @@ export function ResidentForm({
 
     const saved = await upsert.mutateAsync(payload);
 
+    // ★ 4. フォームのリセット (saved は DB の型 = UUID持ち)
+    // (ここでも UUID から ラベルへの逆引きが必要)
+    const savedSpeechLabel = saved.speechPreset === 'uuid-s1' ? 'ていねい' : (values.speechPreset ?? ''); //
+    const savedOccLabel = saved.occupation === 'uuid-o1' ? '学生' : (values.occupation ?? '');
+    const savedFpLabel = saved.firstPerson === 'uuid-f1' ? '私' : (values.firstPerson ?? '');
+
     // form.reset (変更なし)
     form.reset({
+      ...values, // フォームの基本値は維持
       id: saved.id,
       name: saved.name,
       mbti: saved.mbti ?? '',
-      traits: saved.traits ?? { sociability: 3, empathy: 3, stubbornness: 3, activity: 3, expressiveness: 3 },
-      speechPreset: saved.speechPreset ?? '',
+      traits: saved.traits ?? { ...DEFAULT_TRAITS },
       trustToPlayer: saved.trustToPlayer ?? 50,
 
-      // ★ 追加（saved 側に存在すれば反映）
-      gender: saved.gender ?? '',
-      age: typeof saved.age === 'number' ? saved.age : undefined,
-      occupation: saved.occupation ?? '',
-      firstPerson: saved.firstPerson ?? '',
-      // ★ string[] を { value: string }[] に変換
+      // ★ フォームにはラベルを戻す
+      speechPreset: savedSpeechLabel,
+      occupation: savedOccLabel,
+      firstPerson: savedFpLabel,
+
+      // ★ 管理フラグはリセット
+      isSpeechPresetManaged: false,
+      isOccupationManaged: false,
+      isFirstPersonManaged: false,
+
+      // ★ DB の型からフォームの型へ
       interests: saved.interests?.map(val => ({ value: val })) ?? [],
-      activityTendency: saved.activityTendency ?? '',
       sleepBedtime: saved.sleepProfile?.bedtime ?? '',
       sleepWakeTime: saved.sleepProfile?.wakeTime ?? '',
     });
-
 
     onSubmitted?.();
   }
@@ -375,38 +392,50 @@ export function ResidentForm({
           }}
         />
 
-        {/* ★ 変更: speechPreset を <select> から <Input> + <datalist> に変更 */}
-        <FormField
-          control={form.control}
-          name="speechPreset"
-          render={({ field }) => {
-            const v = field.value ?? '';
-            return (
+        {/* ★ 変更: 話し方プリセット */}
+        <div className="space-y-2 rounded-md border p-3">
+          <FormField
+            control={form.control}
+            name="speechPreset"
+            render={({ field }) => (
               <FormItem className="space-y-2">
-                <FormLabel>話し方プリセット</FormLabel>
+                <FormLabel>話し方</FormLabel>
                 <FormControl>
-                  <>
-                    <Input
-                      placeholder="例：polite (ていねい)"
-                      list="speech-preset-options"
-                      {...field}
-                      value={v}
-                      onChange={(e) => field.onChange(e.target.value)}
-                    />
-                    <datalist id="speech-preset-options">
-                      {speechPresets.map((preset) => (
-                        <option key={preset.value} value={preset.value}>
-                          {preset.label}
-                        </option>
-                      ))}
-                    </datalist>
-                  </>
+                  <Input
+                    placeholder="例：ていねい（手動入力も可）"
+                    list="speech-preset-options"
+                    {...field}
+                    value={field.value ?? ''} // ここには「ラベル」が入る
+                  />
                 </FormControl>
+                <datalist id="speech-preset-options">
+                  {/* ★ 変更: value にも label を設定 */}
+                  {speechPresets.map((preset) => (
+                    <option key={preset.id} value={preset.label} />
+                  ))}
+                </datalist>
                 <FormMessage />
               </FormItem>
-            );
-          }}
-        />
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="isSpeechPresetManaged"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-end space-x-2">
+                <FormLabel className="text-sm text-muted-foreground">
+                  この話し方をプリセット管理に追加
+                </FormLabel>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
 
         {/* ... (性格 traits セクションは変更なし) ... */}
         <div className="space-y-4">
@@ -526,77 +555,97 @@ export function ResidentForm({
               />
             </div>
 
-            {/* ★ 変更: 職業（md: 5カラム）を <select> から <Input> + <datalist> に変更 */}
-            <div className="md:col-span-5 min-w-0">
+            {/* ★ 変更: 職業 */}
+            <div className="md:col-span-5 min-w-0 space-y-2">
               <FormField
                 control={form.control}
                 name="occupation"
-                render={({ field }) => {
-                  const v = field.value ?? '';
-                  return (
-                    <FormItem className="space-y-2">
-                      <FormLabel className="block">職業</FormLabel>
-                      <FormControl>
-                        <>
-                          <Input
-                            placeholder="例：student (学生)"
-                            list="occupation-options"
-                            className="w-full"
-                            {...field}
-                            value={v}
-                            onChange={(e) => field.onChange(e.target.value)}
-                          />
-                          <datalist id="occupation-options">
-                            {occupationPresets.map((preset) => (
-                              <option key={preset.value} value={preset.value}>
-                                {preset.label}
-                              </option>
-                            ))}
-                          </datalist>
-                        </>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel className="block">職業</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="例：学生（手動入力も可）"
+                        list="occupation-options"
+                        className="w-full"
+                        {...field}
+                        value={field.value ?? ''} // ラベル
+                      />
+                    </FormControl>
+                    <datalist id="occupation-options">
+                      {occupationPresets.map((preset) => (
+                        <option key={preset.id} value={preset.label} />
+                      ))}
+                    </datalist>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="isOccupationManaged"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-end space-x-2 pt-1">
+                    <FormLabel className="text-sm text-muted-foreground">
+                      プリセット管理に追加
+                    </FormLabel>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
               />
             </div>
           </div>
         </div>
 
-        {/* ★ 変更: 一人称 を <select> から <Input> + <datalist> に変更 */}
-        <FormField
-          control={form.control}
-          name="firstPerson"
-          render={({ field }) => {
-            const v = field.value ?? '';
-            return (
+        {/* ★ 変更: 一人称 */}
+        <div className="space-y-2 rounded-md border p-3">
+          <FormField
+            control={form.control}
+            name="firstPerson"
+            render={({ field }) => (
               <FormItem className="space-y-2">
                 <FormLabel>一人称</FormLabel>
                 <FormControl>
-                  <>
-                    <Input
-                      placeholder="例：私"
-                      list="first-person-options"
-                      className="w-full"
-                      {...field}
-                      value={v}
-                      onChange={(e) => field.onChange(e.target.value)}
-                    />
-                    <datalist id="first-person-options">
-                      {firstPersonPresets.map((preset) => (
-                        <option key={preset.value} value={preset.value}>
-                          {preset.label}
-                        </option>
-                      ))}
-                    </datalist>
-                  </>
+                  <Input
+                    placeholder="例：私（手動入力も可）"
+                    list="first-person-options"
+                    className="w-full"
+                    {...field}
+                    value={field.value ?? ''} // ラベル
+                  />
                 </FormControl>
+                <datalist id="first-person-options">
+                  {firstPersonPresets.map((preset) => (
+                    <option key={preset.id} value={preset.label} />
+                  ))}
+                </datalist>
                 <FormMessage />
               </FormItem>
-            );
-          }}
-        />
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="isFirstPersonManaged"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-end space-x-2">
+                <FormLabel className="text-sm text-muted-foreground">
+                  プリセット管理に追加
+                </FormLabel>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
 
         {/* ... (興味関心、活動傾向、保存ボタン、診断パネル は変更なし) ... */}
         {/* 興味関心（カンマ区切り） */}

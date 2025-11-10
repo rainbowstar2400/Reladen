@@ -1,6 +1,7 @@
 import { boolean, jsonb, pgEnum, pgTable, text, timestamp, integer, uuid, index } from 'drizzle-orm/pg-core';
 import { relations as createRelations } from 'drizzle-orm';
 
+// ... (relationTypeEnum, feelingLabelEnum は変更なし) ...
 export const relationTypeEnum = pgEnum('relation_type', ['none', 'friend', 'best_friend', 'lover', 'family']);
 export const feelingLabelEnum = pgEnum('feeling_label', [
   'none',
@@ -12,17 +13,59 @@ export const feelingLabelEnum = pgEnum('feeling_label', [
   'awkward',
 ]);
 
+// ★ 1. presets テーブルを先に定義 (参照されるため)
+/**
+ * @description プリセットのカテゴリ
+ */
+export const presetCategoryEnum = pgEnum('preset_category', [
+  'speech',
+  'occupation',
+  'first_person',
+]);
+
+/**
+ * @description プリセット（話し方、職業、一人称）
+ * `is_managed: true` = 管理ページで管理される
+ * `is_managed: false` = フォームで手動入力された（管理ページには出ない）
+ */
+export const presets = pgTable('presets', {
+  id: uuid('id').primaryKey().defaultRandom(), // ★ 唯一のキー
+  category: presetCategoryEnum('category').notNull(), 
+  
+  // ★ 削除: 'value' カラム
+  
+  label: text('label').notNull(), // UIに表示されるラベル
+  description: text('description'), // 話し方用のAI指示 (編集可能)
+  
+  // ★ 追加: 管理フラグ
+  isManaged: boolean('is_managed').notNull().default(false),
+
+  ownerId: uuid('owner_id'), 
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deleted: boolean('deleted').notNull().default(false),
+}, (t) => ({
+  categoryIdx: index('presets_category_idx').on(t.category),
+  // ★ 変更: ラベルとカテゴリの組み合わせをユニークにする（例: 'speech' で 'ていねい' は1つだけ）
+  uniqueLabel: { columns: [t.category, t.label, t.ownerId], isUnique: true },
+}));
+
+
+// ★ 2. residents テーブル
 export const residents = pgTable('residents', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   mbti: text('mbti'),
   traits: jsonb('traits'),
-  speechPreset: text('speech_preset'), // ★ 追加 (話し方プリセット)
+  
+  // ★ 変更: presets.id を参照する uuid 型に変更
+  speechPreset: uuid('speech_preset').references(() => presets.id, { onDelete: 'set null' }),
+  
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
   ownerId: uuid('owner_id'),
 });
 
+// ★ 3. relations テーブル
 export const relations = pgTable(
   'relations',
   {
@@ -31,13 +74,16 @@ export const relations = pgTable(
     bId: uuid('b_id').notNull(),
     type: relationTypeEnum('type').notNull().default('none'),
 
-    gender: text('gender'),                 // 'male' | 'female' | 'nonbinary' | 'other'
-    age: integer('age'),                    // 0..120 想定
-    occupation: text('occupation'),         // 列挙相当だが text で保存
-    firstPerson: text('first_person'),      // '私'など
-    activityTendency: text('activity_tendency'), // 'morning'|'normal'|'night'
-    interests: jsonb('interests'),          // string[] を想定
-    sleepProfile: jsonb('sleep_profile'),   // { bedtime, wakeTime, prepMinutes }
+    gender: text('gender'),
+    age: integer('age'),
+    
+    // ★ 変更: presets.id を参照する uuid 型に変更
+    occupation: uuid('occupation').references(() => presets.id, { onDelete: 'set null' }),
+    firstPerson: uuid('first_person').references(() => presets.id, { onDelete: 'set null' }),
+    
+    activityTendency: text('activity_tendency'),
+    interests: jsonb('interests'),
+    sleepProfile: jsonb('sleep_profile'),
 
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
@@ -48,7 +94,7 @@ export const relations = pgTable(
   })
 );
 
-// ... (feelings, events テーブルは変更なし) ...
+// ... (feelings, events, residentsRelations, etc. は変更なし) ...
 export const feelings = pgTable(
   'feelings',
   {
@@ -77,7 +123,6 @@ export const events = pgTable('events', {
   byUpdated: index('events_updated_idx').on(t.updatedAt),
 }));
 
-// ... (residentsRelations, relationsResidents, feelingsRelations, topicThreads, beliefs, notifications テーブルは変更なし) ...
 export const residentsRelations = createRelations(residents, ({ many }) => ({
   relations: many(relations),
   feelingsFrom: many(feelings, { relationName: 'feelings_from' }),
@@ -145,33 +190,4 @@ export const notifications = pgTable('notifications', {
   statusIdx: index('notifications_status_idx').on(t.status),
   occurredIdx: index('notifications_occurred_idx').on(t.occurredAt),
   updatedIdx: index('notifications_updated_idx').on(t.updatedAt),
-}));
-
-/**
- * @description プリセットのカテゴリ
- * - speech: 話し方
- * - occupation: 職業
- * - first_person: 一人称
- */
-export const presetCategoryEnum = pgEnum('preset_category', [
-  'speech',
-  'occupation',
-  'first_person',
-]);
-
-/**
- * @description ユーザーが管理するプリセット
- */
-export const presets = pgTable('presets', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  category: presetCategoryEnum('category').notNull(), // 'speech' | 'occupation' | 'first_person'
-  value: text('value').notNull(), // DBに保存される値 (e.g., 'polite', 'student', '私')
-  label: text('label').notNull(), // UIに表示されるラベル (e.g., 'ていねい', '学生', '私')
-  ownerId: uuid('owner_id'), // 将来的にユーザーごとに管理する場合
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  deleted: boolean('deleted').notNull().default(false),
-}, (t) => ({
-  categoryIdx: index('presets_category_idx').on(t.category),
-  // value はカテゴリ内でユニーク（ownerId が null の場合はグローバルでユニーク）
-  uniquePreset: { columns: [t.category, t.value, t.ownerId], isUnique: true },
 }));

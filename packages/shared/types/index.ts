@@ -8,40 +8,15 @@ export const MbtiEnum = z.enum([
   'ISTP', 'ISFP', 'ESTP', 'ESFP',
 ]);
 
-// ★ 変更不要: この Enum 定義は残してもOK
-export const SpeechPresetEnum = z.enum([
-  'polite',     // ていねい
-  'casual',     // くだけた
-  'blunt',      // 素っ気ない
-  'soft',       // やわらかい
-]);
+// ★ 削除: SpeechPresetEnum
+// ★ 削除: OccupationEnum
+// ★ 削除: FirstPersonEnum
 
 export const GenderEnum = z.enum([
   'male',
   'female',
   'nonbinary',
   'other'
-]);
-
-// ★ 変更不要: この Enum 定義は残してもOK
-export const OccupationEnum = z.enum([
-  'student',
-  'office',
-  'engineer',
-  'teacher',
-  'parttimer',
-  'freelancer',
-  'unemployed',
-  'other'
-]);
-
-// ★ 変更不要: この Enum 定義は残してもOK
-export const FirstPersonEnum = z.enum([
-  '私',
-  '僕',
-  '俺',
-  'うち',
-  '自分'
 ]);
 
 export const ActivityTendencyEnum = z.enum([
@@ -69,31 +44,30 @@ export const residentSchema = baseEntitySchema.extend({
   mbti: MbtiEnum.optional(),
 
   // 5つの性格スライダーは 1〜5（未設定はデフォルト3）
-  // 保存時は未指定でも zod.parse 時に既定値が入りやすいよう .default を付けています
   traits: z.object({
-    sociability: z.number().int().min(1).max(5).default(3), // 社交性
-    empathy: z.number().int().min(1).max(5).default(3), // 気配り傾向
-    stubbornness: z.number().int().min(1).max(5).default(3), // 頑固さ
-    activity: z.number().int().min(1).max(5).default(3), // 行動力
+    sociability:    z.number().int().min(1).max(5).default(3), // 社交性
+    empathy:        z.number().int().min(1).max(5).default(3), // 気配り傾向
+    stubbornness:   z.number().int().min(1).max(5).default(3), // 頑固さ
+    activity:       z.number().int().min(1).max(5).default(3), // 行動力
     expressiveness: z.number().int().min(1).max(5).default(3), // 表現力
   }).partial().default({}),
-
-  // ★ 変更: SpeechPresetEnum.optional() から z.string().optional() へ
-  speechPreset: z.string().optional(),       // 話し方プリセット
-
+  
+  // ★ 変更: string().uuid() に変更 (presets.id を参照)
+  speechPreset: z.string().uuid().optional(),       // 話し方プリセット
+  
   // プレイヤーへの信頼度（UI編集不可。後続ロジックで上げ下げ）
   // 0〜100、既定50（中立）
   trustToPlayer: z.number().int().min(0).max(100).default(50),
 
   gender: GenderEnum.optional(),
   age: z.number().int().min(0).max(120).optional(),
-
-  // ★ 変更: OccupationEnum.optional() から z.string().optional() へ
-  occupation: z.string().optional(),
-
-  // ★ 変更: FirstPersonEnum.optional() から z.string().optional() へ
-  firstPerson: z.string().optional(),
-
+  
+  // ★ 変更: string().uuid() に変更 (presets.id を参照)
+  occupation: z.string().uuid().optional(),
+  
+  // ★ 変更: string().uuid() に変更 (presets.id を参照)
+  firstPerson: z.string().uuid().optional(),
+  
   interests: z.array(z.string()).max(20).optional(),
 
   activityTendency: ActivityTendencyEnum.optional(),
@@ -106,6 +80,7 @@ export const relationSchema = baseEntitySchema.extend({
   type: z.enum(['none', 'friend', 'best_friend', 'lover', 'family']),
 });
 
+// ... (feelingSchema, eventSchema, syncPayloadSchema は変更なし) ...
 export const feelingSchema = baseEntitySchema.extend({
   from_id: z.string().uuid(),
   to_id: z.string().uuid(),

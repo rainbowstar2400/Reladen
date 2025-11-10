@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-// ★ 1. Textarea をインポート
 import { Textarea } from '@/components/ui/textarea'; //
 import {
   Card,
@@ -12,92 +11,90 @@ import {
   CardTitle,
 } from '@/components/ui/card'; //
 import { presetCategoryEnum } from '@/lib/drizzle/schema'; //
+import { Trash2 } from 'lucide-react';
 
 type PresetCategory = typeof presetCategoryEnum.enumValues[number];
 type PresetItem = {
-  id: string;
+  id: string; // DBの主キー (uuid)
   category: PresetCategory;
-  value: string;
-  label: string;
-  // ★ 2. description を型に追加
+  label: string; // 表示名
   description?: string | null;
+  isManaged: boolean;
 };
 
-// ★ 3. モックデータに description を追加
+// 仮のデータ (isManaged: true のものが管理対象)
 const MOCK_DATA: Record<PresetCategory, PresetItem[]> = {
   speech: [
-    { id: 's1', category: 'speech', value: 'polite', label: 'ていねい', description: '常に敬語を使い、相手を尊重する話し方。' },
-    { id: 's2', category: 'speech', value: 'casual', label: 'くだけた', description: '友人や親しい人との間で使われる、フレンドリーな話し方。' },
+    { id: 'uuid-s1', category: 'speech', label: 'ていねい', description: '常に敬語を使い、相手を尊重する話し方。', isManaged: true },
+    { id: 'uuid-s2', category: 'speech', label: 'くだけた', description: '友人や親しい人との間で使われる、フレンドリーな話し方。', isManaged: true },
   ],
   occupation: [
-    { id: 'o1', category: 'occupation', value: 'student', label: '学生' },
-    { id: 'o2', category: 'occupation', value: 'office', label: '会社員' },
+    { id: 'uuid-o1', category: 'occupation', label: '学生', isManaged: true },
+    { id: 'uuid-o2', category: 'occupation', label: '会社員', isManaged: true },
+    { id: 'uuid-o3', category: 'occupation', label: 'エンジニア', isManaged: true },
+    { id: 'uuid-o4', category: 'occupation', label: '浪人生', isManaged: false }, // これは表示されない
   ],
   first_person: [
-    { id: 'f1', category: 'first_person', value: '私', label: '私' },
-    { id: 'f2', category: 'first_person', value: '僕', label: '僕' },
+    { id: 'uuid-f1', category: 'first_person', label: '私', isManaged: true },
+    { id: 'uuid-f2', category: 'first_person', label: '僕', isManaged: true },
+    { id: 'uuid-f3', category: 'first_person', label: '拙者', isManaged: false }, // これは表示されない
   ],
 };
 
-// ★ 4. カテゴリごとの説明を定義
-const CATEGORY_DETAILS: Record<PresetCategory, { title: string; desc: string; valueHelp: string; labelHelp: string; descHelp?: string }> = {
+const CATEGORY_DETAILS: Record<PresetCategory, { title: string; desc: string; labelHelp: string; descHelp?: string }> = {
   speech: {
     title: '話し方プリセット',
-    desc: '会話生成時にAIに渡す「話し方」のキーと説明を管理します。',
-    valueHelp: '値 (例: polite)',
+    desc: '会話生成時にAIに渡す「話し方」を管理します。',
     labelHelp: 'ラベル (例: ていねい)',
     descHelp: 'AIへの指示 (例: 常に敬語を使い…)',
   },
   occupation: {
     title: '職業プリセット',
     desc: '住人フォームの「職業」サジェストを管理します。',
-    valueHelp: '値 (例: 学生)',
     labelHelp: 'ラベル (例: 学生)',
   },
   first_person: {
     title: '一人称プリセット',
     desc: '住人フォームの「一人称」サジェストを管理します。',
-    valueHelp: '値 (例: 私)',
     labelHelp: 'ラベル (例: 私)',
   },
 };
 
-
 /**
- * カテゴリごとのプリセット管理UI
+ * カテゴリごとのプリセット管理UI (仮)
  */
 function PresetCategoryManager({ category }: { category: PresetCategory }) {
   const details = CATEGORY_DETAILS[category];
-  const [items, setItems] = useState(MOCK_DATA[category]);
-  const [newValue, setNewValue] = useState('');
+  
+  // ★ 変更: isManaged: true のものだけをフィルタ
+  const [items, setItems] = useState(MOCK_DATA[category].filter(item => item.isManaged));
+  
   const [newLabel, setNewLabel] = useState('');
-  // ★ 5. description の state を追加
   const [newDescription, setNewDescription] = useState('');
 
   const handleAdd = () => {
-    // 「話し方」以外は Description を必須としない
-    if (!newValue || !newLabel || (category === 'speech' && !newDescription)) return;
+    if (!newLabel || (category === 'speech' && !newDescription)) return;
     
     const newItem: PresetItem = {
-      id: crypto.randomUUID(),
+      id: crypto.randomUUID(), // DBの主キー (仮)
       category,
-      value: newValue,
       label: newLabel,
-      // ★ 6. description を item に追加
-      ...(category === 'speech' ? { description: newDescription } : {}),
+      description: category === 'speech' ? newDescription : undefined,
+      isManaged: true, // ★ このページで追加するものは isManaged: true
     };
+    
     setItems([...items, newItem]);
-    setNewValue('');
     setNewLabel('');
-    setNewDescription(''); // ★ 7. state をクリア
+    setNewDescription('');
     // TODO: API 呼び出し (addPreset.mutate(newItem))
-    console.log('Add:', newItem);
+    console.log('Add Managed Preset:', newItem);
   };
 
   const handleDelete = (id: string) => {
     setItems(items.filter((item) => item.id !== id));
     // TODO: API 呼び出し (deletePreset.mutate(id))
-    console.log('Delete:', id);
+    // 実際には削除せず isManaged: false にする or 関連する住人がいないかチェックする
+    console.log('Delete/Unmanage Preset:', id);
   };
 
   return (
@@ -115,22 +112,16 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
               className="flex flex-col gap-1 rounded-md border p-3"
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  {/* 値 (value) */}
-                  <span className="font-mono text-sm font-semibold">{item.value}</span>
-                  {/* ラベル (label) */}
-                  <span className="text-sm text-muted-foreground">({item.label})</span>
-                </div>
+                <span className="font-semibold">{item.label}</span>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
                   onClick={() => handleDelete(item.id)}
-                  className="shrink-0"
                 >
-                  削除
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
-              {/* ★ 8. description があれば表示 */}
               {item.description && (
                 <p className="pl-1 text-xs text-gray-600 dark:text-gray-400">
                   {item.description}
@@ -142,20 +133,12 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
 
         {/* 新規追加フォーム */}
         <div className="flex flex-col gap-2 rounded-md border border-dashed p-3">
-          <div className="flex gap-2">
-            <Input
-              placeholder={details.valueHelp} // ★ 9. 動的プレースホルダー
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
-            />
-            <Input
-              placeholder={details.labelHelp} // ★ 10. 動的プレースホルダー
-              value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-            />
-          </div>
+          <Input
+            placeholder={details.labelHelp}
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+          />
 
-          {/* ★ 11. 「話し方」の場合のみ Textarea を表示 */}
           {category === 'speech' && (
             <Textarea
               placeholder={details.descHelp}
@@ -167,8 +150,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
 
           <Button
             onClick={handleAdd}
-            // ★ 12. 「話し方」の場合は説明も必須とする
-            disabled={!newValue || !newLabel || (category === 'speech' && !newDescription)}
+            disabled={!newLabel || (category === 'speech' && !newDescription)}
             className="mt-2"
           >
             追加
@@ -185,7 +167,7 @@ export default function PresetsPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">プリセット管理</h1>
       <p className="text-sm text-muted-foreground">
-        住人登録などで使用する選択肢を管理できます。
+        住人登録フォームの選択リストに表示されるプリセット（話し方、職業、一人称）を管理します。
       </p>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
