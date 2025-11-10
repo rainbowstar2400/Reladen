@@ -266,7 +266,7 @@ export function ResidentForm({
                 <FormControl>
                   <div className="relative w-full flex items-center">
                     {/* 左側：診断ボタン */}
-                    <div className="absolute left-0">
+                    <div className="absolute left-8">
                       <Button
                         type="button"
                         onClick={() => setShowDiagnosis(true)}
@@ -418,7 +418,7 @@ export function ResidentForm({
             }}
           />
 
-          {/* 年齢 */}
+          {/* 年齢（手入力 + リスト選択） */}
           <FormField
             control={form.control}
             name="age"
@@ -426,21 +426,36 @@ export function ResidentForm({
               <FormItem className="space-y-2">
                 <FormLabel>年齢</FormLabel>
                 <FormControl>
-                  <select
-                    className="w-full rounded border px-3 py-2" // Inputコンポーネントと見た目を合わせる
-                    name={field.name}
-                    ref={field.ref}
-                    value={field.value ?? ''}
-                    onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                    onBlur={field.onBlur}
-                  >
-                    <option value="">（未設定）</option>
-                    {Array.from({ length: 121 }, (_, i) => i).map((age) => ( // 0から120までの配列を生成
-                      <option key={age} value={age}>
-                        {age}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <Input
+                      // Chrome/Edgeでは list + datalist で候補が表示されます
+                      list="age-options"
+                      placeholder="例：20（手入力も可）"
+                      value={field.value ?? ''}
+                      // 空文字は ''、それ以外は Number に正規化
+                      onChange={(e) =>
+                        field.onChange(e.target.value === '' ? '' : Number(e.target.value))
+                      }
+                      onBlur={field.onBlur}
+                      // モバイルでも数字キーボードを出す
+                      inputMode="numeric"
+                      // iOS Safari での互換性も考えて type="text" を維持（datalist との相性を優先）
+                      // type="number" にしたい場合は Safari で候補が出ない点にご注意ください
+                      type="text"
+                      pattern="^\d{1,3}$"
+                      className="w-[50px]"
+                      aria-describedby="age-help"
+                    />
+                    <datalist id="age-options">
+                      {/* 1〜120 の候補（クリック/Enterで確定）。0は候補に出さず、必要な人は手入力で対応 */}
+                      {Array.from({ length: 120 }, (_, i) => i + 1).map((n) => (
+                        <option key={n} value={n} />
+                      ))}
+                    </datalist>
+                    <p id="age-help" className="text-xs text-muted-foreground mt-1">
+                      直接入力も、候補リスト（1〜120）からの選択もできます。
+                    </p>
+                  </>
                 </FormControl>
                 <FormMessage />
               </FormItem>
