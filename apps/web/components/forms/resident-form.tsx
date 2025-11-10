@@ -264,18 +264,20 @@ export function ResidentForm({
                 </FormLabel>
 
                 <FormControl>
-                  <div className="flex items-center justify-between w-full">
-                    {/* 左：診断ボタン */}
-                    <Button
-                      type="button"
-                      onClick={() => setShowDiagnosis(true)}
-                      className="bg-black text-white hover:bg-black/90 px-5 py-2"
-                    >
-                      診断する
-                    </Button>
+                  <div className="relative w-full flex items-center">
+                    {/* 左側：診断ボタン */}
+                    <div className="absolute left-0">
+                      <Button
+                        type="button"
+                        onClick={() => setShowDiagnosis(true)}
+                        className="bg-black text-white hover:bg-black/90 px-5 py-2"
+                      >
+                        診断する
+                      </Button>
+                    </div>
 
-                    {/* 右：ラベル＋セレクトを横並びで中央寄せ */}
-                    <div className="flex items-center gap-2">
+                    {/* 中央：ラベル＋セレクト */}
+                    <div className="mx-auto flex items-center gap-2">
                       <label
                         htmlFor="mbti-select"
                         className="text-sm text-gray-700 whitespace-nowrap"
@@ -290,7 +292,6 @@ export function ResidentForm({
                         value={v}
                         onChange={(e) => field.onChange(e.target.value)}
                         onBlur={field.onBlur}
-                        aria-label="MBTIを手動選択"
                       >
                         <option value="">（未設定）</option>
                         {[
@@ -425,15 +426,21 @@ export function ResidentForm({
               <FormItem className="space-y-2">
                 <FormLabel>年齢</FormLabel>
                 <FormControl>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={120}
-                    placeholder="例：20"
+                  <select
+                    className="w-full rounded border px-3 py-2" // Inputコンポーネントと見た目を合わせる
+                    name={field.name}
+                    ref={field.ref}
                     value={field.value ?? ''}
                     onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
                     onBlur={field.onBlur}
-                  />
+                  >
+                    <option value="">（未設定）</option>
+                    {Array.from({ length: 121 }, (_, i) => i).map((age) => ( // 0から120までの配列を生成
+                      <option key={age} value={age}>
+                        {age}
+                      </option>
+                    ))}
+                  </select>
                 </FormControl>
                 <FormMessage />
               </FormItem>
