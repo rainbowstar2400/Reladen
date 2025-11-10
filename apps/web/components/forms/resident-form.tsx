@@ -509,10 +509,10 @@ export function ResidentForm({
                 name="speechPreset"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm text-muted-foreground">手動入力（口調）</FormLabel>
+                    <FormLabel className="text-sm text-muted-foreground">口調</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="例：武士（ござる）"
+                        placeholder="例：子供っぽい"
                         {...field}
                         value={field.value ?? ''}
                       />
@@ -529,7 +529,7 @@ export function ResidentForm({
                     <FormLabel className="text-sm text-muted-foreground">手動入力（特徴）</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="例：語尾に「ござる」を付ける。"
+                        placeholder="例：幼い印象の話し方：「〜だね！」「やったぁ」など"
                         {...field}
                         value={field.value ?? ''}
                         rows={2}
@@ -738,7 +738,7 @@ export function ResidentForm({
         </div>
 
         {/* ★ 10. 一人称 (Select + Manual UI) */}
-        <div className="space-y-3 rounded-md border p-3">
+        <div className="md:col-span-5 min-w-0 space-y-3">
           <FormField
             control={form.control}
             name="firstPerson"
@@ -863,7 +863,7 @@ export function ResidentForm({
 
         {/* 活動傾向 */}
         <div className="space-y-4 pt-2 border-t">
-          <h3 className="text-sm font-semibold">活動傾向と睡眠</h3>
+          <h3 className="text-sm font-semibold">睡眠</h3>
 
           {/* 活動傾向 */}
           <FormField
@@ -873,7 +873,7 @@ export function ResidentForm({
               const v = field.value ?? '';
               return (
                 <FormItem className="space-y-2">
-                  <FormLabel>活動傾向（クロノタイプ）</FormLabel>
+                  <FormLabel>活動傾向</FormLabel>
                   <FormControl>
                     <select
                       className="w-full rounded border px-3 py-2"
@@ -902,7 +902,7 @@ export function ResidentForm({
               name="sleepBedtime"
               render={({ field }) => (
                 <FormItem className="space-y-2">
-                  <FormLabel>就寝時刻（任意・HH:mm）</FormLabel>
+                  <FormLabel>就寝時刻（任意）</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="例：23:00"
@@ -922,7 +922,7 @@ export function ResidentForm({
               name="sleepWakeTime"
               render={({ field }) => (
                 <FormItem className="space-y-2">
-                  <FormLabel>起床時刻（任意・HH:mm）</FormLabel>
+                  <FormLabel>起床時刻（任意）</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="例：07:30"
