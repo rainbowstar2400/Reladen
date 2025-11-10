@@ -251,6 +251,7 @@ export function ResidentForm({
             </FormItem>
           )}
         />
+        {/* --- MBTI（診断 または手動で選択） --- */}
         <FormField
           control={form.control}
           name="mbti"
@@ -258,16 +259,34 @@ export function ResidentForm({
             const v = field.value ?? ''; // null/undefined→空文字
             return (
               <FormItem className="space-y-2">
-                <FormLabel>MBTI</FormLabel>
+                <FormLabel className="text-base font-semibold">
+                  MBTI（診断 または手動で選択）
+                </FormLabel>
+
                 <FormControl>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* 左：診断ボタン（黒基調） */}
+                    <Button
+                      type="button"
+                      onClick={() => setShowDiagnosis(true)}
+                      className="bg-black text-white hover:bg-black/90"
+                    >
+                      診断する
+                    </Button>
+
+                    {/* 右：「手動で選択：」ラベル＋セレクト */}
+                    <label className="text-sm" htmlFor="mbti-select">
+                      手動で選択：
+                    </label>
                     <select
-                      className="w-full rounded border px-3 py-2"
+                      id="mbti-select"
+                      className="w-[200px] min-w-[160px] rounded border px-3 py-2"
                       name={field.name}
                       ref={field.ref}
                       value={v}
                       onChange={(e) => field.onChange(e.target.value)}
                       onBlur={field.onBlur}
+                      aria-label="MBTIを手動選択"
                     >
                       <option value="">（未設定）</option>
                       {[
@@ -279,18 +298,15 @@ export function ResidentForm({
                         <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
-
-                    {/* ← これが診断パネルのトグル */}
-                    <Button type="button" variant="secondary" onClick={() => setShowDiagnosis(true)}>
-                      診断
-                    </Button>
                   </div>
                 </FormControl>
+
                 <FormMessage />
               </FormItem>
             );
           }}
         />
+
         <FormField
           control={form.control}
           name="speechPreset"
@@ -585,7 +601,7 @@ export function ResidentForm({
 
           {/* 既定値プレビュー（sleepProfile未入力時に、活動傾向からの既定を見せるだけ） */}
           {(() => {
-            const t = form.watch('activityTendency') as ('morning'|'normal'|'night'|undefined);
+            const t = form.watch('activityTendency') as ('morning' | 'normal' | 'night' | undefined);
             const bed = form.watch('sleepBedtime');
             const wake = form.watch('sleepWakeTime');
 
