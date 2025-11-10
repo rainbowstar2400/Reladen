@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { defaultSleepByTendency } from '@/lib/schedule';
 import { ClickableRatingBox } from '@/components/ui/clickable-rating-box';
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea';
 // ★ TODO: 将来的には usePresets フックなどから動的に取得する
 // import { usePresets } from '@/lib/data/presets';
 
@@ -37,11 +38,12 @@ const DEFAULT_TRAITS = {
 } as const;
 
 // DBから取得した「管理プリセット (isManaged: true)」のモックデータ
-type ManagedPreset = { id: string; label: string };
+type ManagedPreset = { id: string; label: string; description?: string | null };
+
 const MOCK_MANAGED_PRESETS: Record<'speech' | 'occupation' | 'first_person', ManagedPreset[]> = {
   speech: [
-    { id: 'uuid-s1', label: 'ていねい' },
-    { id: 'uuid-s2', label: 'くだけた' },
+    { id: 'uuid-s1', label: 'ていねい', description: '常に敬語を使い、相手を尊重する話し方。' },
+    { id: 'uuid-s2', label: 'くだけた', description: '友人や親しい人との間で使われる、フレンドリーな話し方。' },
   ],
   occupation: [
     { id: 'uuid-o1', label: '学生' },
@@ -73,6 +75,8 @@ const residentFormSchema = z.object({
   speechPreset: z.string().optional().nullable(),
   occupation: z.string().optional().nullable(),
   firstPerson: z.string().optional().nullable(),
+  // ★ 追加: 話し方の特徴
+  speechPresetDescription: z.string().optional().nullable(),
 
   // --- プリセット管理フラグ ---
   isSpeechPresetManaged: z.boolean().default(false),
@@ -105,45 +109,44 @@ const residentFormSchema = z.object({
 
 type ResidentFormValues = z.infer<typeof residentFormSchema>;
 
-// ★ 変更:
-// 実際のバックエンドロジック (useUpsertPreset) のモック。
-// フォームの 'handleSubmit' でこのロジックを呼び出し、ラベルをUUIDに変換する。
+// ★ 3. findOrCreatePreset (モック) のシグネチャを変更
 const findOrCreatePreset = async (
   label: string | undefined | null,
   category: 'speech' | 'occupation' | 'first_person',
-  isManaged: boolean
+  isManaged: boolean,
+  // ★ description を引数に追加
+  description?: string | undefined | null
 ): Promise<string | undefined> => { // UUID を返す
   if (!label || label.trim().length === 0) {
     return undefined;
   }
   const trimmedLabel = label.trim();
 
-  // 1. 既存のプリセット（管理・非管理問わず）にラベルがあるか探す（モック）
-  // (実際にはDBを検索)
-  const allPresets = [
+  // (モック) 非管理プリセットの追加
+  const allPresetsMock: ManagedPreset[] = [ // ★ 型を明示
     ...MOCK_MANAGED_PRESETS[category],
-    // 非管理プリセットのモック
     { id: 'uuid-o4', label: '浪人生' },
     { id: 'uuid-f3', label: '拙者' },
   ];
-
-  const existing = allPresets.find(p => p.label === trimmedLabel);
+  const existing = allPresetsMock.find(p => p.label === trimmedLabel);
 
   if (existing) {
     // 2. 存在する場合
-    // 2a. 「プリセット登録」がONにされたが、まだ 'isManaged: false' だった場合
-    // (ここでは isManaged の更新ロジックは省略し、IDを返すだけ)
+    // (ここでは isManaged や description の更新ロジックは省略し、IDを返すだけ)
     if (isManaged) {
-      // TODO: API 呼び出し (updatePreset(existing.id, { isManaged: true }))
+      // TODO: API 呼び出し (updatePreset(existing.id, { isManaged: true, description }))
       console.log(`Preset ${trimmedLabel} (${existing.id}) を 'managed' に更新 (モック)`);
+    } else if (category === 'speech' && description) {
+      // TODO: API 呼び出し (updatePreset(existing.id, { description }))
+      console.log(`Preset ${trimmedLabel} (${existing.id}) の 'description' を更新 (モック)`);
     }
     return existing.id; // 既存のUUIDを返す
   }
 
   // 3. 存在しない場合 (新規作成)
   const newId = crypto.randomUUID();
-  // TODO: API 呼び出し (createPreset({ label: trimmedLabel, category, isManaged }))
-  console.log(`Preset ${trimmedLabel} を新規作成 (isManaged: ${isManaged}) (ID: ${newId}) (モック)`);
+  // TODO: API 呼び出し (createPreset({ label: trimmedLabel, category, isManaged, description }))
+  console.log(`Preset ${trimmedLabel} を新規作成 (isManaged: ${isManaged}) (Desc: ${description}) (ID: ${newId}) (モック)`);
   // 新しいUUIDを返す
   return newId;
 };
@@ -166,13 +169,17 @@ export function ResidentForm({
     // ... (defaultValues の設定は変更なし) ...
     resolver: zodResolver(residentFormSchema),
     defaultValues: useMemo(() => {
-      // ★ 変更:
-      // defaultValues (DB) から フォーム (FormValues) への変換
-      // DBの speechPreset (UUID) から、対応する「ラベル」を引く必要がある
-      // (ここではモックデータで「ていねい」に決め打ち)
-      const defaultSpeechLabel = defaultValues?.speechPreset === 'uuid-s1' ? 'ていねい' : '';
-      const defaultOccLabel = defaultValues?.occupation === 'uuid-o1' ? '学生' : '';
-      const defaultFpLabel = defaultValues?.firstPerson === 'uuid-f1' ? '私' : '';
+      // ★ 4. defaultValues (DB) から フォーム (FormValues) への変換ロジック
+
+      // (モック) DBのUUIDから対応するプリセットを引く
+      // 実際には defaultValues にプリセット情報もJOINするか、別途フェッチする
+      const findPreset = (id: string | undefined, category: 'speech' | 'occupation' | 'first_person'): ManagedPreset | undefined => {
+        const presets: ManagedPreset[] = MOCK_MANAGED_PRESETS[category]; // 型を保証
+        return presets.find(p => p.id === id);
+      };
+      const defaultSpeechPreset = findPreset(defaultValues?.speechPreset, 'speech');
+      const defaultOccPreset = findPreset(defaultValues?.occupation, 'occupation');
+      const defaultFpPreset = findPreset(defaultValues?.firstPerson, 'first_person');
 
       const traitsObj =
         defaultValues?.traits && typeof defaultValues.traits === 'object'
@@ -185,10 +192,11 @@ export function ResidentForm({
         mbti: defaultValues?.mbti ?? '',
         traits: traitsObj,
         trustToPlayer: defaultValues?.trustToPlayer ?? 50,
-        // ★ フォームにはラベルを設定
-        speechPreset: defaultSpeechLabel,
-        occupation: defaultOccLabel,
-        firstPerson: defaultFpLabel,
+        // ★ フォームにはラベルと特徴を設定
+        speechPreset: defaultSpeechPreset?.label ?? '',
+        speechPresetDescription: defaultSpeechPreset?.description ?? '', // ★ 特徴
+        occupation: defaultOccPreset?.label ?? '',
+        firstPerson: defaultFpPreset?.label ?? '',
         // ★ 管理フラグはデフォルトOFF
         isSpeechPresetManaged: false,
         isOccupationManaged: false,
@@ -269,11 +277,16 @@ export function ResidentForm({
 
     const saved = await upsert.mutateAsync(payload);
 
+    // (モック) 保存されたUUIDからプリセットを探す
+    const findPreset = (id: string | undefined, category: 'speech' | 'occupation' | 'first_person'): ManagedPreset | undefined => {
+      const presets: ManagedPreset[] = MOCK_MANAGED_PRESETS[category]; // 型を保証
+      return presets.find(p => p.id === id);
+    };
     // ★ 4. フォームのリセット (saved は DB の型 = UUID持ち)
     // (ここでも UUID から ラベルへの逆引きが必要)
-    const savedSpeechLabel = saved.speechPreset === 'uuid-s1' ? 'ていねい' : (values.speechPreset ?? ''); //
-    const savedOccLabel = saved.occupation === 'uuid-o1' ? '学生' : (values.occupation ?? '');
-    const savedFpLabel = saved.firstPerson === 'uuid-f1' ? '私' : (values.firstPerson ?? '');
+    const savedSpeechPreset = findPreset(saved.speechPreset, 'speech');
+    const savedOccPreset = findPreset(saved.occupation, 'occupation');
+    const savedFpPreset = findPreset(saved.firstPerson, 'first_person');
 
     // form.reset (変更なし)
     form.reset({
@@ -285,9 +298,10 @@ export function ResidentForm({
       trustToPlayer: saved.trustToPlayer ?? 50,
 
       // ★ フォームにはラベルを戻す
-      speechPreset: savedSpeechLabel,
-      occupation: savedOccLabel,
-      firstPerson: savedFpLabel,
+      speechPreset: savedSpeechPreset?.label ?? (values.speechPreset ?? ''),
+      speechPresetDescription: savedSpeechPreset?.description ?? (values.speechPresetDescription ?? ''),
+      occupation: savedOccPreset?.label ?? (values.occupation ?? ''),
+      firstPerson: savedFpPreset?.label ?? (values.firstPerson ?? ''),
 
       // ★ 管理フラグはリセット
       isSpeechPresetManaged: false,
@@ -313,6 +327,7 @@ export function ResidentForm({
   // ★ 追加: 新しく追加する興味・関心の入力値を管理
   const [newInterest, setNewInterest] = useState('');
 
+  const watchSpeechPresetLabel = form.watch('speechPreset');
 
   return (
     <Form {...form}>
@@ -392,51 +407,6 @@ export function ResidentForm({
           }}
         />
 
-        {/* ★ 変更: 話し方プリセット */}
-        <div className="space-y-2 rounded-md border p-3">
-          <FormField
-            control={form.control}
-            name="speechPreset"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel>話し方</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="例：ていねい（手動入力も可）"
-                    list="speech-preset-options"
-                    {...field}
-                    value={field.value ?? ''} // ここには「ラベル」が入る
-                  />
-                </FormControl>
-                <datalist id="speech-preset-options">
-                  {/* ★ 変更: value にも label を設定 */}
-                  {speechPresets.map((preset) => (
-                    <option key={preset.id} value={preset.label} />
-                  ))}
-                </datalist>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="isSpeechPresetManaged"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-end space-x-2">
-                <FormLabel className="text-sm text-muted-foreground">
-                  この話し方をプリセット管理に追加
-                </FormLabel>
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-        </div>
-
         {/* ... (性格 traits セクションは変更なし) ... */}
         <div className="space-y-4">
           <h3 className="text-sm font-semibold">性格（1〜5）</h3>
@@ -472,6 +442,73 @@ export function ResidentForm({
               )}
             />
           ))}
+        </div>
+
+        {/* ★ 変更: 話し方プリセット */}
+        <div className="space-y-3 rounded-md border p-3">
+          <FormField
+            control={form.control}
+            name="speechPreset"
+            render={({ field }) => (
+              <FormItem className="space-y-2">
+                <FormLabel>話し方（ラベル）</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="例：ていねい（手動入力も可）"
+                    list="speech-preset-options"
+                    {...field}
+                    value={field.value ?? ''} // ここには「ラベル」が入る
+                  />
+                </FormControl>
+                <datalist id="speech-preset-options">
+                  {speechPresets.map((preset) => (
+                    <option key={preset.id} value={preset.label} />
+                  ))}
+                </datalist>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {/* ★ 10. 「特徴」の Textarea を追加 */}
+          {/* ラベルが入力されている時だけ表示 */}
+          {watchSpeechPresetLabel && (
+            <FormField
+              control={form.control}
+              name="speechPresetDescription"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel>話し方の特徴（AIへの指示）</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="例：常に敬語を使い、相手を尊重する話し方。"
+                      {...field}
+                      value={field.value ?? ''}
+                      rows={2}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          <FormField
+            control={form.control}
+            name="isSpeechPresetManaged"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-end space-x-2">
+                <FormLabel className="text-sm text-muted-foreground">
+                  この話し方をプリセット管理に追加
+                </FormLabel>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
         </div>
 
         {/* 基本情報 */}
@@ -798,76 +835,78 @@ export function ResidentForm({
 
       {/* --- 診断パネル (MBTI診断) --- */}
       {/* (前回修正した ClickableRatingBox が使われている状態) */}
-      {showDiagnosis && (
-        <>
-          {/* Backdrop（背景クリックで閉じる） */}
-          <div
-            className="fixed inset-0 z-40 bg-black/40"
-            onClick={() => setShowDiagnosis(false)}
-            aria-hidden="true"
-          />
+      {
+        showDiagnosis && (
+          <>
+            {/* Backdrop（背景クリックで閉じる） */}
+            <div
+              className="fixed inset-0 z-40 bg-black/40"
+              onClick={() => setShowDiagnosis(false)}
+              aria-hidden="true"
+            />
 
-          {/* 右側スライドのサイドパネル */}
-          <aside
-            className="fixed right-0 top-0 z-50 h-svh w-[420px] max-w-[88vw] bg-white shadow-xl border-l outline-none
+            {/* 右側スライドのサイドパネル */}
+            <aside
+              className="fixed right-0 top-0 z-50 h-svh w-[420px] max-w-[88vw] bg-white shadow-xl border-l outline-none
                      animate-in slide-in-from-right duration-200"
-            role="dialog"
-            aria-modal="true"
-          >
-            {/* ... (パネルのヘッダー) ... */}
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <h3 className="text-sm font-semibold">MBTI 診断</h3>
-              <button
-                type="button"
-                className="text-sm text-muted-foreground hover:underline"
-                onClick={() => setShowDiagnosis(false)}
-              >
-                閉じる（Esc）
-              </button>
-            </div>
-            <div className="flex h-[calc(100svh-48px-64px)] flex-col gap-4 overflow-y-auto px-4 py-4">
-              {/* 質問リスト（スライダー） */}
-              {QUESTIONS.map((q) => (
-                <div key={q.id} className="grid grid-cols-5 items-center gap-3">
-                  <div className="col-span-3 text-sm">{q.text}</div>
-                  <div className="col-span-2">
-                    <ClickableRatingBox
-                      value={diagScores[q.id]}
-                      onChange={(newValue) => onDiagScoreChange(q.id, newValue)}
-                    />
+              role="dialog"
+              aria-modal="true"
+            >
+              {/* ... (パネルのヘッダー) ... */}
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <h3 className="text-sm font-semibold">MBTI 診断</h3>
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground hover:underline"
+                  onClick={() => setShowDiagnosis(false)}
+                >
+                  閉じる（Esc）
+                </button>
+              </div>
+              <div className="flex h-[calc(100svh-48px-64px)] flex-col gap-4 overflow-y-auto px-4 py-4">
+                {/* 質問リスト（スライダー） */}
+                {QUESTIONS.map((q) => (
+                  <div key={q.id} className="grid grid-cols-5 items-center gap-3">
+                    <div className="col-span-3 text-sm">{q.text}</div>
+                    <div className="col-span-2">
+                      <ClickableRatingBox
+                        value={diagScores[q.id]}
+                        onChange={(newValue) => onDiagScoreChange(q.id, newValue)}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
 
-            {/* フッター操作 */}
-            <div className="flex justify-end gap-2 border-t px-4 py-3">
-              <Button
-                type="button"
-                onClick={() => {
-                  const mbti = calculateMbti(answers);
-                  // ← MBTI セレクトにだけ結果を反映（保存は元の「保存」ボタン）
-                  form.setValue('mbti', mbti, {
-                    shouldDirty: true,
-                    shouldTouch: true,
-                    shouldValidate: true,
-                  });
-                  setShowDiagnosis(false);
-                }}
-              >
-                診断して反映
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setShowDiagnosis(false)}
-              >
-                反映せず閉じる
-              </Button>
-            </div>
-          </aside>
-        </>
-      )}
-    </Form>
+              {/* フッター操作 */}
+              <div className="flex justify-end gap-2 border-t px-4 py-3">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const mbti = calculateMbti(answers);
+                    // ← MBTI セレクトにだけ結果を反映（保存は元の「保存」ボタン）
+                    form.setValue('mbti', mbti, {
+                      shouldDirty: true,
+                      shouldTouch: true,
+                      shouldValidate: true,
+                    });
+                    setShowDiagnosis(false);
+                  }}
+                >
+                  診断して反映
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowDiagnosis(false)}
+                >
+                  反映せず閉じる
+                </Button>
+              </div>
+            </aside>
+          </>
+        )
+      }
+    </Form >
   );
 }
