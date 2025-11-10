@@ -459,7 +459,7 @@ export function ResidentForm({
         </div>
 
         {/* ★ 6. 話し方プリセット (Select + Manual UI) */}
-        <div className="space-y-3 rounded-md border p-3">
+        <div className="md:col-span-5 min-w-0 space-y-3">
           <FormField
             control={form.control}
             name="speechPreset"
@@ -509,7 +509,6 @@ export function ResidentForm({
                 name="speechPreset"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm text-muted-foreground">口調</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="例：子供っぽい"
@@ -526,7 +525,7 @@ export function ResidentForm({
                 name="speechPresetDescription"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm text-muted-foreground">手動入力（特徴）</FormLabel>
+                    <FormLabel className="text-sm text-muted-foreground">特徴</FormLabel>
                     <FormControl>
                       <Textarea
                         placeholder="例：幼い印象の話し方：「〜だね！」「やったぁ」など"
