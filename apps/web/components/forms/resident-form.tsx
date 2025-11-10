@@ -252,6 +252,7 @@ export function ResidentForm({
           )}
         />
         {/* --- MBTI（診断 または手動で選択） --- */}
+        {/* --- MBTI（診断 または手動で選択） --- */}
         <FormField
           control={form.control}
           name="mbti"
@@ -264,40 +265,52 @@ export function ResidentForm({
                 </FormLabel>
 
                 <FormControl>
-                  <div className="flex flex-wrap items-center gap-3">
-                    {/* 左：診断ボタン（黒基調） */}
-                    <Button
-                      type="button"
-                      onClick={() => setShowDiagnosis(true)}
-                      className="bg-black text-white hover:bg-black/90"
-                    >
-                      診断する
-                    </Button>
+                  {/* === レイアウト全体 === */}
+                  <div className="flex items-center justify-between w-full gap-4">
+                    {/* 左側：診断ボタン */}
+                    <div className="flex-shrink-0">
+                      <Button
+                        type="button"
+                        onClick={() => setShowDiagnosis(true)}
+                        className="bg-black text-white hover:bg-black/90 px-5 py-2"
+                      >
+                        診断する
+                      </Button>
+                    </div>
 
-                    {/* 右：「手動で選択：」ラベル＋セレクト */}
-                    <label className="text-sm" htmlFor="mbti-select">
-                      手動で選択：
-                    </label>
-                    <select
-                      id="mbti-select"
-                      className="w-[200px] min-w-[160px] rounded border px-3 py-2"
-                      name={field.name}
-                      ref={field.ref}
-                      value={v}
-                      onChange={(e) => field.onChange(e.target.value)}
-                      onBlur={field.onBlur}
-                      aria-label="MBTIを手動選択"
-                    >
-                      <option value="">（未設定）</option>
-                      {[
-                        'INTJ', 'INTP', 'ENTJ', 'ENTP',
-                        'INFJ', 'INFP', 'ENFJ', 'ENFP',
-                        'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
-                        'ISTP', 'ISFP', 'ESTP', 'ESFP',
-                      ].map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+                    {/* 中央：手動選択ラベル */}
+                    <div className="flex-grow text-center">
+                      <label
+                        htmlFor="mbti-select"
+                        className="text-sm text-gray-700 whitespace-nowrap"
+                      >
+                        手動で選択：
+                      </label>
+                    </div>
+
+                    {/* 右側：セレクトボックス */}
+                    <div className="flex-shrink-0">
+                      <select
+                        id="mbti-select"
+                        className="rounded border px-3 py-2 min-w-[140px]"
+                        name={field.name}
+                        ref={field.ref}
+                        value={v}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        onBlur={field.onBlur}
+                        aria-label="MBTIを手動選択"
+                      >
+                        <option value="">（未設定）</option>
+                        {[
+                          'INTJ', 'INTP', 'ENTJ', 'ENTP',
+                          'INFJ', 'INFP', 'ENFJ', 'ENFP',
+                          'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
+                          'ISTP', 'ISFP', 'ESTP', 'ESFP',
+                        ].map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </FormControl>
 
@@ -306,6 +319,7 @@ export function ResidentForm({
             );
           }}
         />
+
 
         <FormField
           control={form.control}
