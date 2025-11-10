@@ -17,8 +17,6 @@ import { defaultSleepByTendency } from '@/lib/schedule';
 import { ClickableRatingBox } from '@/components/ui/clickable-rating-box';
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea';
-// ★ 2. Tabs と Select コンポーネントをインポート
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 // ★ TODO: 将来的には usePresets フックなどから動的に取得する
 // import { usePresets } from '@/lib/data/presets';
@@ -158,9 +156,6 @@ const findOrCreatePreset = async (
   return newId;
 };
 
-// ★ 3. フォームUIのモード（タブ）を管理する型
-type PresetMode = 'select' | 'manual';
-
 export function ResidentForm({
   defaultValues,
   onSubmitted,
@@ -183,9 +178,6 @@ export function ResidentForm({
   const defaultSpeechPreset = findPresetFromDb(defaultValues?.speechPreset, 'speech');
   const defaultOccPreset = findPresetFromDb(defaultValues?.occupation, 'occupation');
   const defaultFpPreset = findPresetFromDb(defaultValues?.firstPerson, 'first_person');
-
-  // ★ 5. タブの初期状態を、読み込んだデータに応じて設定
-  const [speechMode, setSpeechMode] = useState<PresetMode>(defaultSpeechPreset?.isManaged ? 'select' : 'manual');
 
   const form = useForm<ResidentFormValues>({
     resolver: zodResolver(residentFormSchema),
@@ -323,9 +315,6 @@ export function ResidentForm({
       sleepWakeTime: saved.sleepProfile?.wakeTime ?? '',
     });
 
-    // ★ 8. タブの状態もリセット
-    setSpeechMode(savedSpeechPreset?.isManaged ? 'select' : 'manual');
-
     onSubmitted?.();
   }
 
@@ -339,19 +328,18 @@ export function ResidentForm({
   // ★ 追加: 新しく追加する興味・関心の入力値を管理
   const [newInterest, setNewInterest] = useState('');
 
-  // ★ 6. 職業・一人称の手動入力UIを制御するための値監視
+  // ★ 5. 3つのプリセットすべての状態を監視
+  const watchSpeechPreset = form.watch('speechPreset');
   const watchOccupation = form.watch('occupation');
   const watchFirstPerson = form.watch('firstPerson');
 
   // マネージドプリセットのラベルリスト（判定用）
+  const speechPresetLabels = useMemo(() => speechPresets.map(p => p.label), [speechPresets]);
   const occupationPresetLabels = useMemo(() => occupationPresets.map(p => p.label), [occupationPresets]);
   const firstPersonPresetLabels = useMemo(() => firstPersonPresets.map(p => p.label), [firstPersonPresets]);
 
   // 「手動入力」モードかどうかを判定
-  // (手動入力が選ばれた OR プリセットにない値がフォームに入っている)
-
-  // `watchOccupation` (string | null | undefined) を `includes` に渡す前に
-  // `null` や `undefined` ではないこと (truthy) を確認する
+  const isSpeechManual = !watchSpeechPreset || !speechPresetLabels.includes(watchSpeechPreset);
   const isOccupationManual = !watchOccupation || !occupationPresetLabels.includes(watchOccupation);
   const isFirstPersonManual = !watchFirstPerson || !firstPersonPresetLabels.includes(watchFirstPerson);
 
@@ -470,78 +458,58 @@ export function ResidentForm({
           ))}
         </div>
 
-        {/* ★ 7. 話し方プリセット (Tabs UI) */}
+        {/* ★ 6. 話し方プリセット (Select + Manual UI) */}
         <div className="space-y-3 rounded-md border p-3">
-          <FormLabel>話し方</FormLabel>
-          <Tabs
-            value={speechMode}
-            onValueChange={(v) => {
-              const mode = v as PresetMode;
-              setSpeechMode(mode);
-              // ★ 手動 -> 選択 に切り替えた時だけクリア
-              if (mode === 'select') {
-                form.setValue('speechPreset', '');
-                form.setValue('speechPresetDescription', '');
-              }
-            }}
-          >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="select">プリセットから選択</TabsTrigger>
-              <TabsTrigger value="manual">手動入力</TabsTrigger>
-            </TabsList>
-
-            {/* A: プリセット選択タブ */}
-            <TabsContent value="select" className="space-y-3">
-              <FormField
-                control={form.control}
-                name="speechPreset"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>プリセット</FormLabel>
-                    <Select
-                      onValueChange={(label) => {
-                        const preset = speechPresets.find(p => p.label === label);
-                        field.onChange(label);
-                        form.setValue('speechPresetDescription', preset?.description ?? '');
-                      }}
-                      value={field.value ?? ''}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="管理プリセットを選択..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {speechPresets.map((preset) => (
-                          <SelectItem key={preset.id} value={preset.label}>
-                            {preset.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              {/* ★ 8. 特徴を <Textarea> から <p> に変更 */}
+          <FormField
+            control={form.control}
+            name="speechPreset"
+            render={({ field }) => (
               <FormItem>
-                <FormLabel>特徴（AIへの指示）</FormLabel>
-                <FormControl>
-                  <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
-                    {form.watch('speechPresetDescription') || '（プリセットを選択すると特徴が表示されます）'}
-                  </p>
-                </FormControl>
+                <FormLabel>口調</FormLabel>
+                <Select
+                  onValueChange={(value) => {
+                    if (value === MANUAL_INPUT_KEY) {
+                      field.onChange(''); // 手動入力モードへ
+                      form.setValue('speechPresetDescription', ''); // 特徴もクリア
+                    } else {
+                      // プリセットを選択
+                      field.onChange(value); // ラベルをセット
+                      // 対応する特徴をセット
+                      const preset = speechPresets.find(p => p.label === value);
+                      form.setValue('speechPresetDescription', preset?.description ?? '');
+                    }
+                  }}
+                  value={isSpeechManual ? MANUAL_INPUT_KEY : field.value ?? ''}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="プリセットを選択..." />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {speechPresets.map((preset) => (
+                      <SelectItem key={preset.id} value={preset.label}>
+                        {preset.label}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={MANUAL_INPUT_KEY} className="text-blue-600">
+                      （手動で入力）
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </FormItem>
-            </TabsContent>
+            )}
+          />
 
-            {/* B: 手動入力タブ */}
-            <TabsContent value="manual" className="space-y-3">
+          {/* ★ 手動入力が選択された時だけ「入力欄」を表示 */}
+          {isSpeechManual && (
+            <div className="space-y-3 pl-2 border-l-2 border-dashed">
               <FormField
                 control={form.control}
                 name="speechPreset"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>ラベル</FormLabel>
+                    <FormLabel className="text-sm text-muted-foreground">手動入力（口調）</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="例：武士（ござる）"
@@ -558,7 +526,7 @@ export function ResidentForm({
                 name="speechPresetDescription"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>特徴（AIへの指示）</FormLabel>
+                    <FormLabel className="text-sm text-muted-foreground">手動入力（特徴）</FormLabel>
                     <FormControl>
                       <Textarea
                         placeholder="例：語尾に「ござる」を付ける。"
@@ -577,7 +545,7 @@ export function ResidentForm({
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-end space-x-2">
                     <FormLabel className="text-sm text-muted-foreground">
-                      プリセット管理に追加
+                      プリセットに追加
                     </FormLabel>
                     <FormControl>
                       <Switch
@@ -588,8 +556,20 @@ export function ResidentForm({
                   </FormItem>
                 )}
               />
-            </TabsContent>
-          </Tabs>
+            </div>
+          )}
+
+          {/* ★ プリセット選択中（かつ手動ではない）場合、「特徴の表示」を表示 */}
+          {!isSpeechManual && (
+            <FormItem>
+              <FormLabel className="text-sm text-muted-foreground">特徴</FormLabel>
+              <FormControl>
+                <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  {form.watch('speechPresetDescription') || '（特徴はありません）'}
+                </p>
+              </FormControl>
+            </FormItem>
+          )}
         </div>
 
         {/* 基本情報 */}
@@ -725,7 +705,7 @@ export function ResidentForm({
                         <FormLabel className="text-sm text-muted-foreground">手動入力</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="例：浪人生"
+                            placeholder="例：サラリーマン"
                             {...field}
                             value={field.value ?? ''}
                           />
@@ -740,7 +720,7 @@ export function ResidentForm({
                     render={({ field }) => (
                       <FormItem className="flex flex-row items-center justify-end space-x-2 pt-1">
                         <FormLabel className="text-sm text-muted-foreground">
-                          プリセット管理に追加
+                          プリセットに追加
                         </FormLabel>
                         <FormControl>
                           <Switch
@@ -806,7 +786,7 @@ export function ResidentForm({
                     <FormLabel className="text-sm text-muted-foreground">手動入力</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="例：拙者"
+                        placeholder="例：ウチ"
                         {...field}
                         value={field.value ?? ''}
                       />
@@ -821,7 +801,7 @@ export function ResidentForm({
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-end space-x-2">
                     <FormLabel className="text-sm text-muted-foreground">
-                      プリセット管理に追加
+                      プリセットに追加
                     </FormLabel>
                     <FormControl>
                       <Switch
