@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Resident } from '@/types';
 import { z } from 'zod';
@@ -77,8 +77,8 @@ const residentFormSchema = z.object({
     v => (v === '' || v == null ? undefined : Number(v)),
     z.number().int().min(0).max(120).optional()
   ),
-
-  interestsText: z.string().optional().nullable(),
+  
+  interests: z.array(z.object({ value: z.string() })).optional(),
 
   // --- 活動傾向・睡眠関連 ---
   activityTendency: z.preprocess(
@@ -118,12 +118,14 @@ export function ResidentForm({
           : { ...DEFAULT_TRAITS };
 
       return {
-        name: '',
-        mbti: '',
+        ...defaultValues, // ★ スプレッドを先頭に移動
+        name: defaultValues?.name ?? '',
+        mbti: defaultValues?.mbti ?? '',
         speechPreset: defaultValues?.speechPreset ?? '',
         trustToPlayer: defaultValues?.trustToPlayer ?? 50,
         traits: traitsObj,
-        ...defaultValues, // ↑上書きできるように最後でもOK
+        // ★ 最後に 'interests' を正しい型で上書き
+        interests: defaultValues?.interests?.map(val => ({ value: val })) ?? [],
       };
     }, [defaultValues]),
 
@@ -170,15 +172,8 @@ export function ResidentForm({
     const occupation = values.occupation as ('student' | 'office' | 'engineer' | 'teacher' | 'parttimer' | 'freelancer' | 'unemployed' | 'other') | undefined;
     const firstPerson = values.firstPerson as ('私' | '僕' | '俺' | 'うち' | '自分') | undefined;
 
-    // 興味関心：カンマ区切り→配列（空要素除去）
-    const interests =
-      typeof values.interestsText === 'string' && values.interestsText.trim()
-        ? Array.from(
-          new Set(
-            values.interestsText.split(',').map(s => s.trim()).filter(Boolean)
-          )
-        )
-        : undefined;
+    // ★ { value: string }[] から string[] に変換
+    const interests = values.interests?.map(item => item.value).filter(Boolean) ?? [];
 
     // 活動傾向
     const activityTendency = values.activityTendency as ('morning' | 'normal' | 'night') | undefined;
@@ -204,7 +199,7 @@ export function ResidentForm({
       age: typeof values.age === 'number' ? values.age : undefined,
       occupation,
       firstPerson,
-      interests,
+      interests: interests.length > 0 ? interests : undefined,
       activityTendency,
       ...(sleepProfile ? { sleepProfile } : {}),
     };
@@ -224,8 +219,8 @@ export function ResidentForm({
       age: typeof saved.age === 'number' ? saved.age : undefined,
       occupation: saved.occupation ?? '',
       firstPerson: saved.firstPerson ?? '',
-      interestsText: (saved.interests && saved.interests.length > 0) ? saved.interests.join(', ') : '',
-
+      // ★ string[] を { value: string }[] に変換
+      interests: saved.interests?.map(val => ({ value: val })) ?? [],
       activityTendency: saved.activityTendency ?? '',
       sleepBedtime: saved.sleepProfile?.bedtime ?? '',
       sleepWakeTime: saved.sleepProfile?.wakeTime ?? '',
@@ -234,6 +229,15 @@ export function ResidentForm({
 
     onSubmitted?.();
   }
+
+  // ★ 追加: 興味・関心 (useFieldArray)
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "interests",
+  });
+
+  // ★ 追加: 新しく追加する興味・関心の入力値を管理
+  const [newInterest, setNewInterest] = useState('');
 
   return (
     <Form {...form}>
@@ -541,24 +545,54 @@ export function ResidentForm({
           />
 
           {/* 興味関心（カンマ区切り） */}
-          <FormField
-            control={form.control}
-            name="interestsText"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel>興味・関心（カンマ区切り）</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="例：音楽, 読書, カフェ"
-                    value={field.value ?? ''}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    onBlur={field.onBlur}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="space-y-2">
+            <FormLabel>興味・関心</FormLabel>
+            {/* 追加用の入力フィールドとボタン */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="例：音楽"
+                value={newInterest}
+                onChange={(e) => setNewInterest(e.target.value)}
+                // エンターキーでも追加できるように
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newInterest) {
+                    e.preventDefault();
+                    append({ value: newInterest }); // ★ オブジェクトに変更
+                    setNewInterest('');
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!newInterest}
+                onClick={() => {
+                  if (newInterest) {
+                    append({ value: newInterest }); // ★ オブジェクトに変更
+                    setNewInterest('');
+                  }
+                }}
+              >
+                追加
+              </Button>
+            </div>
+
+            {/* 追加された項目のリスト */}
+            <div className="flex flex-wrap gap-2 pt-2">
+              {fields.map((field, index) => (
+                <div key={field.id} className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm">
+                  <span>{field.value}</span>
+                  <button type="button" onClick={() => remove(index)} className="ml-1 font-bold text-muted-foreground hover:text-destructive">
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* react-hook-form の FieldArray を使う場合、<FormField> は不要だが、
+                エラー（例：配列が長すぎる等）を表示したい場合は <FormMessage> をここに配置する */}
+            <FormMessage />
+          </div>
         </div>
 
         {/* 活動傾向と睡眠 */}
