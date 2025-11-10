@@ -267,7 +267,6 @@ export function ResidentForm({
                 <FormLabel className="text-base font-semibold">
                   MBTI（診断 または手動で選択）
                 </FormLabel>
-
                 <FormControl>
                   <div className="relative w-full flex items-center">
                     {/* 左側：診断ボタン */}
@@ -280,7 +279,6 @@ export function ResidentForm({
                         診断する
                       </Button>
                     </div>
-
                     {/* 中央：ラベル＋セレクト */}
                     <div className="mx-auto flex items-center gap-2">
                       <label
@@ -313,18 +311,16 @@ export function ResidentForm({
                     </div>
                   </div>
                 </FormControl>
-
                 <FormMessage />
               </FormItem>
             );
           }}
         />
-
         <FormField
           control={form.control}
           name="speechPreset"
           render={({ field }) => {
-            const v = field.value ?? ''; // ← ここがポイント
+            const v = field.value ?? '';
             return (
               <FormItem className="space-y-2">
                 <FormLabel>話し方プリセット</FormLabel>
@@ -364,21 +360,18 @@ export function ResidentForm({
               name={`traits.${key}` as const}
               render={({ field }) => (
                 <FormItem>
+                  {/* グリッドの分割を 2 (ラベル) : 3 (ボックス) に変更 */}
                   <div className="grid grid-cols-5 items-center gap-3">
-                    <FormLabel className="col-span-1 text-sm">{label}</FormLabel>
-                    <FormControl>
-                      <input
-                        type="range"
-                        min={1}
-                        max={5}
-                        step={1}
-                        className="col-span-3 w-full"
-                        value={field.value ?? DEFAULT_TRAITS[key]}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
-                      />
-                    </FormControl>
-                    <div className="col-span-1 text-right text-sm tabular-nums">
-                      {field.value ?? DEFAULT_TRAITS[key]}
+                    <FormLabel className="col-span-2 text-sm">{label}</FormLabel>
+
+                    {/* --- 変更後 (追加) --- */}
+                    <div className="col-span-3">
+                      <FormControl>
+                        <ClickableRatingBox
+                          value={field.value ?? DEFAULT_TRAITS[key]}
+                          onChange={(newValue) => field.onChange(newValue)}
+                        />
+                      </FormControl>
                     </div>
                   </div>
                   <FormMessage />
@@ -505,7 +498,6 @@ export function ResidentForm({
                 }}
               />
             </div>
-
           </div>
         </div>
 
@@ -550,11 +542,10 @@ export function ResidentForm({
               placeholder="例：音楽"
               value={newInterest}
               onChange={(e) => setNewInterest(e.target.value)}
-              // エンターキーでも追加できるように
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && newInterest) {
                   e.preventDefault();
-                  append({ value: newInterest }); // ★ オブジェクトに変更
+                  append({ value: newInterest });
                   setNewInterest('');
                 }
               }}
@@ -565,7 +556,7 @@ export function ResidentForm({
               disabled={!newInterest}
               onClick={() => {
                 if (newInterest) {
-                  append({ value: newInterest }); // ★ オブジェクトに変更
+                  append({ value: newInterest });
                   setNewInterest('');
                 }
               }}
@@ -573,8 +564,6 @@ export function ResidentForm({
               追加
             </Button>
           </div>
-
-          {/* 追加された項目のリスト */}
           <div className="flex flex-wrap gap-2 pt-2">
             {fields.map((field, index) => (
               <div key={field.id} className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm">
@@ -585,9 +574,6 @@ export function ResidentForm({
               </div>
             ))}
           </div>
-
-          {/* react-hook-form の FieldArray を使う場合、<FormField> は不要だが、
-                エラー（例：配列が長すぎる等）を表示したい場合は <FormMessage> をここに配置する */}
           <FormMessage />
         </div>
 
@@ -688,7 +674,6 @@ export function ResidentForm({
             return null;
           })()}
         </div>
-
         <div className="flex justify-end gap-2">
           <Button type="submit" disabled={upsert.isPending}>
             {upsert.isPending ? '保存中…' : '保存'}
@@ -696,15 +681,8 @@ export function ResidentForm({
         </div>
       </form>
 
-      {/* --- ★ 修正箇所 --- */}
-      {/* * 1. 763行目あたりにあった、外側の {showDiagnosis && (<> ... </Backdrop>)} を削除
-        * 2. 770行目あたりにあった、内側の {showDiagnosis && (<> ... </Backdrop>)} を削除
-        * 3. 診断パネル (<aside>...</aside>) を <></> で囲み、
-        * オリジナルのファイル と同じく
-        * <form> タグの外側、<Form> タグの内側に配置
-        * 4. 849-851行目あたりに紛れ込んでいた </Form> ); } を削除
-      */}
-
+      {/* --- 診断パネル (MBTI診断) --- */}
+      {/* (前回修正した ClickableRatingBox が使われている状態) */}
       {showDiagnosis && (
         <>
           {/* Backdrop（背景クリックで閉じる） */}
@@ -732,7 +710,6 @@ export function ResidentForm({
                 閉じる（Esc）
               </button>
             </div>
-
             <div className="flex h-[calc(100svh-48px-64px)] flex-col gap-4 overflow-y-auto px-4 py-4">
               {/* 質問リスト（スライダー） */}
               {QUESTIONS.map((q) => (
@@ -774,8 +751,8 @@ export function ResidentForm({
               </Button>
             </div>
           </aside>
-        </> // <-- ここが `showDiagnosis` の閉じタグ
+        </>
       )}
-    </Form> // <-- ここが `Form` の閉じタグ
+    </Form>
   );
 }
