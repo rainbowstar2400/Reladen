@@ -392,7 +392,7 @@ export function ResidentForm({
             <h3 className="text-sm font-semibold">背景情報</h3>
 
             {/* 性別・年齢・職業を横並び（レスポンシブ） */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-6 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-x-6 gap-y-4 md:items-start">
 
               {/* 性別（md: 4カラム） */}
               <div className="md:col-span-4 min-w-0">
@@ -403,7 +403,8 @@ export function ResidentForm({
                     const v = field.value ?? '';
                     return (
                       <FormItem className="space-y-2">
-                        <FormLabel>性別</FormLabel>
+                        {/* ラベルは常に上段に出す */}
+                        <FormLabel className="block">性別</FormLabel>
                         <FormControl>
                           <select
                             className="w-[150px] rounded border px-3 py-2"
@@ -434,7 +435,7 @@ export function ResidentForm({
                   name="age"
                   render={({ field }) => (
                     <FormItem className="space-y-2">
-                      <FormLabel>年齢</FormLabel>
+                      <FormLabel className="block">年齢</FormLabel>
                       <FormControl>
                         <>
                           <Input
@@ -446,7 +447,7 @@ export function ResidentForm({
                             }
                             onBlur={field.onBlur}
                             inputMode="numeric"
-                            type="text"                 // datalist互換優先
+                            type="text"
                             pattern="^\d{1,3}$"
                             className="w-[100px]"
                             aria-describedby="age-help"
@@ -476,10 +477,10 @@ export function ResidentForm({
                     const v = field.value ?? '';
                     return (
                       <FormItem className="space-y-2">
-                        <FormLabel>職業</FormLabel>
+                        <FormLabel className="block">職業</FormLabel>
                         <FormControl>
                           <select
-                            className="w-[150px] rounded border px-3 py-2"
+                            className="w-full rounded border px-3 py-2"
                             name={field.name}
                             ref={field.ref}
                             value={v}
