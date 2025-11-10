@@ -13,77 +13,92 @@ export const feelingLabelEnum = pgEnum('feeling_label', [
   'awkward',
 ]);
 
-// ★ 1. presets テーブルを先に定義 (参照されるため)
-/**
- * @description プリセットのカテゴリ
- */
+// ... (presetCategoryEnum, presets テーブルは変更なし) ...
 export const presetCategoryEnum = pgEnum('preset_category', [
   'speech',
   'occupation',
   'first_person',
 ]);
 
-/**
- * @description プリセット（話し方、職業、一人称）
- * `is_managed: true` = 管理ページで管理される
- * `is_managed: false` = フォームで手動入力された（管理ページには出ない）
- */
 export const presets = pgTable('presets', {
-  id: uuid('id').primaryKey().defaultRandom(), // ★ 唯一のキー
+  id: uuid('id').primaryKey().defaultRandom(),
   category: presetCategoryEnum('category').notNull(), 
-  
-  // ★ 削除: 'value' カラム
-  
-  label: text('label').notNull(), // UIに表示されるラベル
-  description: text('description'), // 話し方用のAI指示 (編集可能)
-  
-  // ★ 追加: 管理フラグ
+  label: text('label').notNull(),
+  description: text('description'),
   isManaged: boolean('is_managed').notNull().default(false),
-
   ownerId: uuid('owner_id'), 
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
 }, (t) => ({
   categoryIdx: index('presets_category_idx').on(t.category),
-  // ★ 変更: ラベルとカテゴリの組み合わせをユニークにする（例: 'speech' で 'ていねい' は1つだけ）
   uniqueLabel: { columns: [t.category, t.label, t.ownerId], isUnique: true },
 }));
 
 
-// ★ 2. residents テーブル
+// ★ 2. residents テーブル (フィールドを移設)
 export const residents = pgTable('residents', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   mbti: text('mbti'),
   traits: jsonb('traits'),
-  
-  // ★ 変更: presets.id を参照する uuid 型に変更
   speechPreset: uuid('speech_preset').references(() => presets.id, { onDelete: 'set null' }),
+  
+  // === ★ ここから移設・追加 ★ ===
+  
+  // (relations から移設)
+  gender: text('gender'),
+  age: integer('age'),
+  
+  // (relations から移設 - presets を参照)
+  occupation: uuid('occupation').references(() => presets.id, { onDelete: 'set null' }),
+  firstPerson: uuid('first_person').references(() => presets.id, { onDelete: 'set null' }),
+
+  // (relations から移設)
+  interests: jsonb('interests'),
+  
+  /**
+   * ★ 変更: 新しい仕様の睡眠プロファイル (jsonb)
+   * *型定義 (参考):
+   * type SleepProfile = {
+   * // 1. ユーザーが設定する基準値
+   * baseBedtime: string;   // 'HH:mm' (例: '01:00')
+   * baseWakeTime: string;  // 'HH:mm' (例: '07:00')
+   * prepMinutes: number;   // (例: 30)
+   * * // 2. 毎日抽選・更新されるスケジュール
+   * todaySchedule?: {
+   * date: string;       // 'YYYY-MM-DD'
+   * bedtime: string;    // 'HH:mm' (抽選された今日の就寝時刻)
+   * wakeTime: string;   // 'HH:mm' (抽選された今日の起床時刻)
+   * };
+   * };
+   */
+  sleepProfile: jsonb('sleep_profile'),
+
+  // === ★ 移設・追加ここまで ★ ===
   
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
   ownerId: uuid('owner_id'),
 });
 
-// ★ 3. relations テーブル
+// ★ 3. relations テーブル (フィールドを削除)
 export const relations = pgTable(
   'relations',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    aId: uuid('a_id').notNull(),
-    bId: uuid('b_id').notNull(),
-    type: relationTypeEnum('type').notNull().default('none'),
+    aId: uuid('a_id').notNull(), // 参照元 (将来的に residents.id を参照)
+    bId: uuid('b_id').notNull(), // 参照先 (将来的に residents.id を参照)
+    type: relationTypeEnum('type').notNull().default('none'), // 関係性
 
-    gender: text('gender'),
-    age: integer('age'),
-    
-    // ★ 変更: presets.id を参照する uuid 型に変更
-    occupation: uuid('occupation').references(() => presets.id, { onDelete: 'set null' }),
-    firstPerson: uuid('first_person').references(() => presets.id, { onDelete: 'set null' }),
-    
-    activityTendency: text('activity_tendency'),
-    interests: jsonb('interests'),
-    sleepProfile: jsonb('sleep_profile'),
+    // === ★ ここから削除 ★ ===
+    // gender: text('gender'),
+    // age: integer('age'),
+    // occupation: uuid('occupation').references(() => presets.id, { onDelete: 'set null' }),
+    // firstPerson: uuid('first_person').references(() => presets.id, { onDelete: 'set null' }),
+    // activityTendency: text('activity_tendency'),
+    // interests: jsonb('interests'),
+    // sleepProfile: jsonb('sleep_profile'),
+    // === ★ 削除ここまで ★ ===
 
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
@@ -95,6 +110,7 @@ export const relations = pgTable(
 );
 
 // ... (feelings, events, residentsRelations, etc. は変更なし) ...
+// (relationsResidents, feelingsRelations も Drizzle が型推論するため変更不要)
 export const feelings = pgTable(
   'feelings',
   {
