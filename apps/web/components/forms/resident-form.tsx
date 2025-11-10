@@ -17,6 +17,9 @@ import { defaultSleepByTendency } from '@/lib/schedule';
 import { ClickableRatingBox } from '@/components/ui/clickable-rating-box';
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea';
+// ★ 2. Tabs と Select コンポーネントをインポート
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 // ★ TODO: 将来的には usePresets フックなどから動的に取得する
 // import { usePresets } from '@/lib/data/presets';
 
@@ -37,23 +40,35 @@ const DEFAULT_TRAITS = {
   expressiveness: 3, // 表現力
 } as const;
 
-// DBから取得した「管理プリセット (isManaged: true)」のモックデータ
-type ManagedPreset = { id: string; label: string; description?: string | null };
+// ★ 変更:
+// モックデータに description を含める
+type ManagedPreset = { id: string; label: string; description?: string | null; isManaged: boolean };
 
-const MOCK_MANAGED_PRESETS: Record<'speech' | 'occupation' | 'first_person', ManagedPreset[]> = {
+// ★ 変更: モックデータを isManaged を含む形に変更
+const MOCK_PRESETS_DB: Record<'speech' | 'occupation' | 'first_person', ManagedPreset[]> = {
   speech: [
-    { id: 'uuid-s1', label: 'ていねい', description: '常に敬語を使い、相手を尊重する話し方。' },
-    { id: 'uuid-s2', label: 'くだけた', description: '友人や親しい人との間で使われる、フレンドリーな話し方。' },
+    { id: 'uuid-s1', label: 'ていねい', description: '常に敬語を使い、相手を尊重する話し方。', isManaged: true },
+    { id: 'uuid-s2', label: 'くだけた', description: '友人や親しい人との間で使われる、フレンドリーな話し方。', isManaged: true },
+    { id: 'uuid-s3-temp', label: '武士（ござる）', description: '語尾に「ござる」を付ける。', isManaged: false }, // 非管理
   ],
   occupation: [
-    { id: 'uuid-o1', label: '学生' },
-    { id: 'uuid-o2', label: '会社員' },
-    { id: 'uuid-o3', label: 'エンジニア' },
+    { id: 'uuid-o1', label: '学生', isManaged: true },
+    { id: 'uuid-o2', label: '会社員', isManaged: true },
+    { id: 'uuid-o3', label: 'エンジニア', isManaged: true },
+    { id: 'uuid-o4-temp', label: '浪人生', isManaged: false }, // 非管理
   ],
   first_person: [
-    { id: 'uuid-f1', label: '私' },
-    { id: 'uuid-f2', label: '僕' },
+    { id: 'uuid-f1', label: '私', isManaged: true },
+    { id: 'uuid-f2', label: '僕', isManaged: true },
+    { id: 'uuid-f3-temp', label: '拙者', isManaged: false }, // 非管理
   ],
+};
+
+// ★ 変更: フォームで使う「管理プリセット (isManaged: true)」のみを抽出
+const MOCK_MANAGED_PRESETS = {
+  speech: MOCK_PRESETS_DB.speech.filter(p => p.isManaged),
+  occupation: MOCK_PRESETS_DB.occupation.filter(p => p.isManaged),
+  first_person: MOCK_PRESETS_DB.first_person.filter(p => p.isManaged),
 };
 
 // フォームのZodスキーマ。DBスキーマ (Resident) とは異なる。
@@ -114,42 +129,34 @@ const findOrCreatePreset = async (
   label: string | undefined | null,
   category: 'speech' | 'occupation' | 'first_person',
   isManaged: boolean,
-  // ★ description を引数に追加
   description?: string | undefined | null
-): Promise<string | undefined> => { // UUID を返す
+): Promise<string | undefined> => {
   if (!label || label.trim().length === 0) {
     return undefined;
   }
   const trimmedLabel = label.trim();
-
-  // (モック) 非管理プリセットの追加
-  const allPresetsMock: ManagedPreset[] = [ // ★ 型を明示
-    ...MOCK_MANAGED_PRESETS[category],
-    { id: 'uuid-o4', label: '浪人生' },
-    { id: 'uuid-f3', label: '拙者' },
-  ];
+  const allPresetsMock = MOCK_PRESETS_DB[category];
   const existing = allPresetsMock.find(p => p.label === trimmedLabel);
 
   if (existing) {
-    // 2. 存在する場合
-    // (ここでは isManaged や description の更新ロジックは省略し、IDを返すだけ)
-    if (isManaged) {
-      // TODO: API 呼び出し (updatePreset(existing.id, { isManaged: true, description }))
+    if (isManaged && !existing.isManaged) {
       console.log(`Preset ${trimmedLabel} (${existing.id}) を 'managed' に更新 (モック)`);
-    } else if (category === 'speech' && description) {
-      // TODO: API 呼び出し (updatePreset(existing.id, { description }))
+      // TODO: API 呼び出し (updatePreset(existing.id, { isManaged: true, description }))
+    } else if (category === 'speech' && description !== existing.description) {
       console.log(`Preset ${trimmedLabel} (${existing.id}) の 'description' を更新 (モック)`);
+      // TODO: API 呼び出し (updatePreset(existing.id, { description }))
     }
-    return existing.id; // 既存のUUIDを返す
+    return existing.id;
   }
 
-  // 3. 存在しない場合 (新規作成)
   const newId = crypto.randomUUID();
-  // TODO: API 呼び出し (createPreset({ label: trimmedLabel, category, isManaged, description }))
   console.log(`Preset ${trimmedLabel} を新規作成 (isManaged: ${isManaged}) (Desc: ${description}) (ID: ${newId}) (モック)`);
-  // 新しいUUIDを返す
+  // TODO: API 呼び出し (createPreset({ label: trimmedLabel, category, isManaged, description }))
   return newId;
 };
+
+// ★ 3. フォームUIのモード（タブ）を管理する型
+type PresetMode = 'select' | 'manual';
 
 export function ResidentForm({
   defaultValues,
@@ -160,27 +167,29 @@ export function ResidentForm({
 }) {
   const router = useRouter();
 
-  // ★ 変更: モックデータを読み込む
   const speechPresets = MOCK_MANAGED_PRESETS.speech;
   const occupationPresets = MOCK_MANAGED_PRESETS.occupation;
   const firstPersonPresets = MOCK_MANAGED_PRESETS.first_person;
 
+  // ★ 4. (モック) 編集時にDBから読み込んだプリセットが「管理」か「手動」かを判別する
+  const findPresetFromDb = (id: string | undefined, category: 'speech' | 'occupation' | 'first_person'): ManagedPreset | undefined => {
+    if (!id) return undefined;
+    return MOCK_PRESETS_DB[category].find(p => p.id === id);
+  };
+
+  const defaultSpeechPreset = findPresetFromDb(defaultValues?.speechPreset, 'speech');
+  const defaultOccPreset = findPresetFromDb(defaultValues?.occupation, 'occupation');
+  const defaultFpPreset = findPresetFromDb(defaultValues?.firstPerson, 'first_person');
+
+  // ★ 5. タブの初期状態を、読み込んだデータに応じて設定
+  const [speechMode, setSpeechMode] = useState<PresetMode>(defaultSpeechPreset?.isManaged ? 'select' : 'manual');
+  const [occupationMode, setOccupationMode] = useState<PresetMode>(defaultOccPreset?.isManaged ? 'select' : 'manual');
+  const [firstPersonMode, setFirstPersonMode] = useState<PresetMode>(defaultFpPreset?.isManaged ? 'select' : 'manual');
+
+
   const form = useForm<ResidentFormValues>({
-    // ... (defaultValues の設定は変更なし) ...
     resolver: zodResolver(residentFormSchema),
     defaultValues: useMemo(() => {
-      // ★ 4. defaultValues (DB) から フォーム (FormValues) への変換ロジック
-
-      // (モック) DBのUUIDから対応するプリセットを引く
-      // 実際には defaultValues にプリセット情報もJOINするか、別途フェッチする
-      const findPreset = (id: string | undefined, category: 'speech' | 'occupation' | 'first_person'): ManagedPreset | undefined => {
-        const presets: ManagedPreset[] = MOCK_MANAGED_PRESETS[category]; // 型を保証
-        return presets.find(p => p.id === id);
-      };
-      const defaultSpeechPreset = findPreset(defaultValues?.speechPreset, 'speech');
-      const defaultOccPreset = findPreset(defaultValues?.occupation, 'occupation');
-      const defaultFpPreset = findPreset(defaultValues?.firstPerson, 'first_person');
-
       const traitsObj =
         defaultValues?.traits && typeof defaultValues.traits === 'object'
           ? (defaultValues.traits as any)
@@ -192,18 +201,18 @@ export function ResidentForm({
         mbti: defaultValues?.mbti ?? '',
         traits: traitsObj,
         trustToPlayer: defaultValues?.trustToPlayer ?? 50,
-        // ★ フォームにはラベルと特徴を設定
+
         speechPreset: defaultSpeechPreset?.label ?? '',
-        speechPresetDescription: defaultSpeechPreset?.description ?? '', // ★ 特徴
+        speechPresetDescription: defaultSpeechPreset?.description ?? '',
         occupation: defaultOccPreset?.label ?? '',
         firstPerson: defaultFpPreset?.label ?? '',
-        // ★ 管理フラグはデフォルトOFF
+
         isSpeechPresetManaged: false,
         isOccupationManaged: false,
         isFirstPersonManaged: false,
         interests: defaultValues?.interests?.map(val => ({ value: val })) ?? [],
       };
-    }, [defaultValues]),
+    }, [defaultValues]), // 依存配列に defaultValues を追加（重要）
   });
 
   // ... (診断パネルのロジックは変更なし) ...
@@ -313,6 +322,11 @@ export function ResidentForm({
       sleepBedtime: saved.sleepProfile?.bedtime ?? '',
       sleepWakeTime: saved.sleepProfile?.wakeTime ?? '',
     });
+
+    // ★ 8. タブの状態もリセット
+    setSpeechMode(savedSpeechPreset?.isManaged ? 'select' : 'manual');
+    setOccupationMode(savedOccPreset?.isManaged ? 'select' : 'manual');
+    setFirstPersonMode(savedFpPreset?.isManaged ? 'select' : 'manual');
 
     onSubmitted?.();
   }
@@ -444,71 +458,139 @@ export function ResidentForm({
           ))}
         </div>
 
-        {/* ★ 変更: 話し方プリセット */}
+        {/* ★ 9. 話し方プリセット (Tabs UI) */}
         <div className="space-y-3 rounded-md border p-3">
-          <FormField
-            control={form.control}
-            name="speechPreset"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel>話し方（ラベル）</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="例：ていねい（手動入力も可）"
-                    list="speech-preset-options"
-                    {...field}
-                    value={field.value ?? ''} // ここには「ラベル」が入る
-                  />
-                </FormControl>
-                <datalist id="speech-preset-options">
-                  {speechPresets.map((preset) => (
-                    <option key={preset.id} value={preset.label} />
-                  ))}
-                </datalist>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          {/* ★ 10. 「特徴」の Textarea を追加 */}
-          {/* ラベルが入力されている時だけ表示 */}
-          {watchSpeechPresetLabel && (
-            <FormField
-              control={form.control}
-              name="speechPresetDescription"
-              render={({ field }) => (
-                <FormItem className="space-y-2">
-                  <FormLabel>話し方の特徴（AIへの指示）</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="例：常に敬語を使い、相手を尊重する話し方。"
-                      {...field}
-                      value={field.value ?? ''}
-                      rows={2}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
+          <FormLabel>話し方</FormLabel>
+          <Tabs
+            value={speechMode}
+            onValueChange={(v) => {
+              const mode = v as PresetMode;
+              setSpeechMode(mode);
+              if (mode === 'manual') {
+                // 手動タブに切り替えたら、選択していたプリセットをクリア
+                form.setValue('speechPreset', '');
+                form.setValue('speechPresetDescription', '');
+              }
+            }}
+          >
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="select">プリセットから選択</TabsTrigger>
+              <TabsTrigger value="manual">手動入力</TabsTrigger>
+            </TabsList>
 
-          <FormField
-            control={form.control}
-            name="isSpeechPresetManaged"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-end space-x-2">
-                <FormLabel className="text-sm text-muted-foreground">
-                  この話し方をプリセット管理に追加
-                </FormLabel>
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
+            {/* A: プリセット選択タブ */}
+            <TabsContent value="select" className="space-y-3">
+              <FormField
+                control={form.control}
+                name="speechPreset"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>プリセット</FormLabel>
+                    <Select
+                      onValueChange={(label) => {
+                        // ★ Select で選んだら、ラベルと特徴を両方セット
+                        const preset = speechPresets.find(p => p.label === label);
+                        field.onChange(label);
+                        form.setValue('speechPresetDescription', preset?.description ?? '');
+                      }}
+                      value={field.value ?? ''} // 'ていねい' などのラベル
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="管理プリセットを選択..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {speechPresets.map((preset) => (
+                          <SelectItem key={preset.id} value={preset.label}>
+                            {preset.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="speechPresetDescription"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>特徴（AIへの指示）</FormLabel>
+                    <FormControl>
+                      {/* ★ プリセット選択時は読み取り専用 */}
+                      <Textarea
+                        placeholder="プリセットを選択すると特徴が表示されます"
+                        {...field}
+                        value={field.value ?? ''}
+                        rows={2}
+                        disabled
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </TabsContent>
+
+            {/* B: 手動入力タブ */}
+            <TabsContent value="manual" className="space-y-3">
+              <FormField
+                control={form.control}
+                name="speechPreset"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>ラベル</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="例：武士（ござる）"
+                        {...field}
+                        value={field.value ?? ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="speechPresetDescription"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>特徴（AIへの指示）</FormLabel>
+                    <FormControl>
+                      {/* ★ 手動入力時は編集可能 */}
+                      <Textarea
+                        placeholder="例：語尾に「ござる」を付ける。"
+                        {...field}
+                        value={field.value ?? ''}
+                        rows={2}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="isSpeechPresetManaged"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-end space-x-2">
+                    <FormLabel className="text-sm text-muted-foreground">
+                      プリセット管理に追加
+                    </FormLabel>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* 基本情報 */}
@@ -592,39 +674,150 @@ export function ResidentForm({
               />
             </div>
 
-            {/* ★ 変更: 職業 */}
+            {/* ★ 10. 職業 (Tabs UI) */}
             <div className="md:col-span-5 min-w-0 space-y-2">
+              <FormLabel>職業</FormLabel>
+              <Tabs
+                value={occupationMode}
+                onValueChange={(v) => {
+                  const mode = v as PresetMode;
+                  setOccupationMode(mode);
+                  if (mode === 'manual') {
+                    form.setValue('occupation', '');
+                  }
+                }}
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="select">選択</TabsTrigger>
+                  <TabsTrigger value="manual">手動</TabsTrigger>
+                </TabsList>
+                <TabsContent value="select" className="pt-2">
+                  <FormField
+                    control={form.control}
+                    name="occupation"
+                    render={({ field }) => (
+                      <FormItem>
+                        <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="管理プリセットを選択..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {occupationPresets.map((preset) => (
+                              <SelectItem key={preset.id} value={preset.label}>
+                                {preset.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                </TabsContent>
+                <TabsContent value="manual" className="space-y-3 pt-2">
+                  <FormField
+                    control={form.control}
+                    name="occupation"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input
+                            placeholder="例：浪人生"
+                            {...field}
+                            value={field.value ?? ''}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="isOccupationManaged"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-end space-x-2">
+                        <FormLabel className="text-sm text-muted-foreground">
+                          管理に追加
+                        </FormLabel>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </div>
+
+        {/* ★ 11. 一人称 (Tabs UI) */}
+        <div className="space-y-3 rounded-md border p-3">
+          <FormLabel>一人称</FormLabel>
+          <Tabs
+            value={firstPersonMode}
+            onValueChange={(v) => {
+              const mode = v as PresetMode;
+              setFirstPersonMode(mode);
+              if (mode === 'manual') {
+                form.setValue('firstPerson', '');
+              }
+            }}
+          >
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="select">選択</TabsTrigger>
+              <TabsTrigger value="manual">手動</TabsTrigger>
+            </TabsList>
+            <TabsContent value="select" className="pt-2">
               <FormField
                 control={form.control}
-                name="occupation"
+                name="firstPerson"
                 render={({ field }) => (
-                  <FormItem className="space-y-2">
-                    <FormLabel className="block">職業</FormLabel>
+                  <FormItem>
+                    <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="管理プリセットを選択..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {firstPersonPresets.map((preset) => (
+                          <SelectItem key={preset.id} value={preset.label}>
+                            {preset.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+            </TabsContent>
+            <TabsContent value="manual" className="space-y-3 pt-2">
+              <FormField
+                control={form.control}
+                name="firstPerson"
+                render={({ field }) => (
+                  <FormItem>
                     <FormControl>
                       <Input
-                        placeholder="例：学生（手動入力も可）"
-                        list="occupation-options"
-                        className="w-full"
+                        placeholder="例：拙者"
                         {...field}
-                        value={field.value ?? ''} // ラベル
+                        value={field.value ?? ''}
                       />
                     </FormControl>
-                    <datalist id="occupation-options">
-                      {occupationPresets.map((preset) => (
-                        <option key={preset.id} value={preset.label} />
-                      ))}
-                    </datalist>
-                    <FormMessage />
                   </FormItem>
                 )}
               />
               <FormField
                 control={form.control}
-                name="isOccupationManaged"
+                name="isFirstPersonManaged"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-end space-x-2 pt-1">
+                  <FormItem className="flex flex-row items-center justify-end space-x-2">
                     <FormLabel className="text-sm text-muted-foreground">
-                      プリセット管理に追加
+                      管理に追加
                     </FormLabel>
                     <FormControl>
                       <Switch
@@ -635,53 +828,8 @@ export function ResidentForm({
                   </FormItem>
                 )}
               />
-            </div>
-          </div>
-        </div>
-
-        {/* ★ 変更: 一人称 */}
-        <div className="space-y-2 rounded-md border p-3">
-          <FormField
-            control={form.control}
-            name="firstPerson"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel>一人称</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="例：私（手動入力も可）"
-                    list="first-person-options"
-                    className="w-full"
-                    {...field}
-                    value={field.value ?? ''} // ラベル
-                  />
-                </FormControl>
-                <datalist id="first-person-options">
-                  {firstPersonPresets.map((preset) => (
-                    <option key={preset.id} value={preset.label} />
-                  ))}
-                </datalist>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="isFirstPersonManaged"
-            render={({ field }) => (
-              <FormItem className="flex flex-row items-center justify-end space-x-2">
-                <FormLabel className="text-sm text-muted-foreground">
-                  プリセット管理に追加
-                </FormLabel>
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* ... (興味関心、活動傾向、保存ボタン、診断パネル は変更なし) ... */}
