@@ -406,7 +406,7 @@ export function ResidentForm({
                         <FormLabel>性別</FormLabel>
                         <FormControl>
                           <select
-                            className="w-[200px] rounded border px-3 py-2"
+                            className="w-[150px] rounded border px-3 py-2"
                             name={field.name}
                             ref={field.ref}
                             value={v}
@@ -448,7 +448,7 @@ export function ResidentForm({
                             inputMode="numeric"
                             type="text"                 // datalist互換優先
                             pattern="^\d{1,3}$"
-                            className="w-[140px]"
+                            className="w-[100px]"
                             aria-describedby="age-help"
                           />
                           <datalist id="age-options">
@@ -479,7 +479,7 @@ export function ResidentForm({
                         <FormLabel>職業</FormLabel>
                         <FormControl>
                           <select
-                            className="w-[200px] rounded border px-3 py-2"
+                            className="w-[150px] rounded border px-3 py-2"
                             name={field.name}
                             ref={field.ref}
                             value={v}
