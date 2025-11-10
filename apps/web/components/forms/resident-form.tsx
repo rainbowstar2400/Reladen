@@ -443,7 +443,7 @@ export function ResidentForm({
                       // type="number" にしたい場合は Safari で候補が出ない点にご注意ください
                       type="text"
                       pattern="^\d{1,3}$"
-                      className="w-[50px]"
+                      className="w-[160px]"
                       aria-describedby="age-help"
                     />
                     <datalist id="age-options">
