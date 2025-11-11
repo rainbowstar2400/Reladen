@@ -74,7 +74,6 @@ const HOURS_OPTIONS = Array.from({ length: 24 }, (_, i) => {
   const hour = String(i);
   return {
     value: hour, // "0", "1", ... "23"
-    label: `${i} 時頃`,
   };
 });
 
@@ -918,7 +917,7 @@ export function ResidentForm({
               name="sleepBedtime"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>基準 就寝時刻</FormLabel>
+                  <FormLabel>就寝</FormLabel>
                   <FormControl>
                     {/* ★ 変更: Input + Suffix */}
                     <div className="flex items-center gap-2">
@@ -934,7 +933,7 @@ export function ResidentForm({
                         inputMode="numeric"
                         type="text"
                         pattern="^\d{1,2}$" // 0-23
-                        className="w-[80px]"
+                        className="w-[120px]"
                       />
                       <span className="text-sm text-muted-foreground">時頃</span>
                     </div>
@@ -948,7 +947,7 @@ export function ResidentForm({
               name="sleepWakeTime"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>基準 起床時刻</FormLabel>
+                  <FormLabel>起床</FormLabel>
                   <FormControl>
                     {/* ★ 変更: Input + Suffix */}
                     <div className="flex items-center gap-2">
@@ -964,7 +963,7 @@ export function ResidentForm({
                         inputMode="numeric"
                         type="text"
                         pattern="^\d{1,2}$" // 0-23
-                        className="w-[80px]"
+                        className="w-[120px]"
                       />
                       <span className="text-sm text-muted-foreground">時頃</span>
                     </div>
