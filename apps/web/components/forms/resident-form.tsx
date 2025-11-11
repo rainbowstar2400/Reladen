@@ -74,6 +74,7 @@ const HOURS_OPTIONS = Array.from({ length: 24 }, (_, i) => {
   const hour = String(i);
   return {
     value: hour, // "0", "1", ... "23"
+    label: `${i} 時頃`,
   };
 });
 
@@ -387,247 +388,34 @@ export function ResidentForm({
       {/* ★ 追加: 0時〜23時の Datalist (Age を参考に) */}
       <datalist id="hour-options">
         {Array.from({ length: 24 }, (_, i) => i).map((n) => (
-          <option key={n} value={n} label={`${n} 時`} />
+          <option key={n} value={n} />
         ))}
       </datalist>
 
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-        {/* ... (name, mbti フィールドは変更なし) ... */}
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem className="space-y-2">
-              <FormLabel>名前</FormLabel>
-              <FormControl>
-                <Input placeholder="例：アカリ" {...field} />
-              </FormControl>
-              <FormMessage>{form.formState.errors.name?.message as string}</FormMessage>
-            </FormItem>
-          )}
-        />
-        {/* --- MBTI（診断 または手動で選択） --- */}
-        <FormField
-          control={form.control}
-          name="mbti"
-          render={({ field }) => {
-            const v = field.value ?? '';
-            return (
-              <FormItem className="space-y-2">
-                <FormLabel className="text-base font-semibold">
-                  MBTI（診断 または手動で選択）
-                </FormLabel>
-                <FormControl>
-                  <div className="relative w-full flex items-center">
-                    {/* 左側：診断ボタン */}
-                    <div className="absolute left-8">
-                      <Button
-                        type="button"
-                        onClick={() => setShowDiagnosis(true)}
-                        className="bg-black text-white hover:bg-black/90 px-5 py-2"
-                      >
-                        診断する
-                      </Button>
-                    </div>
-                    {/* 中央：ラベル＋セレクト */}
-                    <div className="mx-auto flex items-center gap-2">
-                      <label
-                        htmlFor="mbti-select"
-                        className="text-sm text-gray-700 whitespace-nowrap"
-                      >
-                        手動で選択：
-                      </label>
-                      <select
-                        id="mbti-select"
-                        className="rounded border px-3 py-2 min-w-[140px]"
-                        name={field.name}
-                        ref={field.ref}
-                        value={v}
-                        onChange={(e) => field.onChange(e.target.value)}
-                        onBlur={field.onBlur}
-                      >
-                        <option value="">（未設定）</option>
-                        {[
-                          'INTJ', 'INTP', 'ENTJ', 'ENTP',
-                          'INFJ', 'INFP', 'ENFJ', 'ENFP',
-                          'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
-                          'ISTP', 'ISFP', 'ESTP', 'ESFP',
-                        ].map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            );
-          }}
-        />
-
-        {/* ... (性格 traits セクションは変更なし) ... */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold">性格（1〜5）</h3>
-          {([
-            { key: 'sociability', label: '社交性' },
-            { key: 'empathy', label: '気配り' },
-            { key: 'stubbornness', label: '頑固さ' },
-            { key: 'activity', label: '行動力' },
-            { key: 'expressiveness', label: '表現力' },
-          ] as const).map(({ key, label }) => (
-            <FormField
-              key={key}
-              control={form.control}
-              name={`traits.${key}` as const}
-              render={({ field }) => (
-                <FormItem>
-                  {/* グリッドの分割を 2 (ラベル) : 3 (ボックス) に変更 */}
-                  <div className="grid grid-cols-5 items-center gap-3">
-                    <FormLabel className="col-span-2 text-sm">{label}</FormLabel>
-
-                    {/* --- 変更後 (追加) --- */}
-                    <div className="col-span-3">
-                      <FormControl>
-                        <ClickableRatingBox
-                          value={field.value ?? DEFAULT_TRAITS[key]}
-                          onChange={(newValue) => field.onChange(newValue)}
-                        />
-                      </FormControl>
-                    </div>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          ))}
-        </div>
-
-        {/* ★ 6. 話し方プリセット (Select + Manual UI) */}
-        <div className="md:col-span-5 min-w-0 space-y-3">
-          <FormField
-            control={form.control}
-            name="speechPreset"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>口調</FormLabel>
-                <Select
-                  onValueChange={(value) => {
-                    if (value === MANUAL_INPUT_KEY) {
-                      field.onChange(''); // 手動入力モードへ
-                      form.setValue('speechPresetDescription', ''); // 特徴もクリア
-                    } else {
-                      // プリセットを選択
-                      field.onChange(value); // ラベルをセット
-                      // 対応する特徴をセット
-                      const preset = speechPresets.find(p => p.label === value);
-                      form.setValue('speechPresetDescription', preset?.description ?? '');
-                    }
-                  }}
-                  // ★ 8. value のロジックを修正
-                  // (手動モードならMANUAL_INPUT_KEY、そうでなければ現在の値(空も含む))
-                  value={isSpeechManual ? MANUAL_INPUT_KEY : field.value ?? ''}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="（未選択）" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {speechPresets.map((preset) => (
-                      <SelectItem key={preset.id} value={preset.label}>
-                        {preset.label}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value={MANUAL_INPUT_KEY} className="text-blue-600">
-                      （手動で入力）
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormItem>
-            )}
-          />
-
-          {/* ★ 手動入力が選択された時だけ「入力欄」を表示 */}
-          {isSpeechManual && (
-            <div className="space-y-3 pl-2 border-l-2 border-dashed">
-              <FormField
-                control={form.control}
-                name="speechPreset"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Input
-                        placeholder="例：子供っぽい"
-                        {...field}
-                        value={field.value ?? ''}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="speechPresetDescription"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-muted-foreground">特徴</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="例：幼い印象の話し方：「〜だね！」「やったぁ」など"
-                        {...field}
-                        value={field.value ?? ''}
-                        rows={2}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="isSpeechPresetManaged"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-end space-x-2">
-                    <FormLabel className="text-sm text-muted-foreground">
-                      プリセットに追加
-                    </FormLabel>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            </div>
-          )}
-
-          {/* ★ プリセット選択中（かつ手動ではない）場合、「特徴の表示」を表示 */}
-          {!isSpeechManual && (
-            <FormItem>
-              <FormLabel className="text-sm text-muted-foreground">特徴</FormLabel>
-              <FormControl>
-                <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
-                  {/* ★ 9. watchする値が空（未選択）の場合の表示を修正 */}
-                  {form.watch('speechPresetDescription') || '（プリセットを選択すると特徴が表示されます）'}
-                </p>
-              </FormControl>
-            </FormItem>
-          )}
-        </div>
 
         {/* 基本情報 */}
         <div className="space-y-4 pt-2 border-t">
           <h3 className="text-sm font-semibold">基本情報</h3>
 
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem className="space-y-2">
+                <FormLabel>名前</FormLabel>
+                <FormControl>
+                  <Input placeholder="例：アカリ" {...field} />
+                </FormControl>
+                <FormMessage>{form.formState.errors.name?.message as string}</FormMessage>
+              </FormItem>
+            )}
+          />
+
           {/* 性別・年齢・職業を横並び（レスポンシブ） */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-x-6 gap-y-4 md:items-start">
 
-            {/* 性別（md: 4カラム） (変更なし) */}
+            {/* 性別（md: 4カラム） */}
             <div className="md:col-span-4 min-w-0">
               <FormField
                 control={form.control}
@@ -661,7 +449,7 @@ export function ResidentForm({
               />
             </div>
 
-            {/* 年齢（md: 3カラム） (変更なし) */}
+            {/* 年齢（md: 3カラム） */}
             <div className="md:col-span-3 min-w-0">
               <FormField
                 control={form.control}
@@ -691,7 +479,7 @@ export function ResidentForm({
                           ))}
                         </datalist>
                         <p id="age-help" className="text-xs text-muted-foreground mt-1">
-                          直接入力（半角数字）も、リスト（1〜120）からの選択もできます。
+                          直接入力（半角数字）も、<br />リスト（1〜120）からの選択もできます。
                         </p>
                       </>
                     </FormControl>
@@ -701,7 +489,7 @@ export function ResidentForm({
               />
             </div>
 
-            {/* ★ 10. 職業 (Select + Manual UI) */}
+            {/* 職業 (Select + Manual UI) */}
             <div className="md:col-span-5 min-w-0 space-y-3">
               <FormField
                 control={form.control}
@@ -782,128 +570,248 @@ export function ResidentForm({
           </div>
         </div>
 
-        {/* ★ 10. 一人称 (Select + Manual UI) */}
-        <div className="md:col-span-5 min-w-0 space-y-3">
-          <FormField
-            control={form.control}
-            name="firstPerson"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>一人称</FormLabel>
-                <Select
-                  onValueChange={(value) => {
-                    if (value === MANUAL_INPUT_KEY) {
-                      field.onChange('');
-                    } else {
-                      field.onChange(value);
-                    }
-                  }}
-                  // ★ 13. value のロジックを修正
-                  value={isFirstPersonManual ? MANUAL_INPUT_KEY : field.value ?? ''}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="（未選択）" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {firstPersonPresets.map((preset) => (
-                      <SelectItem key={preset.id} value={preset.label}>
-                        {preset.label}
+        {/* 会話 */}
+        <div className="space-y-4 pt-2 border-t">
+          <h3 className="text-sm font-semibold">会話</h3>
+
+          {/* 一人称 (Select + Manual UI) */}
+          <div className="md:col-span-5 min-w-0 space-y-3">
+            <FormField
+              control={form.control}
+              name="firstPerson"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>一人称</FormLabel>
+                  <Select
+                    onValueChange={(value) => {
+                      if (value === MANUAL_INPUT_KEY) {
+                        field.onChange('');
+                      } else {
+                        field.onChange(value);
+                      }
+                    }}
+                    // ★ 13. value のロジックを修正
+                    value={isFirstPersonManual ? MANUAL_INPUT_KEY : field.value ?? ''}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="（未選択）" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {firstPersonPresets.map((preset) => (
+                        <SelectItem key={preset.id} value={preset.label}>
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={MANUAL_INPUT_KEY} className="text-blue-600">
+                        （手動で入力）
                       </SelectItem>
-                    ))}
-                    <SelectItem value={MANUAL_INPUT_KEY} className="text-blue-600">
-                      （手動で入力）
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )}
+            />
+
+            {isFirstPersonManual && (
+              <div className="space-y-3 pl-2 border-l-2 border-dashed">
+                <FormField
+                  control={form.control}
+                  name="firstPerson"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm text-muted-foreground">手動入力</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="例：ウチ"
+                          {...field}
+                          value={field.value ?? ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="isFirstPersonManaged"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-end space-x-2">
+                      <FormLabel className="text-sm text-muted-foreground">
+                        プリセットに追加
+                      </FormLabel>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* 話し方プリセット (Select + Manual UI) */}
+          <div className="md:col-span-5 min-w-0 space-y-3">
+            <FormField
+              control={form.control}
+              name="speechPreset"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>口調</FormLabel>
+                  <Select
+                    onValueChange={(value) => {
+                      if (value === MANUAL_INPUT_KEY) {
+                        field.onChange(''); // 手動入力モードへ
+                        form.setValue('speechPresetDescription', ''); // 特徴もクリア
+                      } else {
+                        // プリセットを選択
+                        field.onChange(value); // ラベルをセット
+                        // 対応する特徴をセット
+                        const preset = speechPresets.find(p => p.label === value);
+                        form.setValue('speechPresetDescription', preset?.description ?? '');
+                      }
+                    }}
+                    // ★ 8. value のロジックを修正
+                    // (手動モードならMANUAL_INPUT_KEY、そうでなければ現在の値(空も含む))
+                    value={isSpeechManual ? MANUAL_INPUT_KEY : field.value ?? ''}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="（未選択）" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {speechPresets.map((preset) => (
+                        <SelectItem key={preset.id} value={preset.label}>
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={MANUAL_INPUT_KEY} className="text-blue-600">
+                        （手動で入力）
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )}
+            />
+
+            {/* ★ 手動入力が選択された時だけ「入力欄」を表示 */}
+            {isSpeechManual && (
+              <div className="space-y-3 pl-2 border-l-2 border-dashed">
+                <FormField
+                  control={form.control}
+                  name="speechPreset"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input
+                          placeholder="例：子供っぽい"
+                          {...field}
+                          value={field.value ?? ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="speechPresetDescription"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm text-muted-foreground">特徴</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="例：幼い印象の話し方：「〜だね！」「やったぁ」など"
+                          {...field}
+                          value={field.value ?? ''}
+                          rows={2}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="isSpeechPresetManaged"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-end space-x-2">
+                      <FormLabel className="text-sm text-muted-foreground">
+                        プリセットに追加
+                      </FormLabel>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {/* ★ プリセット選択中（かつ手動ではない）場合、「特徴の表示」を表示 */}
+            {!isSpeechManual && (
+              <FormItem>
+                <FormLabel className="text-sm text-muted-foreground">特徴</FormLabel>
+                <FormControl>
+                  <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
+                    {/* ★ 9. watchする値が空（未選択）の場合の表示を修正 */}
+                    {form.watch('speechPresetDescription') || '（プリセットを選択すると特徴が表示されます）'}
+                  </p>
+                </FormControl>
               </FormItem>
             )}
-          />
+          </div>
 
-          {isFirstPersonManual && (
-            <div className="space-y-3 pl-2 border-l-2 border-dashed">
-              <FormField
-                control={form.control}
-                name="firstPerson"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm text-muted-foreground">手動入力</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="例：ウチ"
-                        {...field}
-                        value={field.value ?? ''}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+          {/* 興味関心（カンマ区切り） */}
+          <div className="space-y-2">
+            <FormLabel>興味・関心</FormLabel>
+            {/* 追加用の入力フィールドとボタン */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="例：音楽"
+                value={newInterest}
+                onChange={(e) => setNewInterest(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newInterest) {
+                    e.preventDefault();
+                    append({ value: newInterest });
+                    setNewInterest('');
+                  }
+                }}
               />
-              <FormField
-                control={form.control}
-                name="isFirstPersonManaged"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-end space-x-2">
-                    <FormLabel className="text-sm text-muted-foreground">
-                      プリセットに追加
-                    </FormLabel>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!newInterest}
+                onClick={() => {
+                  if (newInterest) {
+                    append({ value: newInterest });
+                    setNewInterest('');
+                  }
+                }}
+              >
+                追加
+              </Button>
             </div>
-          )}
-        </div>
-
-        {/* ... (興味関心、活動傾向、保存ボタン、診断パネル は変更なし) ... */}
-        {/* 興味関心（カンマ区切り） */}
-        <div className="space-y-2">
-          <FormLabel>興味・関心</FormLabel>
-          {/* 追加用の入力フィールドとボタン */}
-          <div className="flex gap-2">
-            <Input
-              placeholder="例：音楽"
-              value={newInterest}
-              onChange={(e) => setNewInterest(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && newInterest) {
-                  e.preventDefault();
-                  append({ value: newInterest });
-                  setNewInterest('');
-                }
-              }}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={!newInterest}
-              onClick={() => {
-                if (newInterest) {
-                  append({ value: newInterest });
-                  setNewInterest('');
-                }
-              }}
-            >
-              追加
-            </Button>
+            <div className="flex flex-wrap gap-2 pt-2">
+              {fields.map((field, index) => (
+                <div key={field.id} className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm">
+                  <span>{field.value}</span>
+                  <button type="button" onClick={() => remove(index)} className="ml-1 font-bold text-muted-foreground hover:text-destructive">
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <FormMessage />
           </div>
-          <div className="flex flex-wrap gap-2 pt-2">
-            {fields.map((field, index) => (
-              <div key={field.id} className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm">
-                <span>{field.value}</span>
-                <button type="button" onClick={() => remove(index)} className="ml-1 font-bold text-muted-foreground hover:text-destructive">
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-          <FormMessage />
         </div>
 
         {/* 活動傾向 */}
@@ -980,6 +888,112 @@ export function ResidentForm({
           </Button>
         </div>
       </form>
+
+      {/* パーソナリティ */}
+      <div className="space-y-4 pt-2 border-t">
+        <h3 className="text-sm font-semibold">パーソナリティ</h3>
+
+        {/* 性格 traits */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold">性格パラメータ（1〜5で選択）</h3>
+          <p id="age-help" className="text-xs text-muted-foreground mt-1">
+            数値が高いほどその性格が強い（よく表れる）ことを示します。
+          </p>
+          {([
+            { key: 'sociability', label: '社交性' },
+            { key: 'empathy', label: '気配り' },
+            { key: 'stubbornness', label: '頑固さ' },
+            { key: 'activity', label: '行動力' },
+            { key: 'expressiveness', label: '表現力' },
+          ] as const).map(({ key, label }) => (
+            <FormField
+              key={key}
+              control={form.control}
+              name={`traits.${key}` as const}
+              render={({ field }) => (
+                <FormItem>
+                  {/* グリッドの分割を 2 (ラベル) : 3 (ボックス) に変更 */}
+                  <div className="grid grid-cols-5 items-center gap-3">
+                    <FormLabel className="col-span-2 text-sm">{label}</FormLabel>
+
+                    {/* --- 変更後 (追加) --- */}
+                    <div className="col-span-3">
+                      <FormControl>
+                        <ClickableRatingBox
+                          value={field.value ?? DEFAULT_TRAITS[key]}
+                          onChange={(newValue) => field.onChange(newValue)}
+                        />
+                      </FormControl>
+                    </div>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          ))}
+        </div>
+
+        {/* --- MBTI（診断 または手動で選択） --- */}
+        <FormField
+          control={form.control}
+          name="mbti"
+          render={({ field }) => {
+            const v = field.value ?? '';
+            return (
+              <FormItem className="space-y-2">
+                <FormLabel className="text-base font-semibold">
+                  MBTI（診断 または手動で選択）
+                </FormLabel>
+                <FormControl>
+                  <div className="relative w-full flex items-center">
+                    {/* 左側：診断ボタン */}
+                    <div className="absolute left-8">
+                      <Button
+                        type="button"
+                        onClick={() => setShowDiagnosis(true)}
+                        className="bg-black text-white hover:bg-black/90 px-5 py-2"
+                      >
+                        診断する
+                      </Button>
+                    </div>
+                    {/* 中央：ラベル＋セレクト */}
+                    <div className="mx-auto flex items-center gap-2">
+                      <label
+                        htmlFor="mbti-select"
+                        className="text-sm text-gray-700 whitespace-nowrap"
+                      >
+                        手動で選択：
+                      </label>
+                      <select
+                        id="mbti-select"
+                        className="rounded border px-3 py-2 min-w-[140px]"
+                        name={field.name}
+                        ref={field.ref}
+                        value={v}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        onBlur={field.onBlur}
+                      >
+                        <option value="">（未設定）</option>
+                        {[
+                          'INTJ', 'INTP', 'ENTJ', 'ENTP',
+                          'INFJ', 'INFP', 'ENFJ', 'ENFP',
+                          'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
+                          'ISTP', 'ISFP', 'ESTP', 'ESFP',
+                        ].map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+      </div>
 
       {/* --- 診断パネル (MBTI診断) --- */}
       {/* (前回修正した ClickableRatingBox が使われている状態) */}
