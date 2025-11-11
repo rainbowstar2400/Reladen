@@ -119,9 +119,16 @@ const residentFormSchema = z.object({
   ),
   interests: z.array(z.object({ value: z.string() })).optional(),
 
-  // ★ 変更: HH:mm ではなく、HH (文字列) を受け付ける
-  sleepBedtime: z.string().min(1, '時刻を選択してください'), // 必須
-  sleepWakeTime: z.string().min(1, '時刻を選択してください'), // 必須
+  // ★ 変更: Age と同じ preprocess (数値) に
+  // 必須項目にするため .number({ required_error: ... }) を使用
+  sleepBedtime: z.preprocess(
+    v => (v === '' || v == null ? undefined : Number(v)),
+    z.number({ required_error: '時刻を選択してください' }).int().min(0).max(23)
+  ),
+  sleepWakeTime: z.preprocess(
+    v => (v === '' || v == null ? undefined : Number(v)),
+    z.number({ required_error: '時刻を選択してください' }).int().min(0).max(23)
+  ),
 });
 
 type ResidentFormValues = z.infer<typeof residentFormSchema>;
@@ -188,8 +195,12 @@ export function ResidentForm({
           ? (defaultValues.traits as any)
           : { ...DEFAULT_TRAITS };
 
-      // ★ 追加: DBの HH:00 をフォームの HH (String) に変換するヘルパー
-      const timeToHour = (time: string | undefined) => time ? time.split(':')[0] : '';
+      // ★ 変更: DBの HH:00 (string) をフォームの HH (number | undefined) に
+      const timeToHour = (time: string | undefined): number | undefined => {
+        if (!time) return undefined; // ★ '' -> undefined
+        const hour = parseInt(time.split(':')[0], 10);
+        return isNaN(hour) ? undefined : hour; // ★ '' -> undefined
+      };
 
       const currentSleepProfile = (defaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
 
@@ -210,9 +221,9 @@ export function ResidentForm({
         isFirstPersonManaged: false,
         interests: defaultValues?.interests?.map(val => ({ value: val })) ?? [],
 
-        // ★ 変更: 変換関数を使い、デフォルトを '' (未選択) に
-        sleepBedtime: timeToHour(currentSleepProfile.baseBedtime) ?? '',
-        sleepWakeTime: timeToHour(currentSleepProfile.baseWakeTime) ?? '',
+        // ★ 変更: 変換関数を使い、デフォルトを undefined ('' ではない) に
+        sleepBedtime: timeToHour(currentSleepProfile.baseBedtime),
+        sleepWakeTime: timeToHour(currentSleepProfile.baseWakeTime),
       };
     }, [defaultValues]),
   });
@@ -258,13 +269,16 @@ export function ResidentForm({
     const gender = values.gender as ('male' | 'female' | 'nonbinary' | 'other') | undefined;
     const interests = values.interests?.map(item => item.value).filter(Boolean) ?? [];
 
-    // ★ 追加: フォームの HH (String) をDBの HH:00 に変換するヘルパー
-    const hourToTime = (hour: string | undefined) => hour ? hour.padStart(2, '0') + ':00' : undefined;
+    // ★ 追加: フォームの HH (number) をDBの HH:00 (string) に変換
+    const hourToTime = (hour: number | undefined): string | undefined => {
+      if (hour == null) return undefined;
+      return String(hour).padStart(2, '0') + ':00';
+    };
 
     const currentSleepProfile = (defaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
 
     const sleepProfile =
-      values.sleepBedtime && values.sleepWakeTime
+      (values.sleepBedtime != null && values.sleepWakeTime != null) // 0 (0時) も許可
         ? {
           ...currentSleepProfile, // 既存の todaySchedule などを引き継ぐ
           // ★ 変更: 変換関数を使う
@@ -305,8 +319,12 @@ export function ResidentForm({
     const savedOccPreset = findPreset(saved.occupation, 'occupation');
     const savedFpPreset = findPreset(saved.firstPerson, 'first_person');
 
-    // ★ 追加: DBの HH:00 をフォームの HH (String) に変換するヘルパー
-    const timeToHour = (time: string | undefined) => time ? time.split(':')[0] : '';
+    // ★ 変更: 変換ヘルパー (defaultValues と同じ)
+    const timeToHour = (time: string | undefined): number | undefined => {
+      if (!time) return undefined; // ★ '' -> undefined
+      const hour = parseInt(time.split(':')[0], 10);
+      return isNaN(hour) ? undefined : hour; // ★ '' -> undefined
+    };
 
     // form.reset (変更なし)
     form.reset({
@@ -330,9 +348,10 @@ export function ResidentForm({
 
       // ★ DB の型からフォームの型へ
       interests: saved.interests?.map(val => ({ value: val })) ?? [],
-      // ★ 変更: `baseBedtime` / `baseWakeTime` から読み込む
-      sleepBedtime: saved.sleepProfile?.baseBedtime ?? '',
-      sleepWakeTime: saved.sleepProfile?.baseWakeTime ?? '',
+
+      // ★ 変更: 変換関数を使う
+      sleepBedtime: timeToHour(saved.sleepProfile?.baseBedtime),
+      sleepWakeTime: timeToHour(saved.sleepProfile?.baseWakeTime),
     });
 
     onSubmitted?.();
@@ -365,6 +384,14 @@ export function ResidentForm({
 
   return (
     <Form {...form}>
+
+      {/* ★ 追加: 0時〜23時の Datalist (Age を参考に) */}
+      <datalist id="hour-options">
+        {Array.from({ length: 24 }, (_, i) => i).map((n) => (
+          <option key={n} value={n} label={`${n} 時`} />
+        ))}
+      </datalist>
+
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
         {/* ... (name, mbti フィールドは変更なし) ... */}
         <FormField
@@ -884,7 +911,7 @@ export function ResidentForm({
         <div className="space-y-4 pt-2 border-t">
           <h3 className="text-sm font-semibold">睡眠</h3>
 
-          {/* --- ★ 睡眠スケジュール (Select に変更) --- */}
+          {/* --- ★ 睡眠スケジュール (Datalist + Suffix に変更) --- */}
           <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
@@ -892,20 +919,26 @@ export function ResidentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>基準 就寝時刻</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="（時刻を選択）" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {HOURS_OPTIONS.map(opt => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    {/* ★ 変更: Input + Suffix */}
+                    <div className="flex items-center gap-2">
+                      <Input
+                        list="hour-options" // ★ 準備 1 で定義した datalist
+                        placeholder="例: 23"
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          // ★ Age と同じロジック
+                          field.onChange(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        onBlur={field.onBlur}
+                        inputMode="numeric"
+                        type="text"
+                        pattern="^\d{1,2}$" // 0-23
+                        className="w-[80px]"
+                      />
+                      <span className="text-sm text-muted-foreground">時頃</span>
+                    </div>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -916,28 +949,31 @@ export function ResidentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>基準 起床時刻</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="（時刻を選択）" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {HOURS_OPTIONS.map(opt => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    {/* ★ 変更: Input + Suffix */}
+                    <div className="flex items-center gap-2">
+                      <Input
+                        list="hour-options" // ★ 同じ datalist を参照
+                        placeholder="例: 7"
+                        value={field.value ?? ''}
+                        onChange={(e) =>
+                          // ★ Age と同じロジック
+                          field.onChange(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        onBlur={field.onBlur}
+                        inputMode="numeric"
+                        type="text"
+                        pattern="^\d{1,2}$" // 0-23
+                        className="w-[80px]"
+                      />
+                      <span className="text-sm text-muted-foreground">時頃</span>
+                    </div>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
-
-          return null;
-          
         </div>
         <div className="flex justify-end gap-2">
           <Button type="submit" disabled={upsert.isPending}>
