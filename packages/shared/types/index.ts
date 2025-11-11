@@ -19,17 +19,22 @@ export const GenderEnum = z.enum([
   'other'
 ]);
 
-export const ActivityTendencyEnum = z.enum([
-  'morning',    // 朝型
-  'normal',     // 普通
-  'night'       // 夜型
-]);
+// ★ 変更: sleepProfileSchema を新しい定義に
+export const todayScheduleSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // 'YYYY-MM-DD'
+  bedtime: z.string().regex(/^\d{2}:\d{2}$/),    // 'HH:mm'
+  wakeTime: z.string().regex(/^\d{2}:\d{2}$/),   // 'HH:mm'
+});
 
 export const sleepProfileSchema = z.object({
-  // 'HH:mm'（24時間表記）。『24:00』は不可、'00:00'に正規化方針
-  bedtime: z.string().regex(/^\d{2}:\d{2}$/),
-  wakeTime: z.string().regex(/^\d{2}:\d{2}$/),
+  // (変更) 基準時刻
+  baseBedtime: z.string().regex(/^\d{2}:\d{2}$/),
+  baseWakeTime: z.string().regex(/^\d{2}:\d{2}$/),
+  
   prepMinutes: z.number().int().min(0).max(180).default(30),
+  
+  // (追加) 毎日抽選されるスケジュール
+  todaySchedule: todayScheduleSchema.optional(),
 });
 
 export const baseEntitySchema = z.object({
@@ -70,7 +75,6 @@ export const residentSchema = baseEntitySchema.extend({
   
   interests: z.array(z.string()).max(20).optional(),
 
-  activityTendency: ActivityTendencyEnum.optional(),
   sleepProfile: sleepProfileSchema.optional(),
 });
 

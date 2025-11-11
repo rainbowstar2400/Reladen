@@ -13,7 +13,7 @@ import { useUpsertResident } from '@/lib/data/residents';
 import { useMemo, useState, useEffect } from 'react';
 import { QUESTIONS, calculateMbti, type Answer } from '@/lib/mbti';
 import { useRouter } from 'next/navigation';
-import { defaultSleepByTendency } from '@/lib/schedule';
+import { BaseSleepProfile, SleepProfile } from '../../../../packages/shared/logic/schedule';
 import { ClickableRatingBox } from '@/components/ui/clickable-rating-box';
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea';
@@ -109,10 +109,6 @@ const residentFormSchema = z.object({
     z.number().int().min(0).max(120).optional()
   ),
   interests: z.array(z.object({ value: z.string() })).optional(),
-  activityTendency: z.preprocess(
-    v => (v === '' ? undefined : v),
-    z.enum(['morning', 'normal', 'night']).optional()
-  ),
   sleepBedtime: z.preprocess(
     v => (v === '' ? undefined : v),
     z.string().regex(/^\d{2}:\d{2}$/).optional()
@@ -187,6 +183,9 @@ export function ResidentForm({
           ? (defaultValues.traits as any)
           : { ...DEFAULT_TRAITS };
 
+      // ★ 追加: DBのsleepProfileを型安全に読み込む
+      const currentSleepProfile = (defaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
+
       return {
         ...defaultValues,
         name: defaultValues?.name ?? '',
@@ -203,6 +202,10 @@ export function ResidentForm({
         isOccupationManaged: false,
         isFirstPersonManaged: false,
         interests: defaultValues?.interests?.map(val => ({ value: val })) ?? [],
+
+        // ★ 変更: DBの sleepProfile.baseBedtime / baseWakeTime から読み込む
+        sleepBedtime: currentSleepProfile.baseBedtime ?? '01:00',
+        sleepWakeTime: currentSleepProfile.baseWakeTime ?? '07:00',
       };
     }, [defaultValues]),
   });
@@ -247,12 +250,16 @@ export function ResidentForm({
         : undefined;
     const gender = values.gender as ('male' | 'female' | 'nonbinary' | 'other') | undefined;
     const interests = values.interests?.map(item => item.value).filter(Boolean) ?? [];
-    const activityTendency = values.activityTendency as ('morning' | 'normal' | 'night') | undefined;
+
+    // (DBに保存されている既存の todaySchedule を維持するため)
+    const currentSleepProfile = (defaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
+
     const sleepProfile =
       values.sleepBedtime && values.sleepWakeTime
         ? {
-          bedtime: values.sleepBedtime,
-          wakeTime: values.sleepWakeTime,
+          ...currentSleepProfile, // 既存の todaySchedule などを引き継ぐ
+          baseBedtime: values.sleepBedtime,  // ★ bedtime -> baseBedtime
+          baseWakeTime: values.sleepWakeTime, // ★ wakeTime -> baseWakeTime
           prepMinutes: 30,
         }
         : undefined;
@@ -272,7 +279,6 @@ export function ResidentForm({
       gender,
       age: typeof values.age === 'number' ? values.age : undefined,
       interests: interests.length > 0 ? interests : undefined,
-      activityTendency,
       ...(sleepProfile ? { sleepProfile } : {}),
     };
 
@@ -311,8 +317,9 @@ export function ResidentForm({
 
       // ★ DB の型からフォームの型へ
       interests: saved.interests?.map(val => ({ value: val })) ?? [],
-      sleepBedtime: saved.sleepProfile?.bedtime ?? '',
-      sleepWakeTime: saved.sleepProfile?.wakeTime ?? '',
+      // ★ 変更: `baseBedtime` / `baseWakeTime` から読み込む
+      sleepBedtime: saved.sleepProfile?.baseBedtime ?? '',
+      sleepWakeTime: saved.sleepProfile?.baseWakeTime ?? '',
     });
 
     onSubmitted?.();
@@ -863,37 +870,7 @@ export function ResidentForm({
         {/* 活動傾向 */}
         <div className="space-y-4 pt-2 border-t">
           <h3 className="text-sm font-semibold">睡眠</h3>
-
-          {/* 活動傾向 */}
-          <FormField
-            control={form.control}
-            name="activityTendency"
-            render={({ field }) => {
-              const v = field.value ?? '';
-              return (
-                <FormItem className="space-y-2">
-                  <FormLabel>活動傾向</FormLabel>
-                  <FormControl>
-                    <select
-                      className="w-full rounded border px-3 py-2"
-                      name={field.name}
-                      ref={field.ref}
-                      value={v}
-                      onChange={(e) => field.onChange(e.target.value)}
-                      onBlur={field.onBlur}
-                    >
-                      <option value="">（未設定）</option>
-                      <option value="morning">朝型</option>
-                      <option value="normal">通常</option>
-                      <option value="night">夜型</option>
-                    </select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
-          />
-
+          
           {/* 任意：睡眠プロファイル（上書き） */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <FormField
@@ -940,20 +917,9 @@ export function ResidentForm({
 
           {/* 既定値プレビュー（sleepProfile未入力時に、活動傾向からの既定を見せるだけ） */}
           {(() => {
-            const t = form.watch('activityTendency') as ('morning' | 'normal' | 'night' | undefined);
             const bed = form.watch('sleepBedtime');
             const wake = form.watch('sleepWakeTime');
 
-            // sleepProfileを未入力で activityTendency が選ばれているときだけ表示
-            if (t && !bed && !wake) {
-              const def = defaultSleepByTendency(t);
-              return (
-                <p className="text-xs text-muted-foreground">
-                  既定の睡眠帯（{t === 'morning' ? '朝型' : t === 'night' ? '夜型' : '通常'}）：
-                  就寝 <span className="tabular-nums">{def.bedtime}</span>／起床 <span className="tabular-nums">{def.wakeTime}</span>（就寝準備 {def.prepMinutes}分）
-                </p>
-              );
-            }
             return null;
           })()}
         </div>
