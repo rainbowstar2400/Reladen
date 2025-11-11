@@ -69,6 +69,15 @@ const MOCK_MANAGED_PRESETS = {
   first_person: MOCK_PRESETS_DB.first_person.filter(p => p.isManaged),
 };
 
+// ★ 追加: 0時〜23時の選択肢を生成
+const HOURS_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const hour = String(i);
+  return {
+    value: hour, // "0", "1", ... "23"
+    label: `${i} 時頃`,
+  };
+});
+
 // ★ 1. 職業・一人称の <Select> で使う「手動入力」用の特別な値
 const MANUAL_INPUT_KEY = '--manual--';
 
@@ -109,14 +118,10 @@ const residentFormSchema = z.object({
     z.number().int().min(0).max(120).optional()
   ),
   interests: z.array(z.object({ value: z.string() })).optional(),
-  sleepBedtime: z.preprocess(
-    v => (v === '' ? undefined : v),
-    z.string().regex(/^\d{2}:\d{2}$/).optional()
-  ),
-  sleepWakeTime: z.preprocess(
-    v => (v === '' ? undefined : v),
-    z.string().regex(/^\d{2}:\d{2}$/).optional()
-  ),
+
+  // ★ 変更: HH:mm ではなく、HH (文字列) を受け付ける
+  sleepBedtime: z.string().min(1, '時刻を選択してください'), // 必須
+  sleepWakeTime: z.string().min(1, '時刻を選択してください'), // 必須
 });
 
 type ResidentFormValues = z.infer<typeof residentFormSchema>;
@@ -183,7 +188,9 @@ export function ResidentForm({
           ? (defaultValues.traits as any)
           : { ...DEFAULT_TRAITS };
 
-      // ★ 追加: DBのsleepProfileを型安全に読み込む
+      // ★ 追加: DBの HH:00 をフォームの HH (String) に変換するヘルパー
+      const timeToHour = (time: string | undefined) => time ? time.split(':')[0] : '';
+
       const currentSleepProfile = (defaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
 
       return {
@@ -203,9 +210,9 @@ export function ResidentForm({
         isFirstPersonManaged: false,
         interests: defaultValues?.interests?.map(val => ({ value: val })) ?? [],
 
-        // ★ 変更: DBの sleepProfile.baseBedtime / baseWakeTime から読み込む
-        sleepBedtime: currentSleepProfile.baseBedtime ?? '01:00',
-        sleepWakeTime: currentSleepProfile.baseWakeTime ?? '07:00',
+        // ★ 変更: 変換関数を使い、デフォルトを '' (未選択) に
+        sleepBedtime: timeToHour(currentSleepProfile.baseBedtime) ?? '',
+        sleepWakeTime: timeToHour(currentSleepProfile.baseWakeTime) ?? '',
       };
     }, [defaultValues]),
   });
@@ -251,15 +258,18 @@ export function ResidentForm({
     const gender = values.gender as ('male' | 'female' | 'nonbinary' | 'other') | undefined;
     const interests = values.interests?.map(item => item.value).filter(Boolean) ?? [];
 
-    // (DBに保存されている既存の todaySchedule を維持するため)
+    // ★ 追加: フォームの HH (String) をDBの HH:00 に変換するヘルパー
+    const hourToTime = (hour: string | undefined) => hour ? hour.padStart(2, '0') + ':00' : undefined;
+
     const currentSleepProfile = (defaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
 
     const sleepProfile =
       values.sleepBedtime && values.sleepWakeTime
         ? {
           ...currentSleepProfile, // 既存の todaySchedule などを引き継ぐ
-          baseBedtime: values.sleepBedtime,  // ★ bedtime -> baseBedtime
-          baseWakeTime: values.sleepWakeTime, // ★ wakeTime -> baseWakeTime
+          // ★ 変更: 変換関数を使う
+          baseBedtime: hourToTime(values.sleepBedtime)!,
+          baseWakeTime: hourToTime(values.sleepWakeTime)!,
           prepMinutes: 30,
         }
         : undefined;
@@ -294,6 +304,9 @@ export function ResidentForm({
     const savedSpeechPreset = findPreset(saved.speechPreset, 'speech');
     const savedOccPreset = findPreset(saved.occupation, 'occupation');
     const savedFpPreset = findPreset(saved.firstPerson, 'first_person');
+
+    // ★ 追加: DBの HH:00 をフォームの HH (String) に変換するヘルパー
+    const timeToHour = (time: string | undefined) => time ? time.split(':')[0] : '';
 
     // form.reset (変更なし)
     form.reset({
@@ -870,25 +883,29 @@ export function ResidentForm({
         {/* 活動傾向 */}
         <div className="space-y-4 pt-2 border-t">
           <h3 className="text-sm font-semibold">睡眠</h3>
-          
-          {/* 任意：睡眠プロファイル（上書き） */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+
+          {/* --- ★ 睡眠スケジュール (Select に変更) --- */}
+          <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
               name="sleepBedtime"
               render={({ field }) => (
-                <FormItem className="space-y-2">
-                  <FormLabel>就寝時刻（任意）</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="例：23:00"
-                      value={field.value ?? ''}
-                      onChange={(e) => field.onChange(e.target.value)}
-                      onBlur={field.onBlur}
-                      inputMode="numeric"
-                      pattern="^[0-2][0-9]:[0-5][0-9]$"
-                    />
-                  </FormControl>
+                <FormItem>
+                  <FormLabel>基準 就寝時刻</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="（時刻を選択）" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {HOURS_OPTIONS.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -897,31 +914,30 @@ export function ResidentForm({
               control={form.control}
               name="sleepWakeTime"
               render={({ field }) => (
-                <FormItem className="space-y-2">
-                  <FormLabel>起床時刻（任意）</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="例：07:30"
-                      value={field.value ?? ''}
-                      onChange={(e) => field.onChange(e.target.value)}
-                      onBlur={field.onBlur}
-                      inputMode="numeric"
-                      pattern="^[0-2][0-9]:[0-5][0-9]$"
-                    />
-                  </FormControl>
+                <FormItem>
+                  <FormLabel>基準 起床時刻</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="（時刻を選択）" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {HOURS_OPTIONS.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
 
-          {/* 既定値プレビュー（sleepProfile未入力時に、活動傾向からの既定を見せるだけ） */}
-          {(() => {
-            const bed = form.watch('sleepBedtime');
-            const wake = form.watch('sleepWakeTime');
-
-            return null;
-          })()}
+          return null;
+          
         </div>
         <div className="flex justify-end gap-2">
           <Button type="submit" disabled={upsert.isPending}>
