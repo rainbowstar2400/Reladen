@@ -882,11 +882,6 @@ export function ResidentForm({
             />
           </div>
         </div>
-        <div className="flex justify-end gap-2">
-          <Button type="submit" disabled={upsert.isPending}>
-            {upsert.isPending ? '保存中…' : '保存'}
-          </Button>
-        </div>
       </form>
 
       {/* パーソナリティ */}
@@ -993,6 +988,12 @@ export function ResidentForm({
             );
           }}
         />
+      </div>
+      
+      <div className="flex justify-end gap-2">
+        <Button type="submit" disabled={upsert.isPending}>
+          {upsert.isPending ? '保存中…' : '保存'}
+        </Button>
       </div>
 
       {/* --- 診断パネル (MBTI診断) --- */}
