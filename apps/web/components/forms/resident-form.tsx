@@ -1031,253 +1031,253 @@ export function ResidentForm({
             />
           </div>
         </div>
-      </form>
 
-      {/* パーソナリティ */}
-      <div className="space-y-2 pt-2 border-t">
-        <h2 className="text-sm font-semibold">パーソナリティ</h2>
+        {/* パーソナリティ */}
+        <div className="space-y-2 pt-2 border-t">
+          <h2 className="text-sm font-semibold">パーソナリティ</h2>
 
-        {/* 性格 traits */}
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold">性格パラメータ（1〜5で選択）</h3>
-          <p id="age-help" className="text-xs text-muted-foreground mt-1">
-            数値が高いほどその性格が強い（よく表れる）ことを示します。
-          </p>
-          {([
-            { key: 'sociability', label: '社交性' },
-            { key: 'empathy', label: '気配り' },
-            { key: 'stubbornness', label: '頑固さ' },
-            { key: 'activity', label: '行動力' },
-            { key: 'expressiveness', label: '表現力' },
-          ] as const).map(({ key, label }) => (
-            <FormField
-              key={key}
-              control={form.control}
-              name={`traits.${key}` as const}
-              render={({ field }) => (
-                <FormItem>
-                  {/* グリッドの分割を 2 (ラベル) : 3 (ボックス) に変更 */}
-                  <div className="grid grid-cols-5 items-center gap-3">
-                    <FormLabel className="col-span-2 text-sm">{label}</FormLabel>
+          {/* 性格 traits */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">性格パラメータ（1〜5で選択）</h3>
+            <p id="age-help" className="text-xs text-muted-foreground mt-1">
+              数値が高いほどその性格が強い（よく表れる）ことを示します。
+            </p>
+            {([
+              { key: 'sociability', label: '社交性' },
+              { key: 'empathy', label: '気配り' },
+              { key: 'stubbornness', label: '頑固さ' },
+              { key: 'activity', label: '行動力' },
+              { key: 'expressiveness', label: '表現力' },
+            ] as const).map(({ key, label }) => (
+              <FormField
+                key={key}
+                control={form.control}
+                name={`traits.${key}` as const}
+                render={({ field }) => (
+                  <FormItem>
+                    {/* グリッドの分割を 2 (ラベル) : 3 (ボックス) に変更 */}
+                    <div className="grid grid-cols-5 items-center gap-3">
+                      <FormLabel className="col-span-2 text-sm">{label}</FormLabel>
 
-                    {/* --- 変更後 (追加) --- */}
-                    <div className="col-span-3">
-                      <FormControl>
-                        <ClickableRatingBox
-                          value={field.value ?? DEFAULT_TRAITS[key]}
-                          onChange={(newValue) => field.onChange(newValue)}
-                        />
-                      </FormControl>
+                      {/* --- 変更後 (追加) --- */}
+                      <div className="col-span-3">
+                        <FormControl>
+                          <ClickableRatingBox
+                            value={field.value ?? DEFAULT_TRAITS[key]}
+                            onChange={(newValue) => field.onChange(newValue)}
+                          />
+                        </FormControl>
+                      </div>
                     </div>
-                  </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
+          </div>
+
+          {/* --- MBTI（診断 または手動で選択） --- */}
+          <FormField
+            control={form.control}
+            name="mbti"
+            render={({ field }) => {
+              const v = field.value ?? '';
+              return (
+                <FormItem className="space-y-2">
+                  <FormLabel className="text-base font-semibold">
+                    MBTI（診断 または手動で選択）
+                  </FormLabel>
+                  <FormControl>
+                    <div className="relative w-full flex items-center">
+                      {/* 左側：診断ボタン */}
+                      <div className="absolute left-8">
+                        <Button
+                          type="button"
+                          onClick={() => setShowDiagnosis(true)}
+                          className="bg-black text-white hover:bg-black/90 px-5 py-2"
+                        >
+                          診断する
+                        </Button>
+                      </div>
+                      {/* 中央：ラベル＋セレクト */}
+                      <div className="mx-auto flex items-center gap-2">
+                        <label
+                          htmlFor="mbti-select"
+                          className="text-sm text-gray-700 whitespace-nowrap"
+                        >
+                          手動で選択：
+                        </label>
+                        <select
+                          id="mbti-select"
+                          className="rounded border px-3 py-2 min-w-[140px]"
+                          name={field.name}
+                          ref={field.ref}
+                          value={v}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          onBlur={field.onBlur}
+                        >
+                          <option value="">（未設定）</option>
+                          {[
+                            'INTJ', 'INTP', 'ENTJ', 'ENTP',
+                            'INFJ', 'INFP', 'ENFJ', 'ENFP',
+                            'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
+                            'ISTP', 'ISFP', 'ESTP', 'ESFP',
+                          ].map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
-              )}
-            />
-          ))}
+              );
+            }}
+          />
         </div>
 
-        {/* --- MBTI（診断 または手動で選択） --- */}
-        <FormField
-          control={form.control}
-          name="mbti"
-          render={({ field }) => {
-            const v = field.value ?? '';
-            return (
-              <FormItem className="space-y-2">
-                <FormLabel className="text-base font-semibold">
-                  MBTI（診断 または手動で選択）
-                </FormLabel>
-                <FormControl>
-                  <div className="relative w-full flex items-center">
-                    {/* 左側：診断ボタン */}
-                    <div className="absolute left-8">
-                      <Button
-                        type="button"
-                        onClick={() => setShowDiagnosis(true)}
-                        className="bg-black text-white hover:bg-black/90 px-5 py-2"
-                      >
-                        診断する
-                      </Button>
-                    </div>
-                    {/* 中央：ラベル＋セレクト */}
-                    <div className="mx-auto flex items-center gap-2">
-                      <label
-                        htmlFor="mbti-select"
-                        className="text-sm text-gray-700 whitespace-nowrap"
-                      >
-                        手動で選択：
-                      </label>
-                      <select
-                        id="mbti-select"
-                        className="rounded border px-3 py-2 min-w-[140px]"
-                        name={field.name}
-                        ref={field.ref}
-                        value={v}
-                        onChange={(e) => field.onChange(e.target.value)}
-                        onBlur={field.onBlur}
-                      >
-                        <option value="">（未設定）</option>
-                        {[
-                          'INTJ', 'INTP', 'ENTJ', 'ENTP',
-                          'INFJ', 'INFP', 'ENFJ', 'ENFP',
-                          'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
-                          'ISTP', 'ISFP', 'ESTP', 'ESFP',
-                        ].map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            );
-          }}
-        />
-      </div>
-
-      {/* 初期関係設定 */}
-      {/* 新規作成時 (IDなし) は表示しない */}
-      {formDefaultValues?.id && (<
-        div className="space-y-4 pt-2 border-t">
-        <h2 className="text-sm font-semibold">元々の関係の設定</h2>
-        <p className="text-xs text-muted-foreground">
-          この住人({formDefaultValues.name || '...'})が他の住人と既に持っている関係性を登録します。
-        </p>
-
-        {/* 他の住人がいない場合 */}
-        {otherResidents.length === 0 && (
-          <p className="text-sm text-muted-foreground italic">
-            （他に設定可能な住人がいません）
+        {/* 初期関係設定 */}
+        {/* 新規作成時 (IDなし) は表示しない */}
+        {formDefaultValues?.id && (<
+          div className="space-y-4 pt-2 border-t">
+          <h2 className="text-sm font-semibold">元々の関係の設定</h2>
+          <p className="text-xs text-muted-foreground">
+            この住人({formDefaultValues.name || '...'})が他の住人と既に持っている関係性を登録します。
           </p>
-        )}
 
-        {/* 他の住人リストをループ */}
-        <div className="space-y-4">
-          {otherResidents.map((target) => {
-            const currentRel = tempRelations[target.id] ?? DEFAULT_TEMP_RELATION;
-            const thisName = formDefaultValues.name || '住人';
-            const targetName = target.name;
+          {/* 他の住人がいない場合 */}
+          {otherResidents.length === 0 && (
+            <p className="text-sm text-muted-foreground italic">
+              （他に設定可能な住人がいません）
+            </p>
+          )}
 
-            return (
-              <Card key={target.id}>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    {target.name} との関係
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
+          {/* 他の住人リストをループ */}
+          <div className="space-y-4">
+            {otherResidents.map((target) => {
+              const currentRel = tempRelations[target.id] ?? DEFAULT_TEMP_RELATION;
+              const thisName = formDefaultValues.name || '住人';
+              const targetName = target.name;
 
-                  {/* 1. 関係性 (Select) */}
-                  <div className="space-y-2">
-                    <Label>関係性</Label>
-                    <Select
-                      value={currentRel.relationType}
-                      onValueChange={(value: RelationType) =>
-                        handleRelationChange(target.id, 'relationType', value)
-                      }
-                    >
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {relationTypeEnum.enumValues.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              return (
+                <Card key={target.id}>
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      {target.name} との関係
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
 
-                  {/* 2. 好感度 (双方向スライダー) */}
-                  <div className="space-y-4">
-                    {/* 2a. 自分 -> 相手 */}
+                    {/* 1. 関係性 (Select) */}
                     <div className="space-y-2">
-                      <Label htmlFor={`score-to-${target.id}`}>
-                        {thisName} → {targetName} の好感度 ({currentRel.feelingScoreTo})
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">0</span>
-                        <Slider
-                          id={`score-to-${target.id}`}
-                          min={0}
-                          max={100}
-                          step={1}
-                          value={[currentRel.feelingScoreTo]}
-                          onValueChange={([value]) =>
-                            handleRelationChange(target.id, 'feelingScoreTo', value)
-                          }
-                        />
-                        <span className="text-xs text-muted-foreground">100</span>
+                      <Label>関係性</Label>
+                      <Select
+                        value={currentRel.relationType}
+                        onValueChange={(value: RelationType) =>
+                          handleRelationChange(target.id, 'relationType', value)
+                        }
+                      >
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {relationTypeEnum.enumValues.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* 2. 好感度 (双方向スライダー) */}
+                    <div className="space-y-4">
+                      {/* 2a. 自分 -> 相手 */}
+                      <div className="space-y-2">
+                        <Label htmlFor={`score-to-${target.id}`}>
+                          {thisName} → {targetName} の好感度 ({currentRel.feelingScoreTo})
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">0</span>
+                          <Slider
+                            id={`score-to-${target.id}`}
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={[currentRel.feelingScoreTo]}
+                            onValueChange={([value]) =>
+                              handleRelationChange(target.id, 'feelingScoreTo', value)
+                            }
+                          />
+                          <span className="text-xs text-muted-foreground">100</span>
+                        </div>
+                      </div>
+
+                      {/* 2b. 相手 -> 自分 */}
+                      <div className="space-y-2">
+                        <Label htmlFor={`score-from-${target.id}`}>
+                          {thisName} ← {targetName} の好感度 ({currentRel.feelingScoreFrom})
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">0</span>
+                          <Slider
+                            id={`score-from-${target.id}`}
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={[currentRel.feelingScoreFrom]}
+                            onValueChange={([value]) =>
+                              handleRelationChange(target.id, 'feelingScoreFrom', value)
+                            }
+                          />
+                          <span className="text-xs text-muted-foreground">100</span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* 2b. 相手 -> 自分 */}
-                    <div className="space-y-2">
-                      <Label htmlFor={`score-from-${target.id}`}>
-                        {thisName} ← {targetName} の好感度 ({currentRel.feelingScoreFrom})
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">0</span>
-                        <Slider
-                          id={`score-from-${target.id}`}
-                          min={0}
-                          max={100}
-                          step={1}
-                          value={[currentRel.feelingScoreFrom]}
-                          onValueChange={([value]) =>
-                            handleRelationChange(target.id, 'feelingScoreFrom', value)
+                    {/* 3. 呼び方 (双方向入力) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* 3a. 自分 -> 相手 */}
+                      <div className="space-y-2">
+                        <Label htmlFor={`nick-to-${target.id}`}>
+                          {thisName} から {targetName} への呼び方
+                        </Label>
+                        <Input
+                          id={`nick-to-${target.id}`}
+                          placeholder={`例: ${targetName}さん`}
+                          value={currentRel.nicknameTo}
+                          onChange={(e) =>
+                            handleRelationChange(target.id, 'nicknameTo', e.target.value)
                           }
                         />
-                        <span className="text-xs text-muted-foreground">100</span>
+                      </div>
+
+                      {/* 3b. 相手 -> 自分 */}
+                      <div className="space-y-2">
+                        <Label htmlFor={`nick-from-${target.id}`}>
+                          {targetName} から {thisName} への呼び方
+                        </Label>
+                        <Input
+                          id={`nick-from-${target.id}`}
+                          placeholder={`例: ${thisName}ちゃん`}
+                          value={currentRel.nicknameFrom}
+                          onChange={(e) =>
+                            handleRelationChange(target.id, 'nicknameFrom', e.target.value)
+                          }
+                        />
                       </div>
                     </div>
-                  </div>
 
-                  {/* 3. 呼び方 (双方向入力) */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* 3a. 自分 -> 相手 */}
-                    <div className="space-y-2">
-                      <Label htmlFor={`nick-to-${target.id}`}>
-                        {thisName} から {targetName} への呼び方
-                      </Label>
-                      <Input
-                        id={`nick-to-${target.id}`}
-                        placeholder={`例: ${targetName}さん`}
-                        value={currentRel.nicknameTo}
-                        onChange={(e) =>
-                          handleRelationChange(target.id, 'nicknameTo', e.target.value)
-                        }
-                      />
-                    </div>
-
-                    {/* 3b. 相手 -> 自分 */}
-                    <div className="space-y-2">
-                      <Label htmlFor={`nick-from-${target.id}`}>
-                        {targetName} から {thisName} への呼び方
-                      </Label>
-                      <Input
-                        id={`nick-from-${target.id}`}
-                        placeholder={`例: ${thisName}ちゃん`}
-                        value={currentRel.nicknameFrom}
-                        onChange={(e) =>
-                          handleRelationChange(target.id, 'nicknameFrom', e.target.value)
-                        }
-                      />
-                    </div>
-                  </div>
-
-                </CardContent>
-              </Card>
-            );
-          })}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         </div>
-      </div>
-      )}
+        )}
+      </form>
 
       <div className="flex justify-end gap-2">
         <Button type="submit" disabled={upsert.isPending}>
