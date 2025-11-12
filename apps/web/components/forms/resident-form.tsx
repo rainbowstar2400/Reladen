@@ -545,7 +545,7 @@ export function ResidentForm({
 
         {/* 基本情報 */}
         <div className="space-y-4 pt-2 border-t">
-          <h3 className="text-sm font-semibold">基本情報</h3>
+          <h2 className="text-sm font-semibold">基本情報</h2>
 
           <FormField
             control={form.control}
@@ -721,7 +721,7 @@ export function ResidentForm({
 
         {/* 会話 */}
         <div className="space-y-4 pt-2 border-t">
-          <h3 className="text-sm font-semibold">会話</h3>
+          <h2 className="text-sm font-semibold">会話</h2>
 
           {/* 一人称 (Select + Manual UI) */}
           <div className="md:col-span-5 min-w-0 space-y-3">
@@ -965,7 +965,7 @@ export function ResidentForm({
 
         {/* 活動傾向 */}
         <div className="space-y-4 pt-2 border-t">
-          <h3 className="text-sm font-semibold">睡眠</h3>
+          <h2 className="text-sm font-semibold">睡眠</h2>
 
           {/* --- ★ 睡眠スケジュール (Datalist + Suffix に変更) --- */}
           <div className="grid grid-cols-2 gap-4">
@@ -1034,11 +1034,11 @@ export function ResidentForm({
       </form>
 
       {/* パーソナリティ */}
-      <div className="space-y-4 pt-2 border-t">
-        <h3 className="text-sm font-semibold">パーソナリティ</h3>
+      <div className="space-y-2 pt-2 border-t">
+        <h2 className="text-sm font-semibold">パーソナリティ</h2>
 
         {/* 性格 traits */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           <h3 className="text-sm font-semibold">性格パラメータ（1〜5で選択）</h3>
           <p id="age-help" className="text-xs text-muted-foreground mt-1">
             数値が高いほどその性格が強い（よく表れる）ことを示します。
@@ -1143,7 +1143,7 @@ export function ResidentForm({
       {/* 新規作成時 (IDなし) は表示しない */}
       {formDefaultValues?.id && (<
         div className="space-y-4 pt-2 border-t">
-        <h3 className="text-sm font-semibold">元々の関係の設定</h3>
+        <h2 className="text-sm font-semibold">元々の関係の設定</h2>
         <p className="text-xs text-muted-foreground">
           この住人({formDefaultValues.name || '...'})が他の住人と既に持っている関係性を登録します。
         </p>
