@@ -1,7 +1,6 @@
 import { boolean, jsonb, pgEnum, pgTable, text, timestamp, integer, uuid, index } from 'drizzle-orm/pg-core';
 import { relations as createRelations } from 'drizzle-orm';
 
-// ... (relationTypeEnum, feelingLabelEnum は変更なし) ...
 export const relationTypeEnum = pgEnum('relation_type', ['none', 'friend', 'best_friend', 'lover', 'family']);
 export const feelingLabelEnum = pgEnum('feeling_label', [
   'none',
@@ -13,7 +12,6 @@ export const feelingLabelEnum = pgEnum('feeling_label', [
   'awkward',
 ]);
 
-// ... (presetCategoryEnum, presets テーブルは変更なし) ...
 export const presetCategoryEnum = pgEnum('preset_category', [
   'speech',
   'occupation',
@@ -22,11 +20,11 @@ export const presetCategoryEnum = pgEnum('preset_category', [
 
 export const presets = pgTable('presets', {
   id: uuid('id').primaryKey().defaultRandom(),
-  category: presetCategoryEnum('category').notNull(), 
+  category: presetCategoryEnum('category').notNull(),
   label: text('label').notNull(),
   description: text('description'),
   isManaged: boolean('is_managed').notNull().default(false),
-  ownerId: uuid('owner_id'), 
+  ownerId: uuid('owner_id'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
 }, (t) => ({
@@ -42,20 +40,12 @@ export const residents = pgTable('residents', {
   mbti: text('mbti'),
   traits: jsonb('traits'),
   speechPreset: uuid('speech_preset').references(() => presets.id, { onDelete: 'set null' }),
-  
-  // === ★ ここから移設・追加 ★ ===
-  
-  // (relations から移設)
   gender: text('gender'),
   age: integer('age'),
-  
-  // (relations から移設 - presets を参照)
   occupation: uuid('occupation').references(() => presets.id, { onDelete: 'set null' }),
   firstPerson: uuid('first_person').references(() => presets.id, { onDelete: 'set null' }),
-
-  // (relations から移設)
   interests: jsonb('interests'),
-  
+
   /**
    * ★ 変更: 新しい仕様の睡眠プロファイル (jsonb)
    * *型定義 (参考):
@@ -74,14 +64,12 @@ export const residents = pgTable('residents', {
    */
   sleepProfile: jsonb('sleep_profile'),
 
-  // === ★ 移設・追加ここまで ★ ===
-  
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
   ownerId: uuid('owner_id'),
 });
 
-// ★ 3. relations テーブル (フィールドを削除)
+// relations テーブル
 export const relations = pgTable(
   'relations',
   {
@@ -89,17 +77,6 @@ export const relations = pgTable(
     aId: uuid('a_id').notNull(), // 参照元 (将来的に residents.id を参照)
     bId: uuid('b_id').notNull(), // 参照先 (将来的に residents.id を参照)
     type: relationTypeEnum('type').notNull().default('none'), // 関係性
-
-    // === ★ ここから削除 ★ ===
-    // gender: text('gender'),
-    // age: integer('age'),
-    // occupation: uuid('occupation').references(() => presets.id, { onDelete: 'set null' }),
-    // firstPerson: uuid('first_person').references(() => presets.id, { onDelete: 'set null' }),
-    // activityTendency: text('activity_tendency'),
-    // interests: jsonb('interests'),
-    // sleepProfile: jsonb('sleep_profile'),
-    // === ★ 削除ここまで ★ ===
-
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
     ownerId: uuid('owner_id'),
@@ -109,8 +86,6 @@ export const relations = pgTable(
   })
 );
 
-// ... (feelings, events, residentsRelations, etc. は変更なし) ...
-// (relationsResidents, feelingsRelations も Drizzle が型推論するため変更不要)
 export const feelings = pgTable(
   'feelings',
   {
@@ -118,12 +93,34 @@ export const feelings = pgTable(
     fromId: uuid('from_id').notNull(),
     toId: uuid('to_id').notNull(),
     label: feelingLabelEnum('label').notNull().default('none'),
+
+    // 好感度スコア
+    score: integer('score').notNull().default(0),
+
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
     ownerId: uuid('owner_id'),
   },
   (table) => ({
     uniqueDirectional: { columns: [table.fromId, table.toId], isUnique: true },
+  })
+);
+
+// nicknames テーブル
+export const nicknames = pgTable(
+  'nicknames',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromId: uuid('from_id').notNull(), // 呼ぶ側
+    toId: uuid('to_id').notNull(),   // 呼ばれる側
+    nickname: text('nickname').notNull(), // 呼び名
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deleted: boolean('deleted').notNull().default(false),
+    ownerId: uuid('owner_id'),
+  },
+  (table) => ({
+    // fromId と toId のペアでユニーク制約を設ける
+    uniqueDirectionalNickname: { columns: [table.fromId, table.toId], isUnique: true },
   })
 );
 
@@ -142,6 +139,7 @@ export const events = pgTable('events', {
 export const residentsRelations = createRelations(residents, ({ many }) => ({
   relations: many(relations),
   feelingsFrom: many(feelings, { relationName: 'feelings_from' }),
+  nicknamesFrom: many(nicknames, { relationName: 'nicknames_from' }),
 }));
 
 export const relationsResidents = createRelations(relations, ({ one }) => ({
@@ -159,10 +157,25 @@ export const feelingsRelations = createRelations(feelings, ({ one }) => ({
   fromResident: one(residents, {
     fields: [feelings.fromId],
     references: [residents.id],
+    relationName: 'feelings_from', // ★ relationName を明記
   }),
   toResident: one(residents, {
     fields: [feelings.toId],
     references: [residents.id],
+    // relationName: 'feelings_to' // 相手側は 'feelingsTo' として参照
+  }),
+}));
+
+export const nicknamesRelations = createRelations(nicknames, ({ one }) => ({
+  fromResident: one(residents, {
+    fields: [nicknames.fromId],
+    references: [residents.id],
+    relationName: 'nicknames_from', // ★ relationName を明記
+  }),
+  toResident: one(residents, {
+    fields: [nicknames.toId],
+    references: [residents.id],
+    // relationName: 'nicknames_to'
   }),
 }));
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Resident } from '@/types';
+import type { Resident, Relation, Feeling, Nickname, TempRelationData } from '@/types';
 import { listLocal, putLocal, markDeleted } from '@/lib/db-local';
 import { newId } from '@/lib/newId';
 import {
@@ -73,18 +73,123 @@ export function useResident(id: string) {
   return useQuery({ queryKey: [...KEY, id], queryFn: async () => (await fetchResidents()).find((r) => r.id === id) });
 }
 
+// 関係データをまとめて保存するヘルパー関数
+// (useUpsertResident の内部でのみ使用)
+async function saveAllRelationData(
+  currentId: string,
+  relations: Record<string, TempRelationData>,
+  ownerId: string | null | undefined
+) {
+  // ★ 事前に既存データをすべて取得 (ループ内で listLocal すると遅いため)
+  const allRelations = await listLocal<Relation>('relations');
+  const allFeelings = await listLocal<Feeling>('feelings');
+  const allNicknames = await listLocal<Nickname>('nicknames');
+
+  const promises: Promise<any>[] = [];
+  const now = new Date().toISOString();
+
+  for (const [targetId, data] of Object.entries(relations)) {
+    // 1. Relation (関係性)
+    const existingRelation = allRelations.find(r => (r.a_id === currentId && r.b_id === targetId));
+    const relationPayload: Relation = {
+      // @ts-ignore
+      id: existingRelation?.id ?? newId(),
+      a_id: currentId,
+      b_id: targetId,
+      type: data.relationType,
+      updated_at: now,
+      deleted: false,
+      owner_id: ownerId,
+    };
+    promises.push(putLocal('relations', relationPayload));
+
+    // 2. Feeling (自分 -> 相手)
+    const existingFeelingTo = allFeelings.find(f => f.from_id === currentId && f.to_id === targetId);
+    const feelingToPayload: Feeling = {
+      // @ts-ignore
+      id: existingFeelingTo?.id ?? newId(),
+      from_id: currentId,
+      to_id: targetId,
+      label: data.feelingLabelTo,
+      score: data.feelingScoreTo,
+      updated_at: now,
+      deleted: false,
+      owner_id: ownerId,
+    };
+    promises.push(putLocal('feelings', feelingToPayload));
+
+    // 3. Feeling (相手 -> 自分)
+    const existingFeelingFrom = allFeelings.find(f => f.from_id === targetId && f.to_id === currentId);
+    const feelingFromPayload: Feeling = {
+      // @ts-ignore
+      id: existingFeelingFrom?.id ?? newId(),
+      from_id: targetId,
+      to_id: currentId,
+      label: data.feelingLabelFrom,
+      score: data.feelingScoreFrom,
+      updated_at: now,
+      deleted: false,
+      owner_id: ownerId,
+    };
+    promises.push(putLocal('feelings', feelingFromPayload));
+
+    // 4. Nickname (自分 -> 相手)
+    const existingNicknameTo = allNicknames.find(n => n.from_id === currentId && n.to_id === targetId);
+    if (data.nicknameTo.trim()) {
+      const nicknameToPayload: Nickname = {
+        // @ts-ignore
+        id: existingNicknameTo?.id ?? newId(),
+        from_id: currentId,
+        to_id: targetId,
+        nickname: data.nicknameTo.trim(),
+        updated_at: now,
+        deleted: false,
+        owner_id: ownerId,
+      };
+      promises.push(putLocal('nicknames', nicknameToPayload));
+    } else if (existingNicknameTo) {
+      // フォームが空欄 = 削除
+      promises.push(markDeleted('nicknames', existingNicknameTo.id));
+    }
+
+    // 5. Nickname (相手 -> 自分)
+    const existingNicknameFrom = allNicknames.find(n => n.from_id === targetId && n.to_id === currentId);
+    if (data.nicknameFrom.trim()) {
+      const nicknameFromPayload: Nickname = {
+        // @ts-ignore
+        id: existingNicknameFrom?.id ?? newId(),
+        from_id: targetId,
+        to_id: currentId,
+        nickname: data.nicknameFrom.trim(),
+        updated_at: now,
+        deleted: false,
+        owner_id: ownerId,
+      };
+      promises.push(putLocal('nicknames', nicknameFromPayload));
+    } else if (existingNicknameFrom) {
+      // フォームが空欄 = 削除
+      promises.push(markDeleted('nicknames', existingNicknameFrom.id));
+    }
+  }
+
+  // ★ すべてのDB書き込みを並列実行
+  await Promise.all(promises);
+}
+
 export function useUpsertResident() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: Partial<Resident>) => {
-      const id = input.id ?? newId();
+    // ★ 変更: 住民データと関係データを受け取る
+    mutationFn: async (input: { resident: Partial<Resident>, relations?: Record<string, TempRelationData> }) => {
+      const { resident: residentInput, relations: relationsInput } = input;
+      const id = residentInput.id ?? newId();
 
       // ★ 既存のレコードを取得（updated_at などのため）
       const existing = (await listLocal<Resident>('residents')).find(r => r.id === id);
 
       const recordData = {
         ...existing, // 既存の値をベースに
-        ...input,   // 新しい入力で上書き
+        ...residentInput,   // 新しい入力で上書き
         id,
         updated_at: new Date().toISOString(),
         deleted: false,
@@ -92,10 +197,23 @@ export function useUpsertResident() {
 
       // @ts-ignore (型定義が Zod と一致している前提)
       const record = await putLocal('residents', recordData);
+      const currentId = record.id;
+
+      // ★ 追加: 関係データがあれば保存処理を呼び出す
+      if (relationsInput && currentId) {
+        await saveAllRelationData(currentId, relationsInput, record.owner_id);
+      }
+
       return record;
     },
-    onSuccess: () => {
+    onSuccess: (savedResident) => {
+      // ★ 変更: 住民キャッシュを無効化
       void queryClient.invalidateQueries({ queryKey: KEY });
+
+      // ★ 追加: 関連テーブルのキャッシュも無効化
+      void queryClient.invalidateQueries({ queryKey: ['relations'] });
+      void queryClient.invalidateQueries({ queryKey: ['feelings'] });
+      void queryClient.invalidateQueries({ queryKey: ['nicknames'] });
     },
   });
 }

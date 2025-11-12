@@ -8,10 +8,6 @@ export const MbtiEnum = z.enum([
   'ISTP', 'ISFP', 'ESTP', 'ESFP',
 ]);
 
-// ★ 削除: SpeechPresetEnum
-// ★ 削除: OccupationEnum
-// ★ 削除: FirstPersonEnum
-
 export const GenderEnum = z.enum([
   'male',
   'female',
@@ -19,7 +15,6 @@ export const GenderEnum = z.enum([
   'other'
 ]);
 
-// ★ 変更: sleepProfileSchema を新しい定義に
 export const todayScheduleSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // 'YYYY-MM-DD'
   bedtime: z.string().regex(/^\d{2}:\d{2}$/),    // 'HH:mm'
@@ -27,13 +22,10 @@ export const todayScheduleSchema = z.object({
 });
 
 export const sleepProfileSchema = z.object({
-  // (変更) 基準時刻
   baseBedtime: z.string().regex(/^\d{2}:\d{2}$/),
   baseWakeTime: z.string().regex(/^\d{2}:\d{2}$/),
-  
   prepMinutes: z.number().int().min(0).max(180).default(30),
-  
-  // (追加) 毎日抽選されるスケジュール
+  // 毎日抽選されるスケジュール
   todaySchedule: todayScheduleSchema.optional(),
 });
 
@@ -50,29 +42,29 @@ export const residentSchema = baseEntitySchema.extend({
 
   // 5つの性格スライダーは 1〜5（未設定はデフォルト3）
   traits: z.object({
-    sociability:    z.number().int().min(1).max(5).default(3), // 社交性
-    empathy:        z.number().int().min(1).max(5).default(3), // 気配り傾向
-    stubbornness:   z.number().int().min(1).max(5).default(3), // 頑固さ
-    activity:       z.number().int().min(1).max(5).default(3), // 行動力
+    sociability: z.number().int().min(1).max(5).default(3), // 社交性
+    empathy: z.number().int().min(1).max(5).default(3), // 気配り傾向
+    stubbornness: z.number().int().min(1).max(5).default(3), // 頑固さ
+    activity: z.number().int().min(1).max(5).default(3), // 行動力
     expressiveness: z.number().int().min(1).max(5).default(3), // 表現力
   }).partial().default({}),
-  
+
   // ★ 変更: string().uuid() に変更 (presets.id を参照)
   speechPreset: z.string().uuid().optional(),       // 話し方プリセット
-  
+
   // プレイヤーへの信頼度（UI編集不可。後続ロジックで上げ下げ）
   // 0〜100、既定50（中立）
   trustToPlayer: z.number().int().min(0).max(100).default(50),
 
   gender: GenderEnum.optional(),
   age: z.number().int().min(0).max(120).optional(),
-  
+
   // ★ 変更: string().uuid() に変更 (presets.id を参照)
   occupation: z.string().uuid().optional(),
-  
+
   // ★ 変更: string().uuid() に変更 (presets.id を参照)
   firstPerson: z.string().uuid().optional(),
-  
+
   interests: z.array(z.string()).max(20).optional(),
 
   sleepProfile: sleepProfileSchema.optional(),
@@ -84,11 +76,17 @@ export const relationSchema = baseEntitySchema.extend({
   type: z.enum(['none', 'friend', 'best_friend', 'lover', 'family']),
 });
 
-// ... (feelingSchema, eventSchema, syncPayloadSchema は変更なし) ...
 export const feelingSchema = baseEntitySchema.extend({
   from_id: z.string().uuid(),
   to_id: z.string().uuid(),
   label: z.enum(['none', 'dislike', 'curious', 'maybe_like', 'like', 'love', 'awkward']),
+  score: z.number().int().default(0),
+});
+
+export const nicknameSchema = baseEntitySchema.extend({
+  from_id: z.string().uuid(),
+  to_id: z.string().uuid(),
+  nickname: z.string().min(1).max(50),
 });
 
 export const eventSchema = baseEntitySchema.extend({
@@ -109,7 +107,37 @@ export const syncPayloadSchema = z.object({
 export type Resident = z.infer<typeof residentSchema>;
 export type Relation = z.infer<typeof relationSchema>;
 export type Feeling = z.infer<typeof feelingSchema>;
+export type Nickname = z.infer<typeof nicknameSchema>;
 export type EventLog = z.infer<typeof eventSchema>;
 export type SyncPayload = z.infer<typeof syncPayloadSchema>;
 export * from './conversation';
 export * from './base';
+
+export type RelationType = z.infer<typeof relationSchema>['type'];
+export type FeelingLabel = z.infer<typeof feelingSchema>['label'];
+
+/**
+ * 住人フォームで使う、一時的な関係データ（Relation_Sim の tempRelations 相当）
+ */
+export type TempRelationData = {
+  // relations テーブル
+  relationType: RelationType;
+  // feelings テーブル
+  feelingLabelTo: FeelingLabel;
+  feelingScoreTo: number;
+  feelingLabelFrom: FeelingLabel;
+  feelingScoreFrom: number;
+  // nicknames テーブル
+  nicknameTo: string;   // 自分が相手を呼ぶ
+  nicknameFrom: string; // 相手が自分を呼ぶ
+};
+
+// === ★ 5. （任意）リレーションを含む型定義 ★ ===
+// (※これは Drizzle `inferSelect` 版のものを Zod 版に書き換えたものです)
+export type ResidentWithRelations = Resident & {
+  relations: Relation[];
+  feelingsFrom: Feeling[];
+  feelingsTo: Feeling[];
+  nicknamesFrom: Nickname[];
+  nicknamesTo: Nickname[];
+};

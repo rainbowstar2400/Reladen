@@ -1,0 +1,13 @@
+{
+  "version": "6",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1762872163815,
+      "tag": "0000_mean_penance",
+      "breakpoints": true
+    }
+  ]
+}

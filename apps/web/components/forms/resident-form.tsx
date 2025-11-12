@@ -5,11 +5,16 @@ import React from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Resident } from '@/types';
+import type {
+  ResidentWithRelations,
+  TempRelationData,
+  RelationType,
+} from '@/types';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { useUpsertResident } from '@/lib/data/residents';
+import { useUpsertResident, useResidents } from '@/lib/data/residents';
 import { useMemo, useState, useEffect } from 'react';
 import { QUESTIONS, calculateMbti, type Answer } from '@/lib/mbti';
 import { useRouter } from 'next/navigation';
@@ -18,6 +23,12 @@ import { ClickableRatingBox } from '@/components/ui/clickable-rating-box';
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+// ★ 追加: UIコンポーネント
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+// ★ 追加: スキーマ (schema.ts)
+import { relationTypeEnum } from '@/lib/drizzle/schema';
 // ★ TODO: 将来的には usePresets フックなどから動的に取得する
 // import { usePresets } from '@/lib/data/presets';
 
@@ -133,6 +144,15 @@ const residentFormSchema = z.object({
 
 type ResidentFormValues = z.infer<typeof residentFormSchema>;
 
+// Relation_Sim の defaultAffections に相当
+const defaultScores: Record<RelationType, number> = {
+  none: 0,
+  friend: 20,
+  best_friend: 40,
+  lover: 60,
+  family: 60,
+};
+
 // ★ 3. findOrCreatePreset (モック) のシグネチャを変更
 const findOrCreatePreset = async (
   label: string | undefined | null,
@@ -164,14 +184,28 @@ const findOrCreatePreset = async (
   return newId;
 };
 
+// ★ 追加: 初期関係設定のデフォルト値
+const DEFAULT_TEMP_RELATION: TempRelationData = {
+  relationType: 'none',
+  feelingLabelTo: 'none',
+  feelingScoreTo: 50,
+  feelingLabelFrom: 'none',
+  feelingScoreFrom: 50,
+  nicknameTo: '',
+  nicknameFrom: '',
+};
+
 export function ResidentForm({
   defaultValues,
   onSubmitted,
 }: {
-  defaultValues?: Partial<Resident>;
+  // ★ 変更: 編集時は Relation データも受け取る
+  defaultValues?: Partial<Resident>; // ★ 変更: 互換性のため Partial<Resident> に戻す (実際のデータは Step 6 で ResidentWithRelations を期待)
   onSubmitted?: () => void;
 }) {
   const router = useRouter();
+
+  const formDefaultValues = defaultValues as Partial<ResidentWithRelations>;
 
   const speechPresets = MOCK_MANAGED_PRESETS.speech;
   const occupationPresets = MOCK_MANAGED_PRESETS.occupation;
@@ -183,16 +217,16 @@ export function ResidentForm({
     return MOCK_PRESETS_DB[category].find(p => p.id === id);
   };
 
-  const defaultSpeechPreset = findPresetFromDb(defaultValues?.speechPreset, 'speech');
-  const defaultOccPreset = findPresetFromDb(defaultValues?.occupation, 'occupation');
-  const defaultFpPreset = findPresetFromDb(defaultValues?.firstPerson, 'first_person');
+  const defaultSpeechPreset = findPresetFromDb(formDefaultValues?.speechPreset, 'speech');
+  const defaultOccPreset = findPresetFromDb(formDefaultValues?.occupation, 'occupation');
+  const defaultFpPreset = findPresetFromDb(formDefaultValues?.firstPerson, 'first_person');
 
   const form = useForm<ResidentFormValues>({
     resolver: zodResolver(residentFormSchema),
     defaultValues: useMemo(() => {
       const traitsObj =
-        defaultValues?.traits && typeof defaultValues.traits === 'object'
-          ? (defaultValues.traits as any)
+        formDefaultValues?.traits && typeof formDefaultValues.traits === 'object'
+          ? (formDefaultValues.traits as any)
           : { ...DEFAULT_TRAITS };
 
       // ★ 変更: DBの HH:00 (string) をフォームの HH (number | undefined) に
@@ -202,14 +236,14 @@ export function ResidentForm({
         return isNaN(hour) ? undefined : hour; // ★ '' -> undefined
       };
 
-      const currentSleepProfile = (defaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
+      const currentSleepProfile = (formDefaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
 
       return {
-        ...defaultValues,
-        name: defaultValues?.name ?? '',
-        mbti: defaultValues?.mbti ?? '',
+        ...formDefaultValues,
+        name: formDefaultValues?.name ?? '',
+        mbti: formDefaultValues?.mbti ?? '',
         traits: traitsObj,
-        trustToPlayer: defaultValues?.trustToPlayer ?? 50,
+        trustToPlayer: formDefaultValues?.trustToPlayer ?? 50,
 
         speechPreset: defaultSpeechPreset?.label ?? '',
         speechPresetDescription: defaultSpeechPreset?.description ?? '',
@@ -219,14 +253,123 @@ export function ResidentForm({
         isSpeechPresetManaged: false,
         isOccupationManaged: false,
         isFirstPersonManaged: false,
-        interests: defaultValues?.interests?.map(val => ({ value: val })) ?? [],
+        interests: formDefaultValues?.interests?.map(val => ({ value: val })) ?? [],
 
         // ★ 変更: 変換関数を使い、デフォルトを undefined ('' ではない) に
         sleepBedtime: timeToHour(currentSleepProfile.baseBedtime),
         sleepWakeTime: timeToHour(currentSleepProfile.baseWakeTime),
       };
-    }, [defaultValues]),
+    }, [formDefaultValues]),
   });
+
+  // ★ 1. 他の住人リストを取得 (自分を除く)
+  const { data: allResidents } = useResidents();
+  const otherResidents = useMemo(() => {
+    if (!allResidents) return [];
+    // formDefaultValues.id (編集中の住人ID) があれば、それを除外
+    const currentId = formDefaultValues?.id;
+    if (currentId) {
+      return allResidents.filter(r => r.id !== currentId);
+    }
+    // 新規作成時は空リスト (自分を保存するまで関係設定は不可)
+    return [];
+  }, [allResidents, formDefaultValues?.id]);
+
+  // ★ 2. フォーム内の関係設定を管理する State (★ 変更: 初期化ロジック)
+  const [tempRelations, setTempRelations] = useState<Record<string, TempRelationData>>(() => {
+    // ★ 変更:
+    // defaultValues.initialRelations (加工済み) ではなく、
+    // defaultValues (DBからの生データ) と otherResidents から
+    // フォーム用の tempRelations を「生成」する
+    return initializeTempRelations(formDefaultValues, otherResidents);
+  });
+
+  // ★ 3. (追加) defaultValues や otherResidents が非同期でロードされたら State を再同期
+  // (useState の遅延初期化は一度しか実行されないため、
+  //  DBデータ (formDefaultValues) や住人リスト (otherResidents) が
+  //  後からロードされた場合に備えて Effect で再設定する)
+  useEffect(() => {
+    // 既存の tempRelations (ユーザーが編集中の可能性) とマージする
+    const newRelations = initializeTempRelations(formDefaultValues, otherResidents);
+
+    // 既存の値を尊重しつつ、新しい初期値をマージする
+    setTempRelations(prev => {
+      const merged = { ...newRelations };
+      // ユーザーが既に編集した値 (prev) があれば、そちらを優先する
+      // (ただし、この例では簡潔さのため newRelations で上書き)
+      // ※より厳密には new と prev の deep merge が必要だが、
+      // フォームロード時の一回限りの初期化と割り切る
+      return newRelations;
+    });
+
+  }, [formDefaultValues, otherResidents]); // 依存配列に
+
+  // ★ 3. 関係設定の State を更新するヘルパー
+  const handleRelationChange = (
+    targetId: string,
+    field: keyof TempRelationData,
+    value: string | number | RelationType
+  ) => {
+    setTempRelations(prev => {
+      // ターゲットIDの現在の設定 (なければデフォルト)
+      const currentRelation = prev[targetId] ?? { ...DEFAULT_TEMP_RELATION };
+      // 特定のフィールドを更新
+      const updatedRelation = { ...currentRelation, [field]: value };
+
+      return {
+        ...prev,
+        [targetId]: updatedRelation,
+      };
+    });
+  };
+
+  // ★ 4. (追加) 初期化ロジック (コンポーネント内ヘルパー)
+  function initializeTempRelations(
+    defaults: Partial<ResidentWithRelations>,
+    others: Resident[]
+  ): Record<string, TempRelationData> {
+
+    // 編集モードでない、または他の住人がいない場合は空
+    if (!defaults.id || !others || others.length === 0) {
+      return {};
+    }
+
+    const currentId = defaults.id;
+    const initial: Record<string, TempRelationData> = {};
+
+    // DBからロードした生の配列データ
+    const relationsArr = defaults.relations ?? [];
+    const feelingsFromArr = defaults.feelingsFrom ?? []; // 自分 -> 相手
+    const feelingsToArr = defaults.feelingsTo ?? [];     // 相手 -> 自分
+    const nicknamesToArr = defaults.nicknamesTo ?? [];   // 自分が相手を呼ぶ
+    const nicknamesFromArr = defaults.nicknamesFrom ?? []; // 相手が自分を呼ぶ
+
+    for (const target of others) {
+      const targetId = target.id;
+
+      // 該当するデータを探す
+      const relation = relationsArr.find(r => r.b_id === targetId);
+      const feelingTo = feelingsFromArr.find(f => f.to_id === targetId);
+      const feelingFrom = feelingsToArr.find(f => f.from_id === targetId);
+      const nicknameTo = nicknamesToArr.find(n => n.to_id === targetId);
+      const nicknameFrom = nicknamesFromArr.find(n => n.from_id === targetId);
+
+      // フォーム用の TempRelationData を構築
+      initial[targetId] = {
+        relationType: relation?.type ?? 'none',
+
+        feelingLabelTo: feelingTo?.label ?? 'none',
+        feelingScoreTo: feelingTo?.score ?? 50, // ★ score を参照 (デフォルト 50)
+
+        feelingLabelFrom: feelingFrom?.label ?? 'none',
+        feelingScoreFrom: feelingFrom?.score ?? 50, // ★ score を参照 (デフォルト 50)
+
+        nicknameTo: nicknameTo?.nickname ?? '',
+        nicknameFrom: nicknameFrom?.nickname ?? '',
+      };
+    }
+    return initial;
+  };
 
   // ... (診断パネルのロジックは変更なし) ...
   // 診断パネルの開閉と、各設問のスコア（1〜5、初期値は中立3）
@@ -275,7 +418,7 @@ export function ResidentForm({
       return String(hour).padStart(2, '0') + ':00';
     };
 
-    const currentSleepProfile = (defaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
+    const currentSleepProfile = (formDefaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
 
     const sleepProfile =
       (values.sleepBedtime != null && values.sleepWakeTime != null) // 0 (0時) も許可
@@ -306,7 +449,11 @@ export function ResidentForm({
       ...(sleepProfile ? { sleepProfile } : {}),
     };
 
-    const saved = await upsert.mutateAsync(payload);
+    // ★ 変更: 住民データ (payload) と関係データ (tempRelations) を渡す
+    const saved = await upsert.mutateAsync({
+      resident: payload,
+      relations: tempRelations,
+    });
 
     // (モック) 保存されたUUIDからプリセットを探す
     const findPreset = (id: string | undefined, category: 'speech' | 'occupation' | 'first_person'): ManagedPreset | undefined => {
@@ -319,7 +466,7 @@ export function ResidentForm({
     const savedOccPreset = findPreset(saved.occupation, 'occupation');
     const savedFpPreset = findPreset(saved.firstPerson, 'first_person');
 
-    // ★ 変更: 変換ヘルパー (defaultValues と同じ)
+    // ★ 変更: 変換ヘルパー (formDefaultValues と同じ)
     const timeToHour = (time: string | undefined): number | undefined => {
       if (!time) return undefined; // ★ '' -> undefined
       const hour = parseInt(time.split(':')[0], 10);
@@ -989,7 +1136,147 @@ export function ResidentForm({
           }}
         />
       </div>
-      
+
+      {/* 初期関係設定 */}
+      {/* 新規作成時 (IDなし) は表示しない */}
+      {formDefaultValues?.id && (<
+        div className="space-y-4 pt-2 border-t">
+        <h3 className="text-sm font-semibold">元々の関係の設定</h3>
+        <p className="text-xs text-muted-foreground">
+          この住人({formDefaultValues.name || '...'})が他の住人と既に持っている関係性を登録します。
+        </p>
+
+        {/* 他の住人がいない場合 */}
+        {otherResidents.length === 0 && (
+          <p className="text-sm text-muted-foreground italic">
+            （他に設定可能な住人がいません）
+          </p>
+        )}
+
+        {/* 他の住人リストをループ */}
+        <div className="space-y-4">
+          {otherResidents.map((target) => {
+            const currentRel = tempRelations[target.id] ?? DEFAULT_TEMP_RELATION;
+            const thisName = formDefaultValues.name || '住人';
+            const targetName = target.name;
+
+            return (
+              <Card key={target.id}>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {target.name} との関係
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+
+                  {/* 1. 関係性 (Select) */}
+                  <div className="space-y-2">
+                    <Label>関係性</Label>
+                    <Select
+                      value={currentRel.relationType}
+                      onValueChange={(value: RelationType) =>
+                        handleRelationChange(target.id, 'relationType', value)
+                      }
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {relationTypeEnum.enumValues.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* 2. 好感度 (双方向スライダー) */}
+                  <div className="space-y-4">
+                    {/* 2a. 自分 -> 相手 */}
+                    <div className="space-y-2">
+                      <Label htmlFor={`score-to-${target.id}`}>
+                        {thisName} → {targetName} の好感度 ({currentRel.feelingScoreTo})
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">0</span>
+                        <Slider
+                          id={`score-to-${target.id}`}
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={[currentRel.feelingScoreTo]}
+                          onValueChange={([value]) =>
+                            handleRelationChange(target.id, 'feelingScoreTo', value)
+                          }
+                        />
+                        <span className="text-xs text-muted-foreground">100</span>
+                      </div>
+                    </div>
+
+                    {/* 2b. 相手 -> 自分 */}
+                    <div className="space-y-2">
+                      <Label htmlFor={`score-from-${target.id}`}>
+                        {thisName} ← {targetName} の好感度 ({currentRel.feelingScoreFrom})
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">0</span>
+                        <Slider
+                          id={`score-from-${target.id}`}
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={[currentRel.feelingScoreFrom]}
+                          onValueChange={([value]) =>
+                            handleRelationChange(target.id, 'feelingScoreFrom', value)
+                          }
+                        />
+                        <span className="text-xs text-muted-foreground">100</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. 呼び方 (双方向入力) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* 3a. 自分 -> 相手 */}
+                    <div className="space-y-2">
+                      <Label htmlFor={`nick-to-${target.id}`}>
+                        {thisName} から {targetName} への呼び方
+                      </Label>
+                      <Input
+                        id={`nick-to-${target.id}`}
+                        placeholder={`例: ${targetName}さん`}
+                        value={currentRel.nicknameTo}
+                        onChange={(e) =>
+                          handleRelationChange(target.id, 'nicknameTo', e.target.value)
+                        }
+                      />
+                    </div>
+
+                    {/* 3b. 相手 -> 自分 */}
+                    <div className="space-y-2">
+                      <Label htmlFor={`nick-from-${target.id}`}>
+                        {targetName} から {thisName} への呼び方
+                      </Label>
+                      <Input
+                        id={`nick-from-${target.id}`}
+                        placeholder={`例: ${thisName}ちゃん`}
+                        value={currentRel.nicknameFrom}
+                        onChange={(e) =>
+                          handleRelationChange(target.id, 'nicknameFrom', e.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+      )}
+
       <div className="flex justify-end gap-2">
         <Button type="submit" disabled={upsert.isPending}>
           {upsert.isPending ? '保存中…' : '保存'}
