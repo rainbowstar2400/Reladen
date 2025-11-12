@@ -66,7 +66,7 @@ const RatingBoxDisplay = ({ value }: { value: number }) => (
         className={`h-5 w-5 rounded
           ${index < value
             ? 'bg-primary text-primary-foreground' // アクティブなボックス
-            : 'bg-muted' // 非アクティブなボックス
+            : 'bg-neutral-200 dark:bg-neutral-700' // 非アクティブなボックス
           }
         `}
       />
@@ -127,7 +127,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   const firstPersonPreset = findPresetFromDb(resident.firstPerson, 'first_person');
 
   const sleepProfile = (resident.sleepProfile ?? {}) as Partial<SleepProfile>;
-  //traits にデフォルト値をマージ (DBに traits が null の場合に対応)
+  // ★ traits にデフォルト値をマージ (DBに traits が null の場合に対応)
   const traits = { ...DEFAULT_TRAITS, ...(resident.traits as any) };
   // --- (ここまで) プリセットIDからラベルを取得 ---
 
@@ -183,6 +183,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
 
       {/* --- タブ（詳細情報） --- */}
       <Tabs defaultValue="profile">
+        {/* タブの構成を変更 */}
         <TabsList>
           <TabsTrigger value="profile">プロフィール</TabsTrigger>
           <TabsTrigger value="relations">関係</TabsTrigger>
@@ -193,7 +194,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
         <TabsContent value="profile">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-            {/* 左側カラム (基本情報、睡眠) */}
+            {/* 基本情報、会話 */}
             <div className="space-y-6">
 
               {/* 基本情報 */}
@@ -209,24 +210,6 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
                   </dl>
                 </CardContent>
               </Card>
-
-              {/* 睡眠 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>睡眠</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
-                  <dl className="space-y-3">
-                    <ProfileRow label="就寝" value={sleepProfile.baseBedtime ? `${parseInt(sleepProfile.baseBedtime.split(':')[0], 10)} 時頃` : null} />
-                    <ProfileRow label="起床" value={sleepProfile.baseWakeTime ? `${parseInt(sleepProfile.baseWakeTime.split(':')[0], 10)} 時頃` : null} />
-                  </dl>
-                </CardContent>
-              </Card>
-
-            </div>
-
-            {/* 会話、パーソナリティ */}
-            <div className="space-y-6">
 
               {/* 会話 */}
               <Card>
@@ -269,29 +252,51 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
                 </CardContent>
               </Card>
 
+            </div>
+
+            {/* 睡眠、パーソナリティ */}
+            <div className="space-y-6">
+
+              {/* 睡眠 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>睡眠</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <dl className="space-y-3">
+                    <ProfileRow label="就寝" value={sleepProfile.baseBedtime ? `${parseInt(sleepProfile.baseBedtime.split(':')[0], 10)} 時頃` : null} />
+                    <ProfileRow label="起床" value={sleepProfile.baseWakeTime ? `${parseInt(sleepProfile.baseWakeTime.split(':')[0], 10)} 時頃` : null} />
+                  </dl>
+                </CardContent>
+              </Card>
+
               {/* パーソナリティ */}
               <Card>
                 <CardHeader>
                   <CardTitle>パーソナリティ</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 text-sm">
-                  <dl className="space-y-4"> {/* 項目間のスペースを調整 */}
+                  {/* dl で全体を囲み、ProfileRow を使う */}
+                  <dl className="space-y-4">
                     <ProfileRow label="MBTI" value={resident.mbti} />
 
-                    {/* 性格パラメータ (Traits) */}
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium text-muted-foreground">性格パラメータ</p>
-                      <div className="space-y-3 pt-2">
-                        {(Object.keys(TRAIT_LABELS) as Array<keyof typeof TRAIT_LABELS>).map((key) => (
-                          <div key={key} className="grid grid-cols-5 items-center gap-3">
-                            <label className="col-span-2 text-sm">{TRAIT_LABELS[key]}</label>
-                            <div className="col-span-3">
-                              <RatingBoxDisplay value={traits[key]} />
+                    {/* ProfileRow を使い、isBlock={true} でレイアウトを統一 */}
+                    <ProfileRow
+                      label="性格パラメータ"
+                      isBlock={true}
+                      value={
+                        <div className="space-y-3 pt-1"> {/* pt-1 を追加 (ラベルとの間隔) */}
+                          {(Object.keys(TRAIT_LABELS) as Array<keyof typeof TRAIT_LABELS>).map((key) => (
+                            <div key={key} className="grid grid-cols-5 items-center gap-3">
+                              <label className="col-span-2 text-sm">{TRAIT_LABELS[key]}</label>
+                              <div className="col-span-3">
+                                <RatingBoxDisplay value={traits[key]} />
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                          ))}
+                        </div>
+                      }
+                    />
                   </dl>
                 </CardContent>
               </Card>
@@ -331,7 +336,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
                 {relatedFeelings.map((feeling) => (
                   <div key={feeling.id} className="rounded border p-2">
                     <p>
-                      {feeling.from_id === residentId ? 'この住人 → 相手' : '相手 → この住人'} :{' '}
+                      {feeling.from_id === residentId ? 'この住人 → T' : '相手 → この住人'} :{' '}
                       <Badge>{feeling.label}</Badge>
                     </p>
                     <p className="text-xs text-muted-foreground">相手ID: {feeling.from_id === residentId ? feeling.to_id : feeling.from_id}</p>
