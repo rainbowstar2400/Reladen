@@ -270,21 +270,6 @@ export function ResidentForm({
   });
 
   const { formState } = form;
-
-  useEffect(() => {
-    // フォームが変更されている (isDirty) ときだけ警告を出す
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (formState.isDirty) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [formState.isDirty]);
-
   const isFormDirty = formState.isDirty;
 
   useEffect(() => {
