@@ -28,7 +28,7 @@ function hmToMinutes(hm: string): number {
     }
   }
   // それ以外 (undefined, null, ':' がない等) は安全な値 (0時 = 0) を返す
-  console.warn(`Invalid hmToMinutes input: ${hm}. Defaulting to 0.`);
+  // フォームとは違い、こちらは0時を返すのが安全
   return 0;
 }
 
@@ -167,4 +167,22 @@ export function calcSituation(
   if (inRange(bed, wake, n)) return 'sleeping';
   if (inRange(prepStart, bed, n)) return 'preparing';
   return 'active';
+}
+
+// (古い schedule.ts から移管)
+export type ActivityTendency = 'morning' | 'normal' | 'night';
+
+/**
+ * (移管) 傾向からデフォルトの「基準」睡眠プロファイル(BaseSleepProfile)を生成する
+ * ★ キー名を `bedtime` -> `baseBedtime` に変更
+ */
+export function defaultSleepByTendency(t: ActivityTendency): BaseSleepProfile {
+  switch (t) {
+    case 'morning':
+      return { baseBedtime: '22:30', baseWakeTime: '06:30', prepMinutes: 30 };
+    case 'night':
+      return { baseBedtime: '02:30', baseWakeTime: '10:30', prepMinutes: 45 };
+    default:
+      return { baseBedtime: '00:00', baseWakeTime: '08:00', prepMinutes: 30 };
+  }
 }

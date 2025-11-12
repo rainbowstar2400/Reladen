@@ -7,7 +7,15 @@ import { MessageSquare, Cloud, AlertTriangle, Moon } from 'lucide-react';
 import React, { useMemo } from 'react';
 import NotificationsSectionClient from '@/components/notifications/NotificationsSection.client';
 import { Suspense } from 'react';
-import { calcSituation, defaultSleepByTendency, type Situation } from '@/lib/schedule';
+import {
+  calcSituation,
+  defaultSleepByTendency,
+  getOrGenerateTodaySchedule,
+  type Situation,
+  type SleepProfile,
+  type BaseSleepProfile,
+  type ActivityTendency,
+} from '../../../../../packages/shared/logic/schedule';
 import { useEffect, useState } from 'react';
 import { listLocal } from '@/lib/db-local';
 import type { Resident } from '@/types';
@@ -106,7 +114,33 @@ export default function HomePage() {
     let alive = true;
     (async () => {
       const rows = await listLocal('residents');
-      if (alive) setResidents(rows as Resident[]);
+      if (!alive) return;
+
+      // ★ 追加: 読み込んだデータを処理し、「今日のスケジュール」を確定させる
+      const processedResidents = rows.map(r => {
+        let profile: SleepProfile | undefined = (r as any).sleepProfile;
+
+        // 1. もし sleepProfile がないなら、傾向(tendency)からデフォルトを生成
+        if (!profile && (r as any).activityTendency) {
+          profile = defaultSleepByTendency(
+            (r as any).activityTendency as ActivityTendency
+          );
+        }
+
+        // 2. プロファイルが確定したら、「今日のスケジュール」を（必要なら）生成
+        if (profile) {
+          // getOrGenerateTodaySchedule は純粋な関数（DB更新しない）
+          const { profile: updatedProfile } = getOrGenerateTodaySchedule(profile);
+          // 処理済みのプロファイルを resident オブジェクトに戻す
+          return { ...r, sleepProfile: updatedProfile };
+        }
+
+        return r; // プロファイルがない住人はそのまま返す
+      });
+
+      if (alive) {
+        setResidents(processedResidents as Resident[]);
+      }
     })();
     return () => { alive = false; };
   }, []);
@@ -116,16 +150,15 @@ export default function HomePage() {
   const residentsWithSituation = useMemo(
     () =>
       residents.map((r) => {
-        // Resident 側に sleepProfile / activityTendency がある場合は calcSituation を使用
-        // どちらも無い場合は「活動中」フォールバック
-        const hasProfile = (r as any).sleepProfile || (r as any).activityTendency;
+        const profile = (r as any).sleepProfile as SleepProfile | undefined;
         let sit: Situation;
-        if (hasProfile) {
-          const base =
-            (r as any).sleepProfile ??
-            defaultSleepByTendency((r as any).activityTendency ?? 'normal');
-          sit = calcSituation(now, base);
+
+        // useEffect で処理済みのプロファイルがあるか確認
+        if (profile && profile.todaySchedule) {
+          // ★ 新しい calcSituation を呼ぶ
+          sit = calcSituation(now, profile);
         } else {
+          // プロファイルがないか、今日のスケジュールが生成できなかった場合
           sit = 'active';
         }
 
@@ -136,7 +169,7 @@ export default function HomePage() {
         };
         return { r: lite, sit };
       }),
-    [residents, now]
+    [residents, now] // tick で 'now' が更新されるたびに再計算
   );
 
 
