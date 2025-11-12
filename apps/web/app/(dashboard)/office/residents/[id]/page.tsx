@@ -21,6 +21,7 @@ const MOCK_PRESETS_DB: Record<'speech' | 'occupation' | 'first_person', ManagedP
   speech: [
     { id: 'uuid-s1', label: 'ていねい', description: '常に敬語を使い、相手を尊重する話し方。', isManaged: true },
     { id: 'uuid-s2', label: 'くだけた', description: '友人や親しい人との間で使われる、フレンドリーな話し方。', isManaged: true },
+    { id: 'uuid-s3-temp', label: '武士（ござる）', description: '語尾に「ござる」を付ける。', isManaged: false }, // 非管理
   ],
   occupation: [
     { id: 'uuid-o1', label: '学生', isManaged: true },
@@ -39,6 +40,40 @@ const findPresetFromDb = (id: string | undefined, category: 'speech' | 'occupati
 };
 // --- (ここまで) resident-form.tsx からモックデータとヘルパーを一時的に拝借 ---
 
+// --- (ここから) traits の日本語ラベルと表示用コンポーネント ---
+const DEFAULT_TRAITS = {
+  sociability: 3,    // 社交性
+  empathy: 3,        // 気配り
+  stubbornness: 3,   // 頑固さ
+  activity: 3,       // 行動力
+  expressiveness: 3, // 表現力
+} as const;
+
+const TRAIT_LABELS: Record<keyof typeof DEFAULT_TRAITS, string> = {
+  sociability: '社交性',
+  empathy: '気配り',
+  stubbornness: '頑固さ',
+  activity: '行動力',
+  expressiveness: '表現力',
+};
+
+// ★ 表示用の簡易レーティングボックス
+const RatingBoxDisplay = ({ value }: { value: number }) => (
+  <div className="flex space-x-1">
+    {Array.from({ length: 5 }).map((_, index) => (
+      <div
+        key={index}
+        className={`h-5 w-5 rounded
+          ${index < value
+            ? 'bg-primary text-primary-foreground' // アクティブなボックス
+            : 'bg-muted' // 非アクティブなボックス
+          }
+        `}
+      />
+    ))}
+  </div>
+);
+// --- (ここまで) traits の日本語ラベルと表示用コンポーネント ---
 
 // --- (ここから) 表示用のヘルパーコンポーネント (ProfileRow) ---
 // フォームのレイアウトに似せるため、ラベルと値を表示する行コンポーネント
@@ -92,6 +127,8 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   const firstPersonPreset = findPresetFromDb(resident.firstPerson, 'first_person');
 
   const sleepProfile = (resident.sleepProfile ?? {}) as Partial<SleepProfile>;
+  //traits にデフォルト値をマージ (DBに traits が null の場合に対応)
+  const traits = { ...DEFAULT_TRAITS, ...(resident.traits as any) };
   // --- (ここまで) プリセットIDからラベルを取得 ---
 
 
@@ -146,18 +183,17 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
 
       {/* --- タブ（詳細情報） --- */}
       <Tabs defaultValue="profile">
-        {/* ★ タブの構成を変更 */}
         <TabsList>
           <TabsTrigger value="profile">プロフィール</TabsTrigger>
           <TabsTrigger value="relations">関係</TabsTrigger>
           <TabsTrigger value="recent_changes">最近の変化</TabsTrigger>
         </TabsList>
 
-        {/* ★ 「プロフィール」タブ */}
+        {/* 「プロフィール」タブ */}
         <TabsContent value="profile">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-            {/* 左側カラム (基本情報、会話、睡眠) */}
+            {/* 左側カラム (基本情報、睡眠) */}
             <div className="space-y-6">
 
               {/* 基本情報 */}
@@ -173,6 +209,24 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
                   </dl>
                 </CardContent>
               </Card>
+
+              {/* 睡眠 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>睡眠</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <dl className="space-y-3">
+                    <ProfileRow label="就寝" value={sleepProfile.baseBedtime ? `${parseInt(sleepProfile.baseBedtime.split(':')[0], 10)} 時頃` : null} />
+                    <ProfileRow label="起床" value={sleepProfile.baseWakeTime ? `${parseInt(sleepProfile.baseWakeTime.split(':')[0], 10)} 時頃` : null} />
+                  </dl>
+                </CardContent>
+              </Card>
+
+            </div>
+
+            {/* 会話、パーソナリティ */}
+            <div className="space-y-6">
 
               {/* 会話 */}
               <Card>
@@ -215,42 +269,29 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
                 </CardContent>
               </Card>
 
-              {/* 睡眠 */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>睡眠</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
-                  <dl className="space-y-3">
-                    <ProfileRow label="就寝" value={sleepProfile.baseBedtime ? `${parseInt(sleepProfile.baseBedtime.split(':')[0], 10)} 時頃` : null} />
-                    <ProfileRow label="起床" value={sleepProfile.baseWakeTime ? `${parseInt(sleepProfile.baseWakeTime.split(':')[0], 10)} 時頃` : null} />
-                  </dl>
-                </CardContent>
-              </Card>
-
-            </div>
-
-            {/* 右側カラム (パーソナリティ) */}
-            <div className="space-y-6">
+              {/* パーソナリティ */}
               <Card>
                 <CardHeader>
                   <CardTitle>パーソナリティ</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4 text-sm">
-                  <dl className="space-y-3">
+                  <dl className="space-y-4"> {/* 項目間のスペースを調整 */}
                     <ProfileRow label="MBTI" value={resident.mbti} />
 
                     {/* 性格パラメータ (Traits) */}
-                    {/* TODO: フォームの ClickableRatingBox のような表示系コンポーネントが望ましい */}
-                    <ProfileRow
-                      label="性格パラメータ"
-                      isBlock={true}
-                      value={
-                        <pre className="mt-1 max-h-60 overflow-auto rounded bg-muted p-3 text-xs font-mono">
-                          {JSON.stringify(resident.traits ?? {}, null, 2)}
-                        </pre>
-                      }
-                    />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-muted-foreground">性格パラメータ</p>
+                      <div className="space-y-3 pt-2">
+                        {(Object.keys(TRAIT_LABELS) as Array<keyof typeof TRAIT_LABELS>).map((key) => (
+                          <div key={key} className="grid grid-cols-5 items-center gap-3">
+                            <label className="col-span-2 text-sm">{TRAIT_LABELS[key]}</label>
+                            <div className="col-span-3">
+                              <RatingBoxDisplay value={traits[key]} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </dl>
                 </CardContent>
               </Card>
@@ -258,7 +299,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
           </div>
         </TabsContent>
 
-        {/* ★ 「関係」タブ */}
+        {/* 「関係」タブ */}
         <TabsContent value="relations">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* 関係一覧 */}
@@ -280,7 +321,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
               </CardContent>
             </Card>
 
-            {/* ★ 感情ラベル (ここに移動) */}
+            {/* 感情ラベル */}
             <Card>
               <CardHeader>
                 <CardTitle>感情ラベル</CardTitle>
@@ -301,7 +342,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
           </div>
         </TabsContent>
 
-        {/* ★ 「最近の変化」タブ (中身は空) */}
+        {/* 「最近の変化」タブ (中身は空) */}
         <TabsContent value="recent_changes">
           <Card>
             <CardHeader>
