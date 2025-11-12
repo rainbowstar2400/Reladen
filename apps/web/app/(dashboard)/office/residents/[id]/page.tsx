@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useResident, useDeleteResident } from '@/lib/data/residents';
+import { useResident, useDeleteResident, useResidents } from '@/lib/data/residents';
 import { useRelations } from '@/lib/data/relations';
 import { useFeelings } from '@/lib/data/feelings';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 // import { ResidentForm } from '@/components/forms/resident-form'; // フォームを削除
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowLeft, Pencil } from 'lucide-react'; // アイコンを追加
+import { Loader2, ArrowLeft, Pencil, ChevronRight } from 'lucide-react'; // アイコンを追加
+import { useMemo } from 'react';
 import Link from 'next/link'; // Linkを追加
 import { SleepProfile } from '../../../../../../../packages/shared/logic/schedule'; // 型をインポート
 
@@ -105,11 +106,37 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   const router = useRouter();
   const residentId = params.id;
   const { data: resident, isLoading } = useResident(residentId);
+  // ★ 全住人リストを取得
+  const { data: allResidents } = useResidents();
   const { data: relations } = useRelations();
   const { data: feelings } = useFeelings();
   const remove = useDeleteResident();
 
-  if (isLoading) {
+  // ★ (ここから) ID/名前マップと印象マップを作成
+  const residentNameMap = useMemo(() => {
+    if (!allResidents) return new Map<string, string>();
+    return new Map(allResidents.map(r => [r.id, r.name ?? '（名前なし）']));
+  }, [allResidents]);
+
+  const relatedRelations = relations?.filter((relation) => [relation.a_id, relation.b_id].includes(residentId)) ?? [];
+  const relatedFeelings = feelings?.filter((feeling) => feeling.from_id === residentId || feeling.to_id === residentId) ?? [];
+
+  const feelingMap = useMemo(() => {
+    if (!relatedFeelings) return new Map<string, string>();
+    const map = new Map<string, string>();
+    // この住人 (residentId) から相手 (to_id) への感情をマップする
+    for (const feeling of relatedFeelings) {
+      if (feeling.from_id === residentId) {
+        map.set(feeling.to_id, feeling.label);
+      }
+    }
+    return map;
+  }, [relatedFeelings, residentId]);
+  // ★ (ここまで) ID/名前マップと印象マップを作成
+
+
+  // ★ allResidents のロードも待つ
+  if (isLoading || !allResidents) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> 読み込み中…
@@ -130,10 +157,6 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   // ★ traits にデフォルト値をマージ (DBに traits が null の場合に対応)
   const traits = { ...DEFAULT_TRAITS, ...(resident.traits as any) };
   // --- (ここまで) プリセットIDからラベルを取得 ---
-
-
-  const relatedRelations = relations?.filter((relation) => [relation.a_id, relation.b_id].includes(residentId)) ?? [];
-  const relatedFeelings = feelings?.filter((feeling) => feeling.from_id === residentId || feeling.to_id === residentId) ?? [];
 
   // --- (ここから) 性別ラベルの定義 ---
   const GENDER_LABELS: Record<string, string> = {
@@ -306,45 +329,59 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
 
         {/* 「関係」タブ */}
         <TabsContent value="relations">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 関係一覧 */}
-            <Card>
-              <CardHeader>
-                <CardTitle>関係一覧</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {relatedRelations.length === 0 && <p className="text-muted-foreground">まだ関係が登録されていません。</p>}
-                {relatedRelations.map((relation) => {
-                  const partnerId = relation.a_id === residentId ? relation.b_id : relation.a_id;
-                  return (
-                    <div key={relation.id} className="flex items-center justify-between rounded border p-2">
-                      <span>相手ID: {partnerId}</span>
-                      <Badge>{relation.type}</Badge>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>関係一覧</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {relatedRelations.length === 0 ? (
+                <p className="text-sm text-muted-foreground">まだ関係が登録されていません。</p>
+              ) : (
+                <div className="space-y-2">
+                  {relatedRelations.map((relation) => {
+                    const partnerId = relation.a_id === residentId ? relation.b_id : relation.a_id;
+                    const partnerName = residentNameMap.get(partnerId) ?? `ID: ${partnerId}`;
+                    // この住人 (residentId) から相手 (partnerId) への印象を取得
+                    const impression = feelingMap.get(partnerId);
 
-            {/* 感情ラベル */}
-            <Card>
-              <CardHeader>
-                <CardTitle>感情ラベル</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {relatedFeelings.length === 0 && <p className="text-muted-foreground">まだ感情が登録されていません。</p>}
-                {relatedFeelings.map((feeling) => (
-                  <div key={feeling.id} className="rounded border p-2">
-                    <p>
-                      {feeling.from_id === residentId ? 'この住人 → T' : '相手 → この住人'} :{' '}
-                      <Badge>{feeling.label}</Badge>
-                    </p>
-                    <p className="text-xs text-muted-foreground">相手ID: {feeling.from_id === residentId ? feeling.to_id : feeling.from_id}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
+                    return (
+                      <div
+                        key={relation.id}
+                        className="flex items-center justify-between rounded border p-3"
+                      >
+                        <div className="flex flex-col md:flex-row md:items-center md:gap-4">
+                          {/* 相手住人の名前 */}
+                          <span className="font-medium">{partnerName}</span>
+
+                          {/* 関係性 */}
+                          <Badge variant="outline">{relation.type}</Badge>
+
+                          {/* 印象 */}
+                          <div className="text-sm text-muted-foreground mt-1 md:mt-0">
+                            <span className="mr-1">印象:</span>
+                            {impression ? (
+                              <Badge variant="secondary">{impression}</Badge>
+                            ) : (
+                              '（未設定）'
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 詳細ボタン */}
+                        <Button variant="ghost" size="sm" asChild>
+                          {/* TODO: 関係詳細画面のパスを指定する */}
+                          <Link href={`/office/relations/${relation.id}`}> {/* 仮のパス */}
+                            詳細
+                            <ChevronRight className="h-4 w-4 ml-1" />
+                          </Link>
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* 「最近の変化」タブ (中身は空) */}
