@@ -278,10 +278,6 @@ export function ResidentForm({
   useEffect(() => {
     setGlobalDirty(isFormDirty);
 
-    // コンポーネントがアンマウントされるとき (ページ遷移が完了したとき) に、必ずグローバル状態をリセットする
-    return () => {
-      setGlobalDirty(false);
-    };
   }, [isFormDirty, setGlobalDirty]);
 
   // ブラウザ操作 (リロード/戻る) の監視フックを呼び出す
