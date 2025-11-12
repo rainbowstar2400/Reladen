@@ -1277,13 +1277,14 @@ export function ResidentForm({
           </div>
         </div>
         )}
-      </form>
 
-      <div className="flex justify-end gap-2">
-        <Button type="submit" disabled={upsert.isPending}>
-          {upsert.isPending ? '保存中…' : '保存'}
-        </Button>
-      </div>
+        <div className="flex justify-end gap-2">
+          <Button type="submit" disabled={upsert.isPending}>
+            {upsert.isPending ? '保存中…' : '保存'}
+          </Button>
+        </div>
+
+      </form>
 
       {/* --- 診断パネル (MBTI診断) --- */}
       {/* (前回修正した ClickableRatingBox が使われている状態) */}
