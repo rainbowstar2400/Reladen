@@ -231,7 +231,9 @@ export function ResidentForm({
 
       // ★ 変更: DBの HH:00 (string) をフォームの HH (number | undefined) に
       const timeToHour = (time: string | undefined): number | undefined => {
-        if (!time) return undefined; // ★ '' -> undefined
+        if (typeof time !== 'string' || time.length === 0) {
+          return undefined;
+        }
         const hour = parseInt(time.split(':')[0], 10);
         return isNaN(hour) ? undefined : hour; // ★ '' -> undefined
       };
