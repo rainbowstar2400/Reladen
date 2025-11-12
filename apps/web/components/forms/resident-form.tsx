@@ -274,13 +274,10 @@ export function ResidentForm({
 
   useEffect(() => {
     // フォームの Dirty 状態をグローバル Context に反映
+    // (isDirty が true/false になるたびにグローバルに反映する)
     setIsDirty(isFormDirty);
-
-    // アンマウント時に Dirty 状態をリセット
-    return () => {
-      setIsDirty(false);
-    };
-  }, [isFormDirty, setIsDirty]);
+    
+  }, [isFormDirty, setIsDirty]); // 依存配列はそのまま
 
   const RELATION_TYPE_JP: Record<RelationType, string> = {
     none: 'なし',
