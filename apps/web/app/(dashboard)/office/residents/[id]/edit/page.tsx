@@ -2,7 +2,7 @@
 
 import { ResidentForm } from '@/components/forms/resident-form';
 import { Loader2, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import { SafeLink } from '@/components/layout/SafeLink';
 import { Button } from '@/components/ui/button';
 // ★ 追加: useQuery とローカルDBフック
 import { useQuery } from '@tanstack/react-query';
@@ -49,10 +49,10 @@ export default function EditResidentPage({ params }: { params: { id: string } })
     <div className="space-y-6">
       <Button variant="outline" asChild>
         {/* 詳細ページに戻るリンク */}
-        <Link href={`/office/residents/${residentId}`} className="flex items-center gap-2">
+        <SafeLink href={`/office/residents/${residentId}`} className="flex items-center gap-2">
           <ArrowLeft className="h-4 w-4" />
           詳細に戻る
-        </Link>
+        </SafeLink>
       </Button>
 
       <h1 className="text-2xl font-bold">住人情報の編集</h1>

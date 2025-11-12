@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { SafeLink } from '@/components/layout/SafeLink';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -44,10 +44,10 @@ export function Sidebar() {
                   className={cn('w-full justify-start gap-2')}
                   asChild
                 >
-                  <Link href={item.href}>
+                  <SafeLink href={item.href}>
                     <Icon className="h-4 w-4" />
                     {item.label}
-                  </Link>
+                  </SafeLink>
                 </Button>
               </motion.div>
 
@@ -62,10 +62,10 @@ export function Sidebar() {
                         className={cn('h-8 w-full justify-start gap-2 text-sm')}
                         asChild
                       >
-                        <Link href={sub.href}>
+                        <SafeLink href={sub.href}>
                           <Dot className="h-4 w-4" />
                           {sub.label}
-                        </Link>
+                        </SafeLink>
                       </Button>
                     );
                   })}
@@ -82,7 +82,7 @@ export function Sidebar() {
                         className="h-8 w-full justify-start gap-2 text-sm"
                         asChild
                       >
-                        <Link href={sub.href}>• {sub.label}</Link>
+                        <SafeLink href={sub.href}>• {sub.label}</SafeLink>
                       </Button>
                     );
                   })}

@@ -29,6 +29,8 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 // ★ 追加: スキーマ (schema.ts)
 import { relationTypeEnum } from '@/lib/drizzle/schema';
+import { useFormDirty } from '@/components/providers/FormDirtyProvider';
+import { useLeaveConfirm } from '@/lib/hooks/useLeaveConfirm';
 // ★ TODO: 将来的には usePresets フックなどから動的に取得する
 // import { usePresets } from '@/lib/data/presets';
 
@@ -265,6 +267,25 @@ export function ResidentForm({
       };
     }, [formDefaultValues]),
   });
+
+  // ローカルの isDirty 状態を取得
+  const { isDirty: isFormDirty } = form.formState;
+
+  // グローバル状態のセッターを取得
+  const { setIsDirty: setGlobalDirty } = useFormDirty();
+
+  // ローカルの isDirty をグローバル状態に同期
+  useEffect(() => {
+    setGlobalDirty(isFormDirty);
+
+    // コンポーネントがアンマウントされるとき (ページ遷移が完了したとき) に、必ずグローバル状態をリセットする
+    return () => {
+      setGlobalDirty(false);
+    };
+  }, [isFormDirty, setGlobalDirty]);
+
+  // ブラウザ操作 (リロード/戻る) の監視フックを呼び出す
+  useLeaveConfirm();
 
   const RELATION_TYPE_JP: Record<RelationType, string> = {
     none: 'なし',
@@ -526,6 +547,10 @@ export function ResidentForm({
       sleepBedtime: timeToHour(saved.sleepProfile?.baseBedtime),
       sleepWakeTime: timeToHour(saved.sleepProfile?.baseWakeTime),
     });
+
+    // onSubmitted の前にグローバル Dirty を手動で解除
+    // handleSubmit が成功したら、遷移アラートは不要
+    setGlobalDirty(false);
 
     onSubmitted?.();
   }
