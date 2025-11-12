@@ -207,7 +207,7 @@ export function ResidentForm({
   const router = useRouter();
 
   const { setIsDirty } = useContext(DirtyFormContext);
-
+  
   const formDefaultValues = defaultValues as Partial<ResidentWithRelations>;
 
   const speechPresets = MOCK_MANAGED_PRESETS.speech;
@@ -274,10 +274,13 @@ export function ResidentForm({
 
   useEffect(() => {
     // フォームの Dirty 状態をグローバル Context に反映
-    // (isDirty が true/false になるたびにグローバルに反映する)
     setIsDirty(isFormDirty);
     
-  }, [isFormDirty, setIsDirty]); // 依存配列はそのまま
+    // アンマウント時に Dirty 状態をリセット
+    return () => {
+      setIsDirty(false);
+    };
+  }, [isFormDirty, setIsDirty]);
 
   const RELATION_TYPE_JP: Record<RelationType, string> = {
     none: 'なし',
