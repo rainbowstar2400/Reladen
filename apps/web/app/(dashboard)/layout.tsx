@@ -56,33 +56,51 @@ export default function DashboardLayout({
 
   const pathname = usePathname();
   const router = useRouter();
-  // 警告を出す/出さないの判断に使ったパスを保持する
-  const navigatedPathRef = useRef(pathname); 
+
+  // 最後に「承認」したパスを保持する
+  const approvedPathRef = useRef(pathname);
+  // router.replace() を実行したことを一時的にマークする
+  const isCancellingRef = useRef(false);
 
   useEffect(() => {
     const currentPath = pathname;
-    const previousPath = navigatedPathRef.current;
+    const previousPath = approvedPathRef.current;
 
-    // (A) ダーティでない場合、またはパスが変わっていない場合
-    if (!isDirty || currentPath === previousPath) {
-      navigatedPathRef.current = currentPath;
+    // (A) "router.replace()" で戻ってきた場合:
+    // isCancellingRef.current が true なら、それは「いいえ」を押した
+    // 直後のコードによるナビゲーションなので、何もせず許可する。
+    // これによりフォームの再マウントを防ぐ
+    if (isCancellingRef.current) {
+      isCancellingRef.current = false; // フラグをリセット
+      // approvedPathRef.current は "previousPath" のまま変更しない
       return;
     }
 
-    // (B) ダーティかつパスが変わった場合 (「戻る」ボタンなど)
+    // (B) ダーティでない場合、またはパスが変わっていない場合:
+    // 遷移を承認し、現在のパスを「承認済み」として記録
+    if (!isDirty || currentPath === previousPath) {
+      approvedPathRef.current = currentPath;
+      return;
+    }
+
+    // (C) ダーティかつパスが変わった場合 (「戻る」ボタンなど)
     // 警告ダイアログを表示
-    if (window.confirm('編集内容が保存されていませんが、ページを離れてよろしいですか？')) {
+    if (window.confirm('編集内容が保存されていませんが、移動しますか？')) {
       // 「はい」: 遷移を許可
       setIsDirty(false); // ダーティ状態を解除
-      navigatedPathRef.current = currentPath; // 遷移先を「現在のパス」として承認
+      approvedPathRef.current = currentPath; // 遷移先を「承認済み」として記録
     } else {
       // 「いいえ」: 遷移をキャンセル
       // ユーザーを元のページ (previousPath) に強制的に戻す
-      router.replace(previousPath); 
+
+      // ★ "replace" を実行するフラグを立てる
+      // これにより、(A)のロジックが次のフック実行時に作動する
+      isCancellingRef.current = true;
+      router.replace(previousPath);
       // isDirty は true のまま
     }
   }, [pathname, isDirty, router, setIsDirty]);
-  
+
   return (
     <DirtyFormContext.Provider value={contextValue}>
       <div className="flex min-h-screen flex-col">
