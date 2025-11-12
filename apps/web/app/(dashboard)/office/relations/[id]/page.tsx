@@ -18,29 +18,24 @@ const AffinityBar = ({ value }: { value: number }) => {
     return (
         <div className="flex space-x-0.5">
             {Array.from({ length: 10 }).map((_, index) => {
-                // 各セグメントが担当する値の範囲 (例: index 0 = 0-10, index 8 = 80-90)
                 const segmentStartValue = index * 10;
                 const segmentEndValue = (index + 1) * 10;
-
-                let widthPercent = 0; // 0% (空)
-
+                let widthPercent = 0;
                 if (clampedValue >= segmentEndValue) {
-                    // このブロックは完全に満たされている (例: value 85 の時の index 7 (80) )
                     widthPercent = 100;
                 } else if (clampedValue > segmentStartValue) {
-                    // このブロックは部分的に満たされている (例: value 85 の時の index 8 (80-90) )
-                    const valueInRange = clampedValue - segmentStartValue; // 1の位 (例: 85 - 80 = 5)
-                    widthPercent = (valueInRange / 10) * 100; // (例: 5 / 10 * 100 = 50%)
+                    const valueInRange = clampedValue - segmentStartValue;
+                    widthPercent = (valueInRange / 10) * 100;
                 }
 
                 return (
                     <div
                         key={index}
-                        className="h-4 flex-1 rounded-sm bg-neutral-200 dark:bg-neutral-700 overflow-hidden"
+                        className="h-4 flex-1 rounded-xs bg-neutral-200 dark:bg-neutral-700 overflow-hidden"
                     >
                         {/* 内側のバー (塗りつぶし) */}
                         <div
-                            className="h-4 bg-blue-500"
+                            className="h-4 bg-foreground"
                             style={{ width: `${widthPercent}%` }}
                         />
                     </div>
@@ -53,7 +48,7 @@ const AffinityBar = ({ value }: { value: number }) => {
 // 日本語ラベルの定義
 // (packages/shared/types/base.ts の定義に基づく)
 const RELATION_LABELS: Record<Relation['type'], string> = {
-    none: '（なし）',
+    none: 'なし',
     friend: '友達',
     best_friend: '親友',
     lover: '恋人',
@@ -61,7 +56,7 @@ const RELATION_LABELS: Record<Relation['type'], string> = {
 };
 
 const FEELING_LABELS: Record<Feeling['label'], string> = {
-    none: '（なし）',
+    none: 'なし',
     dislike: '苦手',
     curious: '気になる',
     maybe_like: '好きかも',
@@ -86,25 +81,22 @@ const InfoColumn = ({
         <h3 className="text-center font-medium">{title}</h3>
         <dl className="space-y-3 text-sm p-4 rounded border">
 
-            {/* 印象*/}
+            {/* 印象 */}
             <div className="flex items-center justify-between">
                 <dt className="text-muted-foreground">印象：</dt>
                 <dd>
                     {impression ? (
                         <Badge variant="secondary">{FEELING_LABELS[impression] ?? impression}</Badge>
                     ) : (
-                        '（なし）'
+                        'なし'
                     )}
                 </dd>
             </div>
 
             {/* 好感度 */}
-            <div className="space-y-1.5 pt-1">
-                <div className="flex items-center justify-between">
-                    <dt className="text-muted-foreground">好感度：</dt>
-                    <dd className="font-medium">({affinity})</dd>
-                </div>
-                <dd>
+            <div className="flex items-center justify-between gap-4 pt-1">
+                <dt className="text-muted-foreground whitespace-nowrap">好感度：</dt>
+                <dd className="flex-1">
                     <AffinityBar value={affinity} />
                 </dd>
             </div>
@@ -206,7 +198,7 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
             </div>
 
             {/* --- 共通の関係 --- */}
-            <Card>
+            <Card className="max-w-xs mx-auto">
                 <CardContent className="pt-4 pb-3 text-center">
                     <p className="text-base font-medium text-muted-foreground">関係</p>
                     <p className="text-lg font-semibold">
