@@ -60,34 +60,33 @@ export default function DashboardLayout({
   const approvedPathRef = useRef(pathname);
 
   useEffect(() => {
-    const currentPath = pathname;
-    const previousApprovedPath = approvedPathRef.current;
+    const handlePopState = (e: PopStateEvent) => {
+      // (A) Dirty でなければ、ブラウザのデフォルト動作（ナビゲーション）を許可
+      if (!isDirty) {
+        return;
+      }
 
-    // (A) パスが同じ、または Dirty でない場合は、
-    // 現在のパスを「承認済み」として記録し、何もしない
-    if (currentPath === previousApprovedPath || !isDirty) {
-      approvedPathRef.current = currentPath;
-      return;
-    }
+      // (B) Dirty な場合
+      if (window.confirm('編集内容が保存されていませんが、移動しますか？')) {
+        // 「はい」: 遷移を許可
+        setIsDirty(false);
+        // (Next.js がこの popstate を検知してページ遷移を実行する)
+      } else {
+        // 「いいえ」: 遷移をキャンセル
 
-    // (B) Dirty であり、かつパスが変わった場合 (「戻る」ボタン)
-    // 警告ダイアログを表示
-    if (window.confirm('編集内容が保存されていませんが、移動しますか？')) {
-      // 「はい」: 遷移を許可
-      setIsDirty(false); // Dirty 状態を解除
-      approvedPathRef.current = currentPath; // 新しいパスを「承認済み」として記録
-    } else {
-      // 「いいえ」: 遷移をキャンセル
+        // (重要) Next.js/ブラウザは既に履歴を「戻って」しまっているため、
+        // 強制的に「進む」（元のフォームページ）の履歴をスタックに積む
+        window.history.pushState(null, '', pathname);
+      }
+    };
 
-      // ★ (重要) Next.js の router ではなく、ブラウザの history API を
-      // 直接使い、URLだけを元に戻す。
-      // これにより、コンポーネントの再マウントを防ぐ。
-      window.history.replaceState(null, '', previousApprovedPath);
+    // popstate イベントをリッスン
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
 
-      // approvedPathRef は元のまま (previousApprovedPath) にしておく
-    }
-    // ★ 依存配列から router を削除
-  }, [pathname, isDirty, setIsDirty]);
+  }, [isDirty, pathname, setIsDirty]);
 
   return (
     <DirtyFormContext.Provider value={contextValue}>
