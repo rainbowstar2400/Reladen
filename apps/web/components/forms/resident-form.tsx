@@ -490,9 +490,13 @@ export function ResidentForm({
 
     // ★ 変更: 変換ヘルパー (formDefaultValues と同じ)
     const timeToHour = (time: string | undefined): number | undefined => {
-      if (!time) return undefined; // ★ '' -> undefined
-      const hour = parseInt(time.split(':')[0], 10);
-      return isNaN(hour) ? undefined : hour; // ★ '' -> undefined
+      // time が文字列であり、かつ ':' を含む場合のみ処理を続行
+      if (typeof time === 'string' && time.includes(':')) {
+        const hour = parseInt(time.split(':')[0], 10);
+        return isNaN(hour) ? undefined : hour;
+      }
+      // それ以外 (undefined, null, 空文字, ':' がない文字列) は undefined を返す
+      return undefined;
     };
 
     // form.reset (変更なし)
