@@ -262,17 +262,25 @@ export function ResidentForm({
     }, [formDefaultValues]),
   });
 
+  const RELATION_TYPE_JP: Record<RelationType, string> = {
+    none: 'なし',
+    friend: '友達',
+    best_friend: '親友',
+    lover: '恋人',
+    family: '家族',
+  };
+
   // ★ 1. 他の住人リストを取得 (自分を除く)
   const { data: allResidents } = useResidents();
   const otherResidents = useMemo(() => {
     if (!allResidents) return [];
-    // formDefaultValues.id (編集中の住人ID) があれば、それを除外
     const currentId = formDefaultValues?.id;
     if (currentId) {
+      // 編集モード：自分を除外
       return allResidents.filter(r => r.id !== currentId);
     }
-    // 新規作成時は空リスト (自分を保存するまで関係設定は不可)
-    return [];
+    // 新規作成モード：既存の住人をすべて返す
+    return allResidents;
   }, [allResidents, formDefaultValues?.id]);
 
   // ★ 2. フォーム内の関係設定を管理する State (★ 変更: 初期化ロジック)
@@ -371,6 +379,15 @@ export function ResidentForm({
     }
     return initial;
   };
+
+  // 選択中の住人ID
+  const [editingRelationTargetId, setEditingRelationTargetId] = useState<string | null>(null);
+
+  // 選択中の住人オブジェクトを取得するヘルパー
+  const selectedRelationTarget = useMemo(() => {
+    if (!editingRelationTargetId) return null;
+    return otherResidents.find(r => r.id === editingRelationTargetId);
+  }, [editingRelationTargetId, otherResidents]);
 
   // ... (診断パネルのロジックは変更なし) ...
   // 診断パネルの開閉と、各設問のスコア（1〜5、初期値は中立3）
@@ -519,6 +536,7 @@ export function ResidentForm({
   const watchSpeechPreset = form.watch('speechPreset');
   const watchOccupation = form.watch('occupation');
   const watchFirstPerson = form.watch('firstPerson');
+  const watchName = form.watch('name');
 
   // マネージドプリセットのラベルリスト（判定用）
   const speechPresetLabels = useMemo(() => speechPresets.map(p => p.label), [speechPresets]);
@@ -1140,29 +1158,45 @@ export function ResidentForm({
 
         {/* 初期関係設定 */}
         {/* 新規作成時 (IDなし) は表示しない */}
-        {formDefaultValues?.id && (<
-          div className="space-y-4 pt-2 border-t">
-          <h2 className="text-sm font-semibold">元々の関係の設定</h2>
-          <p className="text-xs text-muted-foreground">
-            この住人({formDefaultValues.name || '...'})が他の住人と既に持っている関係性を登録します。
-          </p>
-
-          {/* 他の住人がいない場合 */}
-          {otherResidents.length === 0 && (
-            <p className="text-sm text-muted-foreground italic">
-              （他に設定可能な住人がいません）
+        {otherResidents.length > 0 && (
+          <div className="space-y-4 pt-2 border-t">
+            <h2 className="text-sm font-semibold">元々の関係の設定</h2>
+            <p className="text-xs text-muted-foreground">
+              この住人({watchName || '...'})が他の住人と既に持っている関係性を登録します。
             </p>
-          )}
 
-          {/* 他の住人リストをループ */}
-          <div className="space-y-4">
-            {otherResidents.map((target) => {
+            {/* 対象の住人を選択するリスト */}
+            <div className="space-y-2">
+              <Label>相手住人</Label>
+              <Select
+                value={editingRelationTargetId ?? ''}
+                onValueChange={(value) => {
+                  setEditingRelationTargetId(value === 'none' ? null : value);
+                }}
+              >
+                <SelectTrigger className="w-[300px]">
+                  <SelectValue placeholder="（設定する住人を選択）" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">（選択解除）</SelectItem>
+                  {otherResidents.map((target) => (
+                    <SelectItem key={target.id} value={target.id}>
+                      {target.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 選択された場合にのみ設定カードを表示 */}
+            {selectedRelationTarget && (() => {
+              const target = selectedRelationTarget;
               const currentRel = tempRelations[target.id] ?? DEFAULT_TEMP_RELATION;
-              const thisName = formDefaultValues.name || '住人';
+              const thisName = watchName || '住人';
               const targetName = target.name;
 
               return (
-                <Card key={target.id}>
+                <Card key={target.id} className="mt-4 border-dashed">
                   <CardHeader>
                     <CardTitle className="text-base">
                       {target.name} との関係
@@ -1170,7 +1204,7 @@ export function ResidentForm({
                   </CardHeader>
                   <CardContent className="space-y-6">
 
-                    {/* 1. 関係性 (Select) */}
+                    {/* 関係性 (Select) */}
                     <div className="space-y-2">
                       <Label>関係性</Label>
                       <Select
@@ -1183,99 +1217,104 @@ export function ResidentForm({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                          {/* ★ 修正: 予め定義した RELATION_TYPE_JP を使用 */}
                           {relationTypeEnum.enumValues.map((type) => (
                             <SelectItem key={type} value={type}>
-                              {type}
+                              {RELATION_TYPE_JP[type] ?? type}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    {/* 2. 好感度 (双方向スライダー) */}
-                    <div className="space-y-4">
-                      {/* 2a. 自分 -> 相手 */}
-                      <div className="space-y-2">
-                        <Label htmlFor={`score-to-${target.id}`}>
-                          {thisName} → {targetName} の好感度 ({currentRel.feelingScoreTo})
-                        </Label>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">0</span>
-                          <Slider
-                            id={`score-to-${target.id}`}
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={[currentRel.feelingScoreTo]}
-                            onValueChange={([value]) =>
-                              handleRelationChange(target.id, 'feelingScoreTo', value)
-                            }
-                          />
-                          <span className="text-xs text-muted-foreground">100</span>
+                    {/* (ご要望2) 好感度と呼び方を縦二段組にする Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
+
+                      {/* --- 左列: 好感度 --- */}
+                      <div className="space-y-6">
+                        {/* 自分 -> 相手 */}
+                        <div className="space-y-2">
+                          <Label htmlFor={`score-to-${target.id}`}>
+                            {thisName} → {targetName} の好感度 ({currentRel.feelingScoreTo})
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              id={`score-to-${target.id}`}
+                              type="number"
+                              min={0} max={100}
+                              className="w-16"
+                              value={currentRel.feelingScoreTo}
+                              onChange={(e) => handleRelationChange(target.id, 'feelingScoreTo', Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                            />
+                            <Slider
+                              value={[currentRel.feelingScoreTo]}
+                              onValueChange={([value]) => handleRelationChange(target.id, 'feelingScoreTo', value)}
+                              min={0} max={100} step={1}
+                            />
+                          </div>
+                        </div>
+
+                        {/* 相手 -> 自分 */}
+                        <div className="space-y-2">
+                          <Label htmlFor={`score-from-${target.id}`}>
+                            {targetName} → {thisName} の好感度 ({currentRel.feelingScoreFrom})
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              id={`score-from-${target.id}`}
+                              type="number"
+                              min={0} max={100}
+                              className="w-16"
+                              value={currentRel.feelingScoreFrom}
+                              onChange={(e) => handleRelationChange(target.id, 'feelingScoreFrom', Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                            />
+                            <Slider
+                              value={[currentRel.feelingScoreFrom]}
+                              onValueChange={([value]) => handleRelationChange(target.id, 'feelingScoreFrom', value)}
+                              min={0} max={100} step={1}
+                            />
+                          </div>
                         </div>
                       </div>
 
-                      {/* 2b. 相手 -> 自分 */}
-                      <div className="space-y-2">
-                        <Label htmlFor={`score-from-${target.id}`}>
-                          {thisName} ← {targetName} の好感度 ({currentRel.feelingScoreFrom})
-                        </Label>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">0</span>
-                          <Slider
-                            id={`score-from-${target.id}`}
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={[currentRel.feelingScoreFrom]}
-                            onValueChange={([value]) =>
-                              handleRelationChange(target.id, 'feelingScoreFrom', value)
+                      {/* --- 右列: 呼び方 --- */}
+                      <div className="space-y-6">
+                        {/* 3a. 自分 -> 相手 */}
+                        <div className="space-y-2">
+                          <Label htmlFor={`nick-to-${target.id}`}>
+                            呼び方　{thisName} → {targetName}
+                          </Label>
+                          <Input
+                            id={`nick-to-${target.id}`}
+                            placeholder={`例: ${targetName}さん`}
+                            value={currentRel.nicknameTo}
+                            onChange={(e) =>
+                              handleRelationChange(target.id, 'nicknameTo', e.target.value)
                             }
                           />
-                          <span className="text-xs text-muted-foreground">100</span>
+                        </div>
+
+                        {/* 3b. 相手 -> 自分 */}
+                        <div className="space-y-2">
+                          <Label htmlFor={`nick-from-${target.id}`}>
+                            呼び方　{targetName} → {thisName}
+                          </Label>
+                          <Input
+                            id={`nick-from-${target.id}`}
+                            placeholder={`例: ${thisName}さん`}
+                            value={currentRel.nicknameFrom}
+                            onChange={(e) =>
+                              handleRelationChange(target.id, 'nicknameFrom', e.target.value)
+                            }
+                          />
                         </div>
                       </div>
                     </div>
-
-                    {/* 3. 呼び方 (双方向入力) */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* 3a. 自分 -> 相手 */}
-                      <div className="space-y-2">
-                        <Label htmlFor={`nick-to-${target.id}`}>
-                          {thisName} から {targetName} への呼び方
-                        </Label>
-                        <Input
-                          id={`nick-to-${target.id}`}
-                          placeholder={`例: ${targetName}さん`}
-                          value={currentRel.nicknameTo}
-                          onChange={(e) =>
-                            handleRelationChange(target.id, 'nicknameTo', e.target.value)
-                          }
-                        />
-                      </div>
-
-                      {/* 3b. 相手 -> 自分 */}
-                      <div className="space-y-2">
-                        <Label htmlFor={`nick-from-${target.id}`}>
-                          {targetName} から {thisName} への呼び方
-                        </Label>
-                        <Input
-                          id={`nick-from-${target.id}`}
-                          placeholder={`例: ${thisName}ちゃん`}
-                          value={currentRel.nicknameFrom}
-                          onChange={(e) =>
-                            handleRelationChange(target.id, 'nicknameFrom', e.target.value)
-                          }
-                        />
-                      </div>
-                    </div>
-
                   </CardContent>
                 </Card>
               );
-            })}
+            })()}
           </div>
-        </div>
         )}
 
         <div className="flex justify-end gap-2">
