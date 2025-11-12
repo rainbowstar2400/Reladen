@@ -207,7 +207,7 @@ export function ResidentForm({
   const router = useRouter();
 
   const { setIsDirty } = useContext(DirtyFormContext);
-  
+
   const formDefaultValues = defaultValues as Partial<ResidentWithRelations>;
 
   const speechPresets = MOCK_MANAGED_PRESETS.speech;
@@ -270,12 +270,27 @@ export function ResidentForm({
   });
 
   const { formState } = form;
+
+  useEffect(() => {
+    // フォームが変更されている (isDirty) ときだけ警告を出す
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (formState.isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [formState.isDirty]);
+
   const isFormDirty = formState.isDirty;
 
   useEffect(() => {
     // フォームの Dirty 状態をグローバル Context に反映
     setIsDirty(isFormDirty);
-    
+
     // アンマウント時に Dirty 状態をリセット
     return () => {
       setIsDirty(false);
