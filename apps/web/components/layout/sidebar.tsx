@@ -1,11 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { Home, Building2, ClipboardList, Cog, Dot } from 'lucide-react';
+import { useContext } from 'react';
+import { DirtyFormContext } from '@/app/(dashboard)/layout';
 
 const NAV_ITEMS = [
   { href: '/home', label: 'ホーム', icon: Home },
@@ -26,9 +28,38 @@ const SETTINGS_SUB = [
   { href: '/settings#about', label: 'ゲームについて' },
 ];
 
+function useConfirmNavigation() {
+  const { isDirty, setIsDirty } = useContext(DirtyFormContext);
+  const router = useRouter(); // Next.js の router
+
+  const handleLinkClick = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    href: string
+  ) => {
+    // Dirty でなければ、デフォルトの <Link> の動作に任せる
+    if (!isDirty) {
+      return;
+    }
+
+    // ★ Dirty なので、まず遷移を止める
+    e.preventDefault();
+
+    if (window.confirm('編集内容が保存されていませんが、移動しますか？')) {
+      // 「はい」が押された場合
+      setIsDirty(false); // Dirty 状態をリセット
+      router.push(href); // 手動でページ遷移
+    }
+    // 「いいえ」が押された場合は何もしない（遷移がキャンセルされる）
+  };
+
+  return handleLinkClick;
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const startsWith = (href: string) => pathname?.startsWith(href);
+
+  const handleLinkClick = useConfirmNavigation();
 
   return (
     <aside className="hidden h-[calc(100vh-4rem)] w-64 shrink-0 overflow-y-auto border-r bg-muted/40 p-4 md:block md:sticky md:top-16">
@@ -44,7 +75,10 @@ export function Sidebar() {
                   className={cn('w-full justify-start gap-2')}
                   asChild
                 >
-                  <Link href={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={(e) => handleLinkClick(e, item.href)}
+                  >
                     <Icon className="h-4 w-4" />
                     {item.label}
                   </Link>
@@ -62,7 +96,10 @@ export function Sidebar() {
                         className={cn('h-8 w-full justify-start gap-2 text-sm')}
                         asChild
                       >
-                        <Link href={sub.href}>
+                        <Link
+                          href={sub.href}
+                          onClick={(e) => handleLinkClick(e, sub.href)}
+                        >
                           <Dot className="h-4 w-4" />
                           {sub.label}
                         </Link>
@@ -82,7 +119,12 @@ export function Sidebar() {
                         className="h-8 w-full justify-start gap-2 text-sm"
                         asChild
                       >
-                        <Link href={sub.href}>• {sub.label}</Link>
+                        <Link
+                          href={sub.href}
+                          onClick={(e) => handleLinkClick(e, sub.href)}
+                        >
+                          • {sub.label}
+                        </Link>
                       </Button>
                     );
                   })}
