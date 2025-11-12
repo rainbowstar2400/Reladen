@@ -245,10 +245,10 @@ export function ResidentForm({
         traits: traitsObj,
         trustToPlayer: formDefaultValues?.trustToPlayer ?? 50,
 
-        speechPreset: defaultSpeechPreset?.label ?? '',
-        speechPresetDescription: defaultSpeechPreset?.description ?? '',
-        occupation: defaultOccPreset?.label ?? '',
-        firstPerson: defaultFpPreset?.label ?? '',
+        speechPreset: defaultSpeechPreset?.label ?? null,
+        speechPresetDescription: defaultSpeechPreset?.description ?? null,
+        occupation: defaultOccPreset?.label ?? null,
+        firstPerson: defaultFpPreset?.label ?? null,
 
         isSpeechPresetManaged: false,
         isOccupationManaged: false,
@@ -476,7 +476,7 @@ export function ResidentForm({
 
     // form.reset (変更なし)
     form.reset({
-      ...values, // フォームの基本値は維持
+      ...values,
       id: saved.id,
       name: saved.name,
       mbti: saved.mbti ?? '',
@@ -484,10 +484,10 @@ export function ResidentForm({
       trustToPlayer: saved.trustToPlayer ?? 50,
 
       // ★ フォームにはラベルを戻す
-      speechPreset: savedSpeechPreset?.label ?? (values.speechPreset ?? ''),
-      speechPresetDescription: savedSpeechPreset?.description ?? (values.speechPresetDescription ?? ''),
-      occupation: savedOccPreset?.label ?? (values.occupation ?? ''),
-      firstPerson: savedFpPreset?.label ?? (values.firstPerson ?? ''),
+      speechPreset: savedSpeechPreset?.label ?? (values.speechPreset ?? null),
+      speechPresetDescription: savedSpeechPreset?.description ?? (values.speechPresetDescription ?? null),
+      occupation: savedOccPreset?.label ?? (values.occupation ?? null),
+      firstPerson: savedFpPreset?.label ?? (values.firstPerson ?? null),
 
       // ★ 管理フラグはリセット
       isSpeechPresetManaged: false,
