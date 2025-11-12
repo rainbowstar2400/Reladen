@@ -330,7 +330,8 @@ export function ResidentForm({
   ): Record<string, TempRelationData> {
 
     // 編集モードでない、または他の住人がいない場合は空
-    if (!defaults.id || !others || others.length === 0) {
+    // ★ 変更: `!defaults` のチェックを先頭に追加
+    if (!defaults || !defaults.id || !others || others.length === 0) {
       return {};
     }
 
