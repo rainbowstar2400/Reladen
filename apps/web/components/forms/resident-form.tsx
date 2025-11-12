@@ -231,11 +231,13 @@ export function ResidentForm({
 
       // ★ 変更: DBの HH:00 (string) をフォームの HH (number | undefined) に
       const timeToHour = (time: string | undefined): number | undefined => {
-        if (typeof time !== 'string' || time.length === 0) {
-          return undefined;
+        // time が文字列であり、かつ ':' を含む場合のみ処理を続行
+        if (typeof time === 'string' && time.includes(':')) {
+          const hour = parseInt(time.split(':')[0], 10);
+          return isNaN(hour) ? undefined : hour;
         }
-        const hour = parseInt(time.split(':')[0], 10);
-        return isNaN(hour) ? undefined : hour; // ★ '' -> undefined
+        // それ以外 (undefined, null, 空文字, ':' がない文字列) は undefined を返す
+        return undefined;
       };
 
       const currentSleepProfile = (formDefaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
