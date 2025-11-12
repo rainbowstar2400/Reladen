@@ -9,21 +9,46 @@ import { Button } from '@/components/ui/button';
 import { Loader2, ArrowLeft, ChevronsLeftRight } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { Feeling } from '@/types'; // ★ Feeling 型をインポート
+import { Feeling, Relation } from '@/types';
 
-// ★ (ここから) 好感度バーのダミーコンポーネント
-// (現在のスキーマに好感度がないため、ダミーで表示します)
-const AffinityBar = ({ value }: { value: number }) => (
-    <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-2.5">
-        <div
-            className="bg-blue-600 h-2.5 rounded-full"
-            style={{ width: `${value}%` }}
-        />
-    </div>
-);
-// ★ (ここまで) 好感度バーのダミーコンポーネント
+const AffinityBar = ({ value }: { value: number }) => {
+    // 0-100 の値を 0-100% の幅に変換 (丸めなし)
+    // 0未満、100超過を範囲内に収める
+    const widthPercent = Math.max(0, Math.min(100, value));
 
-// ★ (ここから) 左右対比の表示列コンポーネント
+    return (
+        // 外側のコンテナ (バーの背景)
+        <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-4 overflow-hidden">
+            {/* 内側のバー (実際の値) */}
+            <div
+                className="bg-blue-500 h-4 transition-all duration-300 ease-out" // アニメーションを追加
+                style={{ width: `${widthPercent}%` }}
+            />
+        </div>
+    );
+};
+
+// 日本語ラベルの定義
+// (packages/shared/types/base.ts の定義に基づく)
+const RELATION_LABELS: Record<Relation['type'], string> = {
+    none: '（なし）',
+    friend: '友達',
+    best_friend: '親友',
+    lover: '恋人',
+    family: '家族',
+};
+
+const FEELING_LABELS: Record<Feeling['label'], string> = {
+    none: '（なし）',
+    dislike: '苦手',
+    curious: '気になる',
+    maybe_like: '好きかも',
+    like: '好き',
+    love: '大好き',
+    awkward: '気まずい',
+};
+
+// 左右対比の表示列コンポーネント
 const InfoColumn = ({
     title,
     impression,
@@ -42,7 +67,8 @@ const InfoColumn = ({
                 <dt className="text-muted-foreground">印象</dt>
                 <dd>
                     {impression ? (
-                        <Badge variant="secondary">{impression}</Badge>
+                        // ★ 日本語ラベルで表示
+                        <Badge variant="secondary">{FEELING_LABELS[impression] ?? impression}</Badge>
                     ) : (
                         '（なし）'
                     )}
@@ -61,7 +87,6 @@ const InfoColumn = ({
         </dl>
     </div>
 );
-// ★ (ここまで) 左右対比の表示列コンポーネント
 
 export default function RelationDetailPage({ params }: { params: { id: string } }) {
     const relationId = params.id;
@@ -77,7 +102,7 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
 
     const { data: feelings, isLoading: isLoadingFeelings } = useFeelings();
 
-    // ★ A->B, B->A の情報を整理
+    // A->B, B->A の情報を整理
     const { a_to_b, b_to_a } = useMemo(() => {
         if (!residentAId || !residentBId || !feelings) {
             const defaultData = {
@@ -126,6 +151,10 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
     const nameA = residentA.name ?? '住人A';
     const nameB = residentB.name ?? '住人B';
 
+    // ★ 関係タイプを日本語に変換 (デフォルトは 'none' 扱い)
+    const relationType = relation.type ?? 'none';
+    const relationLabel = RELATION_LABELS[relationType] ?? '（未設定）';
+
     return (
         <div className="space-y-6">
             {/* --- ヘッダー（戻るボタン） --- */}
@@ -152,7 +181,8 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
                     <CardTitle className="text-center text-base font-medium text-muted-foreground">関係</CardTitle>
                 </CardHeader>
                 <CardContent className="text-center text-lg font-semibold">
-                    {relation.type ?? '（未設定）'}
+                    {/* 日本語ラベルで表示 */}
+                    {relationLabel}
                 </CardContent>
             </Card>
 
