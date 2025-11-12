@@ -16,6 +16,13 @@ export function useRelations() {
   return useQuery({ queryKey: KEY, queryFn: fetchRelations });
 }
 
+export function useRelation(id: string) {
+   return useQuery({
+     queryKey: [...KEY, id],
+     queryFn: async () => (await fetchRelations()).find((r) => r.id === id),
+   });
+ }
+
 export function useUpsertRelation() {
   const queryClient = useQueryClient();
   return useMutation({
