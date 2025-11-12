@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useUpsertResident, useResidents } from '@/lib/data/residents';
-import { useMemo, useState, useEffect, useContext } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { QUESTIONS, calculateMbti, type Answer } from '@/lib/mbti';
 import { useRouter } from 'next/navigation';
 import { BaseSleepProfile, SleepProfile } from '../../../../packages/shared/logic/schedule';
@@ -29,7 +29,6 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 // ★ 追加: スキーマ (schema.ts)
 import { relationTypeEnum } from '@/lib/drizzle/schema';
-import { DirtyFormContext } from '@/app/(dashboard)/layout';
 // ★ TODO: 将来的には usePresets フックなどから動的に取得する
 // import { usePresets } from '@/lib/data/presets';
 
@@ -206,8 +205,6 @@ export function ResidentForm({
 }) {
   const router = useRouter();
 
-  const { setIsDirty } = useContext(DirtyFormContext);
-  
   const formDefaultValues = defaultValues as Partial<ResidentWithRelations>;
 
   const speechPresets = MOCK_MANAGED_PRESETS.speech;
@@ -268,19 +265,6 @@ export function ResidentForm({
       };
     }, [formDefaultValues]),
   });
-
-  const { formState } = form;
-  const isFormDirty = formState.isDirty;
-
-  useEffect(() => {
-    // フォームの Dirty 状態をグローバル Context に反映
-    setIsDirty(isFormDirty);
-    
-    // アンマウント時に Dirty 状態をリセット
-    return () => {
-      setIsDirty(false);
-    };
-  }, [isFormDirty, setIsDirty]);
 
   const RELATION_TYPE_JP: Record<RelationType, string> = {
     none: 'なし',
@@ -542,8 +526,6 @@ export function ResidentForm({
       sleepBedtime: timeToHour(saved.sleepProfile?.baseBedtime),
       sleepWakeTime: timeToHour(saved.sleepProfile?.baseWakeTime),
     });
-
-    setIsDirty(false);
 
     onSubmitted?.();
   }
