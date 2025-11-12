@@ -14,15 +14,11 @@ export function Providers({ children }: { children: ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <QueryClientProvider>
         <ConversationSchedulerProvider>
-          {/* <SyncProvider> */}
-          {children}
-          {/* </SyncProvider> */}
-          {/* <SonnerToaster /> */}
+          <FormDirtyProvider>
+            {children}
+          </FormDirtyProvider>
         </ConversationSchedulerProvider>
       </QueryClientProvider>
-      <FormDirtyProvider>
-        {children}
-      </FormDirtyProvider>
     </ThemeProvider>
   )
 }
