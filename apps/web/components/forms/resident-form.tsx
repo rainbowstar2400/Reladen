@@ -130,6 +130,18 @@ const residentFormSchema = z.object({
     v => (v === '' || v == null ? undefined : Number(v)),
     z.number().int().min(0).max(120).optional()
   ),
+
+  // 誕生日 (月)
+  birthMonth: z.preprocess(
+    v => (v === '' || v == null ? undefined : Number(v)),
+    z.number().int().min(1).max(12).optional()
+  ),
+  // 誕生日 (日)
+  birthDay: z.preprocess(
+    v => (v === '' || v == null ? undefined : Number(v)),
+    z.number().int().min(1).max(31).optional()
+  ),
+
   interests: z.array(z.object({ value: z.string() })).optional(),
 
   // ★ 変更: Age と同じ preprocess (数値) に
@@ -244,6 +256,11 @@ export function ResidentForm({
 
       const currentSleepProfile = (formDefaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
 
+      // ★ 追加: 誕生日 (MM/DD) をフォーム用の 月/日 (number) に分解
+      const [defaultMonth, defaultDay] = (formDefaultValues?.birthday ?? '/').split('/');
+      const birthMonthNum = defaultMonth ? parseInt(defaultMonth, 10) : undefined;
+      const birthDayNum = defaultDay ? parseInt(defaultDay, 10) : undefined;
+
       return {
         ...formDefaultValues,
         name: formDefaultValues?.name ?? '',
@@ -260,6 +277,9 @@ export function ResidentForm({
         isOccupationManaged: false,
         isFirstPersonManaged: false,
         interests: formDefaultValues?.interests?.map(val => ({ value: val })) ?? [],
+
+        birthMonth: isNaN(birthMonthNum as number) ? undefined : birthMonthNum,
+        birthDay: isNaN(birthDayNum as number) ? undefined : birthDayNum,
 
         // ★ 変更: 変換関数を使い、デフォルトを undefined ('' ではない) に
         sleepBedtime: timeToHour(currentSleepProfile.baseBedtime),
@@ -470,6 +490,11 @@ export function ResidentForm({
         }
         : undefined;
 
+    const birthday =
+      values.birthMonth != null && values.birthDay != null
+        ? `${String(values.birthMonth).padStart(2, '0')}/${String(values.birthDay).padStart(2, '0')}`
+        : undefined;
+
     // ★ 3. 最終的なペイロード (DBの型) を作成
     const payload: Partial<Resident> = {
       id: values.id,
@@ -485,6 +510,7 @@ export function ResidentForm({
       gender,
       age: typeof values.age === 'number' ? values.age : undefined,
       interests: interests.length > 0 ? interests : undefined,
+      birthday: birthday,
       ...(sleepProfile ? { sleepProfile } : {}),
     };
 
@@ -516,6 +542,10 @@ export function ResidentForm({
       return undefined;
     };
 
+    const [savedMonth, savedDay] = (saved.birthday ?? '/').split('/');
+    const resetBirthMonth = savedMonth ? parseInt(savedMonth, 10) : undefined;
+    const resetBirthDay = savedDay ? parseInt(savedDay, 10) : undefined;
+
     // form.reset (変更なし)
     form.reset({
       ...values,
@@ -538,6 +568,9 @@ export function ResidentForm({
 
       // ★ DB の型からフォームの型へ
       interests: saved.interests?.map(val => ({ value: val })) ?? [],
+
+      birthMonth: isNaN(resetBirthMonth as number) ? undefined : resetBirthMonth,
+      birthDay: isNaN(resetBirthDay as number) ? undefined : resetBirthDay,
 
       // ★ 変更: 変換関数を使う
       sleepBedtime: timeToHour(saved.sleepProfile?.baseBedtime),
@@ -608,8 +641,106 @@ export function ResidentForm({
             )}
           />
 
-          {/* 性別・年齢・職業を横並び（レスポンシブ） */}
+          {/* 年齢/誕生日、性別/職業 */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-x-6 gap-y-4 md:items-start">
+
+            {/* 年齢 (md: 4カラム) */}
+            <div className="md:col-span-4 min-w-0">
+              <FormField
+                control={form.control}
+                name="age"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel className="block">年齢</FormLabel>
+                    <FormControl>
+                      <>
+                        <Input
+                          list="age-options"
+                          placeholder="例：20"
+                          value={field.value ?? ''}
+                          onChange={(e) =>
+                            field.onChange(e.target.value === '' ? '' : Number(e.target.value))
+                          }
+                          onBlur={field.onBlur}
+                          inputMode="numeric"
+                          type="text"
+                          pattern="^\d{1,3}$"
+                          className="w-[100px]"
+                          aria-describedby="age-help"
+                        />
+                        <datalist id="age-options">
+                          {Array.from({ length: 120 }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n} />
+                          ))}
+                        </datalist>
+                        {/* ★ 削除: <p id="age-help">...</p> (スペース確保のため) */}
+                      </>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* 誕生日 (md: 8カラム) */}
+            <div className="md:col-span-8 min-w-0">
+              <FormItem className="space-y-2">
+                <FormLabel className="block">誕生日</FormLabel>
+                <div className="flex items-center gap-2">
+                  {/* MM (月) */}
+                  <FormField
+                    control={form.control}
+                    name="birthMonth"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input
+                            placeholder="MM"
+                            value={field.value ?? ''}
+                            onChange={(e) =>
+                              field.onChange(e.target.value === '' ? '' : Number(e.target.value))
+                            }
+                            onBlur={field.onBlur}
+                            inputMode="numeric"
+                            type="text"
+                            pattern="^\d{1,2}$"
+                            className="w-[80px]"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  {/* / テキスト */}
+                  <span className="text-lg text-muted-foreground">/</span>
+                  {/* DD (日) */}
+                  <FormField
+                    control={form.control}
+                    name="birthDay"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input
+                            placeholder="DD"
+                            value={field.value ?? ''}
+                            onChange={(e) =>
+                              field.onChange(e.target.value === '' ? '' : Number(e.target.value))
+                            }
+                            onBlur={field.onBlur}
+                            inputMode="numeric"
+                            type="text"
+                            pattern="^\d{1,2}$"
+                            className="w-[80px]"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                {/* エラーメッセージ (月・日どちらでも表示) */}
+                <FormMessage>{form.formState.errors.birthMonth?.message as string}</FormMessage>
+                <FormMessage>{form.formState.errors.birthDay?.message as string}</FormMessage>
+              </FormItem>
+            </div>
 
             {/* 性別（md: 4カラム） */}
             <div className="md:col-span-4 min-w-0">
@@ -645,48 +776,8 @@ export function ResidentForm({
               />
             </div>
 
-            {/* 年齢（md: 3カラム） */}
-            <div className="md:col-span-3 min-w-0">
-              <FormField
-                control={form.control}
-                name="age"
-                render={({ field }) => (
-                  <FormItem className="space-y-2">
-                    <FormLabel className="block">年齢</FormLabel>
-                    <FormControl>
-                      <>
-                        <Input
-                          list="age-options"
-                          placeholder="例：20"
-                          value={field.value ?? ''}
-                          onChange={(e) =>
-                            field.onChange(e.target.value === '' ? '' : Number(e.target.value))
-                          }
-                          onBlur={field.onBlur}
-                          inputMode="numeric"
-                          type="text"
-                          pattern="^\d{1,3}$"
-                          className="w-[100px]"
-                          aria-describedby="age-help"
-                        />
-                        <datalist id="age-options">
-                          {Array.from({ length: 120 }, (_, i) => i + 1).map((n) => (
-                            <option key={n} value={n} />
-                          ))}
-                        </datalist>
-                        <p id="age-help" className="text-xs text-muted-foreground mt-1">
-                          直接入力（半角数字）も、<br />リスト（1〜120）からの選択もできます。
-                        </p>
-                      </>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* 職業 (Select + Manual UI) */}
-            <div className="md:col-span-5 min-w-0 space-y-3">
+            {/* 職業 (Select + Manual UI) (md: 8カラム) */}
+            <div className="md:col-span-8 min-w-0 space-y-3">
               <FormField
                 control={form.control}
                 name="occupation"
@@ -701,7 +792,6 @@ export function ResidentForm({
                           field.onChange(value);
                         }
                       }}
-                      // ★ 11. value のロジックを修正
                       value={isOccupationManual ? MANUAL_INPUT_KEY : field.value ?? ''}
                     >
                       <FormControl>
@@ -786,7 +876,6 @@ export function ResidentForm({
                         field.onChange(value);
                       }
                     }}
-                    // ★ 13. value のロジックを修正
                     value={isFirstPersonManual ? MANUAL_INPUT_KEY : field.value ?? ''}
                   >
                     <FormControl>
@@ -870,7 +959,6 @@ export function ResidentForm({
                         form.setValue('speechPresetDescription', preset?.description ?? '');
                       }
                     }}
-                    // ★ 8. value のロジックを修正
                     // (手動モードならMANUAL_INPUT_KEY、そうでなければ現在の値(空も含む))
                     value={isSpeechManual ? MANUAL_INPUT_KEY : field.value ?? ''}
                   >
@@ -957,7 +1045,6 @@ export function ResidentForm({
                 <FormLabel className="text-sm text-muted-foreground">特徴</FormLabel>
                 <FormControl>
                   <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
-                    {/* ★ 9. watchする値が空（未選択）の場合の表示を修正 */}
                     {form.watch('speechPresetDescription') || '（プリセットを選択すると特徴が表示されます）'}
                   </p>
                 </FormControl>
@@ -1014,7 +1101,7 @@ export function ResidentForm({
         <div className="space-y-4 pt-2 border-t">
           <h2 className="text-sm font-semibold">睡眠</h2>
 
-          {/* --- ★ 睡眠スケジュール (Datalist + Suffix に変更) --- */}
+          {/* 睡眠スケジュール (Datalist + Suffix に変更) */}
           <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
@@ -1023,14 +1110,13 @@ export function ResidentForm({
                 <FormItem>
                   <FormLabel>就寝</FormLabel>
                   <FormControl>
-                    {/* ★ 変更: Input + Suffix */}
+                    {/* Input + Suffix */}
                     <div className="flex items-center gap-2">
                       <Input
-                        list="hour-options" // ★ 準備 1 で定義した datalist
+                        list="hour-options"
                         placeholder="例: 23"
                         value={field.value ?? ''}
                         onChange={(e) =>
-                          // ★ Age と同じロジック
                           field.onChange(e.target.value === '' ? '' : Number(e.target.value))
                         }
                         onBlur={field.onBlur}
@@ -1053,14 +1139,13 @@ export function ResidentForm({
                 <FormItem>
                   <FormLabel>起床</FormLabel>
                   <FormControl>
-                    {/* ★ 変更: Input + Suffix */}
+                    {/* Input + Suffix */}
                     <div className="flex items-center gap-2">
                       <Input
-                        list="hour-options" // ★ 同じ datalist を参照
+                        list="hour-options"
                         placeholder="例: 7"
                         value={field.value ?? ''}
                         onChange={(e) =>
-                          // ★ Age と同じロジック
                           field.onChange(e.target.value === '' ? '' : Number(e.target.value))
                         }
                         onBlur={field.onBlur}
@@ -1106,7 +1191,6 @@ export function ResidentForm({
                     <div className="grid grid-cols-5 items-center gap-3">
                       <FormLabel className="col-span-2 text-sm">{label}</FormLabel>
 
-                      {/* --- 変更後 (追加) --- */}
                       <div className="col-span-3">
                         <FormControl>
                           <ClickableRatingBox
@@ -1246,7 +1330,7 @@ export function ResidentForm({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {/* ★ 修正: 予め定義した RELATION_TYPE_JP を使用 */}
+                          {/* 予め定義した RELATION_TYPE_JP を使用 */}
                           {relationTypeEnum.enumValues.map((type) => (
                             <SelectItem key={type} value={type}>
                               {RELATION_TYPE_JP[type] ?? type}
@@ -1256,10 +1340,10 @@ export function ResidentForm({
                       </Select>
                     </div>
 
-                    {/* (ご要望2) 好感度と呼び方を縦二段組にする Grid */}
+                    {/*  好感度と呼び方を縦二段組にする Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">
 
-                      {/* --- 左列: 好感度 --- */}
+                      {/* 左列: 好感度 */}
                       <div className="space-y-6">
                         {/* 自分 -> 相手 */}
                         <div className="space-y-2">
@@ -1306,9 +1390,9 @@ export function ResidentForm({
                         </div>
                       </div>
 
-                      {/* --- 右列: 呼び方 --- */}
+                      {/* 右列: 呼び方 */}
                       <div className="space-y-6">
-                        {/* 3a. 自分 -> 相手 */}
+                        {/* 自分 -> 相手 */}
                         <div className="space-y-2">
                           <Label htmlFor={`nick-to-${target.id}`}>
                             呼び方　{thisName} → {targetName}
@@ -1323,7 +1407,7 @@ export function ResidentForm({
                           />
                         </div>
 
-                        {/* 3b. 相手 -> 自分 */}
+                        {/* 相手 -> 自分 */}
                         <div className="space-y-2">
                           <Label htmlFor={`nick-from-${target.id}`}>
                             呼び方　{targetName} → {thisName}
@@ -1354,8 +1438,7 @@ export function ResidentForm({
 
       </form>
 
-      {/* --- 診断パネル (MBTI診断) --- */}
-      {/* (前回修正した ClickableRatingBox が使われている状態) */}
+      {/* 診断パネル (MBTI診断) */}
       {
         showDiagnosis && (
           <>

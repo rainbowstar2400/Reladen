@@ -59,6 +59,8 @@ export const residentSchema = baseEntitySchema.extend({
   gender: GenderEnum.optional(),
   age: z.number().int().min(0).max(120).optional(),
 
+  birthday: z.string().optional(), // "MM/DD" 形式
+
   // ★ 変更: string().uuid() に変更 (presets.id を参照)
   occupation: z.string().uuid().optional(),
 

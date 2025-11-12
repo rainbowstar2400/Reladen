@@ -42,6 +42,7 @@ export const residents = pgTable('residents', {
   speechPreset: uuid('speech_preset').references(() => presets.id, { onDelete: 'set null' }),
   gender: text('gender'),
   age: integer('age'),
+  birthday: text('birthday'), // "MM/DD" 形式で保存
   occupation: uuid('occupation').references(() => presets.id, { onDelete: 'set null' }),
   firstPerson: uuid('first_person').references(() => presets.id, { onDelete: 'set null' }),
   interests: jsonb('interests'),
