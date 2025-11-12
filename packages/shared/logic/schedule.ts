@@ -18,9 +18,18 @@ export type SleepProfile = BaseSleepProfile & {
   todaySchedule?: TodaySchedule;
 };
 
-function hmToMinutes(hm: string) {
-  const [h, m] = hm.split(':').map(Number);
-  return (h * 60 + m) % 1440;
+function hmToMinutes(hm: string): number {
+  // time が文字列であり、かつ ':' を含む場合のみ処理を続行
+  if (typeof hm === 'string' && hm.includes(':')) {
+    const [h, m] = hm.split(':').map(Number);
+    // h や m が NaN でないことを確認
+    if (!isNaN(h) && !isNaN(m)) {
+      return (h * 60 + m) % 1440;
+    }
+  }
+  // それ以外 (undefined, null, ':' がない等) は安全な値 (0時 = 0) を返す
+  console.warn(`Invalid hmToMinutes input: ${hm}. Defaulting to 0.`);
+  return 0;
 }
 
 // start..end の半開区間判定（end < start は日跨ぎ）
