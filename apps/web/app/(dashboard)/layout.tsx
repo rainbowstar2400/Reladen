@@ -58,35 +58,51 @@ export default function DashboardLayout({
 
   // 最後に「承認」したパスを保持する
   const approvedPathRef = useRef(pathname);
+  // history.pushState() を実行したことを一時的にマークする
+  const isCancellingRef = useRef(false);
 
   useEffect(() => {
-    const handlePopState = (e: PopStateEvent) => {
-      // (A) Dirty でなければ、ブラウザのデフォルト動作（ナビゲーション）を許可
-      if (!isDirty) {
-        return;
-      }
+    const currentPath = pathname;
+    const previousApprovedPath = approvedPathRef.current;
 
-      // (B) Dirty な場合
-      if (window.confirm('編集内容が保存されていませんが、移動しますか？')) {
-        // 「はい」: 遷移を許可
-        setIsDirty(false);
-        // (Next.js がこの popstate を検知してページ遷移を実行する)
-      } else {
-        // 「いいえ」: 遷移をキャンセル
+    // (A) "pushState" で戻ってきた場合:
+    // isCancellingRef.current が true なら、それは「キャンセル」操作
+    // 直後のコードによるナビゲーションなので、何もせず許可する。
+    // これによりフォームの再マウントを防ぐ
+    if (isCancellingRef.current) {
+      isCancellingRef.current = false; // フラグをリセット
+      // approvedPathRef.current は "previousApprovedPath" のまま変更しない
+      return;
+    }
 
-        // (重要) Next.js/ブラウザは既に履歴を「戻って」しまっているため、
-        // 強制的に「進む」（元のフォームページ）の履歴をスタックに積む
-        window.history.pushState(null, '', pathname);
-      }
-    };
+    // (B) ダーティでない場合、またはパスが変わっていない場合:
+    // 遷移を承認し、現在のパスを「承認済み」として記録
+    if (!isDirty || currentPath === previousApprovedPath) {
+      approvedPathRef.current = currentPath;
+      return;
+    }
 
-    // popstate イベントをリッスン
-    window.addEventListener('popstate', handlePopState);
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
+    // (C) ダーティであり、かつパスが変わった場合 (「戻る」ボタンなど)
+    // 警告ダイアログを表示
+    if (window.confirm('編集内容が保存されていませんが、移動しますか？')) {
+      // 「はい」: 遷移を許可
+      setIsDirty(false); // ダーティ状態を解除
+      approvedPathRef.current = currentPath; // 遷移先を「承認済み」として記録
+    } else {
+      // 「いいえ」: 遷移をキャンセル
 
-  }, [isDirty, pathname, setIsDirty]);
+      // (重要) Next.js router ではなく、ブラウザの history API を
+      // 直接使い、URLだけを元に戻す。
+      // 「戻る」操作を相殺するために「進む」操作(pushState) を実行する
+
+      // ★ "pushState" を実行するフラグを立てる
+      // これにより、(A)のロジックが次のフック実行時に作動する
+      isCancellingRef.current = true;
+      window.history.pushState(null, '', previousApprovedPath);
+
+      // approvedPathRef は元のまま (previousApprovedPath) にしておく
+    }
+  }, [pathname, isDirty, setIsDirty]); // 依存配列
 
   return (
     <DirtyFormContext.Provider value={contextValue}>
