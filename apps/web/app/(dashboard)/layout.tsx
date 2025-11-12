@@ -16,7 +16,7 @@ import DetailLayer from '@/components/logs/detail-layer';
 import ConsultDetailLayer from '@/components/consults/detail-layer';
 import RealtimeSubscriber from '@/components/Realtime/RealtimeSubscriber';
 import { useAuth } from '@/lib/auth/use-auth';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 export type DirtyFormContextType = {
   isDirty: boolean;
@@ -55,51 +55,39 @@ export default function DashboardLayout({
   const { ready, user } = useAuth();
 
   const pathname = usePathname();
-  const router = useRouter();
 
   // 最後に「承認」したパスを保持する
   const approvedPathRef = useRef(pathname);
-  // router.replace() を実行したことを一時的にマークする
-  const isCancellingRef = useRef(false);
 
   useEffect(() => {
     const currentPath = pathname;
-    const previousPath = approvedPathRef.current;
+    const previousApprovedPath = approvedPathRef.current;
 
-    // (A) "router.replace()" で戻ってきた場合:
-    // isCancellingRef.current が true なら、それは「いいえ」を押した
-    // 直後のコードによるナビゲーションなので、何もせず許可する。
-    // これによりフォームの再マウントを防ぐ
-    if (isCancellingRef.current) {
-      isCancellingRef.current = false; // フラグをリセット
-      // approvedPathRef.current は "previousPath" のまま変更しない
-      return;
-    }
-
-    // (B) ダーティでない場合、またはパスが変わっていない場合:
-    // 遷移を承認し、現在のパスを「承認済み」として記録
-    if (!isDirty || currentPath === previousPath) {
+    // (A) パスが同じ、または Dirty でない場合は、
+    // 現在のパスを「承認済み」として記録し、何もしない
+    if (currentPath === previousApprovedPath || !isDirty) {
       approvedPathRef.current = currentPath;
       return;
     }
 
-    // (C) ダーティかつパスが変わった場合 (「戻る」ボタンなど)
+    // (B) Dirty であり、かつパスが変わった場合 (「戻る」ボタン)
     // 警告ダイアログを表示
     if (window.confirm('編集内容が保存されていませんが、移動しますか？')) {
       // 「はい」: 遷移を許可
-      setIsDirty(false); // ダーティ状態を解除
-      approvedPathRef.current = currentPath; // 遷移先を「承認済み」として記録
+      setIsDirty(false); // Dirty 状態を解除
+      approvedPathRef.current = currentPath; // 新しいパスを「承認済み」として記録
     } else {
       // 「いいえ」: 遷移をキャンセル
-      // ユーザーを元のページ (previousPath) に強制的に戻す
 
-      // ★ "replace" を実行するフラグを立てる
-      // これにより、(A)のロジックが次のフック実行時に作動する
-      isCancellingRef.current = true;
-      router.replace(previousPath);
-      // isDirty は true のまま
+      // ★ (重要) Next.js の router ではなく、ブラウザの history API を
+      // 直接使い、URLだけを元に戻す。
+      // これにより、コンポーネントの再マウントを防ぐ。
+      window.history.replaceState(null, '', previousApprovedPath);
+
+      // approvedPathRef は元のまま (previousApprovedPath) にしておく
     }
-  }, [pathname, isDirty, router, setIsDirty]);
+    // ★ 依存配列から router を削除
+  }, [pathname, isDirty, setIsDirty]);
 
   return (
     <DirtyFormContext.Provider value={contextValue}>
