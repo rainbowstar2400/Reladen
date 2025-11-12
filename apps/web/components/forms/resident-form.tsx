@@ -526,9 +526,10 @@ export function ResidentForm({
   const firstPersonPresetLabels = useMemo(() => firstPersonPresets.map(p => p.label), [firstPersonPresets]);
 
   // 「手動入力」モードかどうかを判定
-  const isSpeechManual = watchSpeechPreset != null && watchSpeechPreset !== '' && !speechPresetLabels.includes(watchSpeechPreset);
-  const isOccupationManual = watchOccupation != null && watchOccupation !== '' && !occupationPresetLabels.includes(watchOccupation);
-  const isFirstPersonManual = watchFirstPerson != null && watchFirstPerson !== '' && !firstPersonPresetLabels.includes(watchFirstPerson);
+  // (値が空文字'' = 手動入力が選択された直後 OR 値が存在し、かつプリセットリストに無い = 手動入力中/非管理データ)
+  const isSpeechManual = (watchSpeechPreset === '') || (watchSpeechPreset != null && !speechPresetLabels.includes(watchSpeechPreset));
+  const isOccupationManual = (watchOccupation === '') || (watchOccupation != null && !occupationPresetLabels.includes(watchOccupation));
+  const isFirstPersonManual = (watchFirstPerson === '') || (watchFirstPerson != null && !firstPersonPresetLabels.includes(watchFirstPerson));
 
   return (
     <Form {...form}>
