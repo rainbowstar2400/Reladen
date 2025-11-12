@@ -12,18 +12,40 @@ import { Badge } from '@/components/ui/badge';
 import { Feeling, Relation } from '@/types';
 
 const AffinityBar = ({ value }: { value: number }) => {
-    // 0-100 の値を 0-100% の幅に変換 (丸めなし)
-    // 0未満、100超過を範囲内に収める
-    const widthPercent = Math.max(0, Math.min(100, value));
+    // 0-100 の範囲外の値を丸める
+    const clampedValue = Math.max(0, Math.min(100, value));
 
     return (
-        // 外側のコンテナ (バーの背景)
-        <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-4 overflow-hidden">
-            {/* 内側のバー (実際の値) */}
-            <div
-                className="bg-blue-500 h-4 transition-all duration-300 ease-out" // アニメーションを追加
-                style={{ width: `${widthPercent}%` }}
-            />
+        <div className="flex space-x-0.5">
+            {Array.from({ length: 10 }).map((_, index) => {
+                // 各セグメントが担当する値の範囲 (例: index 0 = 0-10, index 8 = 80-90)
+                const segmentStartValue = index * 10;
+                const segmentEndValue = (index + 1) * 10;
+
+                let widthPercent = 0; // 0% (空)
+
+                if (clampedValue >= segmentEndValue) {
+                    // このブロックは完全に満たされている (例: value 85 の時の index 7 (80) )
+                    widthPercent = 100;
+                } else if (clampedValue > segmentStartValue) {
+                    // このブロックは部分的に満たされている (例: value 85 の時の index 8 (80-90) )
+                    const valueInRange = clampedValue - segmentStartValue; // 1の位 (例: 85 - 80 = 5)
+                    widthPercent = (valueInRange / 10) * 100; // (例: 5 / 10 * 100 = 50%)
+                }
+
+                return (
+                    <div
+                        key={index}
+                        className="h-4 flex-1 rounded-sm bg-neutral-200 dark:bg-neutral-700 overflow-hidden"
+                    >
+                        {/* 内側のバー (塗りつぶし) */}
+                        <div
+                            className="h-4 bg-blue-500"
+                            style={{ width: `${widthPercent}%` }}
+                        />
+                    </div>
+                );
+            })}
         </div>
     );
 };
@@ -62,26 +84,34 @@ const InfoColumn = ({
 }) => (
     <div className="flex-1 space-y-3">
         <h3 className="text-center font-medium">{title}</h3>
-        <dl className="space-y-4 text-sm p-4 rounded border">
-            <div className="space-y-1">
-                <dt className="text-muted-foreground">印象</dt>
+        <dl className="space-y-3 text-sm p-4 rounded border">
+
+            {/* 印象*/}
+            <div className="flex items-center justify-between">
+                <dt className="text-muted-foreground">印象：</dt>
                 <dd>
                     {impression ? (
-                        // ★ 日本語ラベルで表示
                         <Badge variant="secondary">{FEELING_LABELS[impression] ?? impression}</Badge>
                     ) : (
                         '（なし）'
                     )}
                 </dd>
             </div>
-            <div className="space-y-1">
-                <dt className="text-muted-foreground">好感度 ({affinity})</dt>
+
+            {/* 好感度 */}
+            <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                    <dt className="text-muted-foreground">好感度：</dt>
+                    <dd className="font-medium">({affinity})</dd>
+                </div>
                 <dd>
                     <AffinityBar value={affinity} />
                 </dd>
             </div>
-            <div className="space-y-1">
-                <dt className="text-muted-foreground">呼び方</dt>
+
+            {/* 呼び方 */}
+            <div className="flex items-center justify-between">
+                <dt className="text-muted-foreground">呼び方：</dt>
                 <dd>{callName ?? '（未設定）'}</dd>
             </div>
         </dl>
@@ -177,12 +207,11 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
 
             {/* --- 共通の関係 --- */}
             <Card>
-                <CardHeader>
-                    <CardTitle className="text-center text-base font-medium text-muted-foreground">関係</CardTitle>
-                </CardHeader>
-                <CardContent className="text-center text-lg font-semibold">
-                    {/* 日本語ラベルで表示 */}
-                    {relationLabel}
+                <CardContent className="pt-4 pb-3 text-center">
+                    <p className="text-base font-medium text-muted-foreground">関係</p>
+                    <p className="text-lg font-semibold">
+                        {relationLabel}
+                    </p>
                 </CardContent>
             </Card>
 

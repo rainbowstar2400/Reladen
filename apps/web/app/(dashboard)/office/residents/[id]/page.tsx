@@ -13,6 +13,7 @@ import { Loader2, ArrowLeft, Pencil, ChevronRight } from 'lucide-react'; // ア�
 import { useMemo } from 'react';
 import Link from 'next/link'; // Linkを追加
 import { SleepProfile } from '../../../../../../../packages/shared/logic/schedule'; // 型をインポート
+import { Feeling, Relation } from '@/types';
 
 // --- (ここから) resident-form.tsx からモックデータとヘルパーを一時的に拝借 ---
 // (本来は共有ライブラリに置くべき)
@@ -101,6 +102,23 @@ const ProfileRow = ({ label, value, isBlock = false }: { label: string; value: R
 };
 // --- (ここまで) 表示用のヘルパーコンポーネント (ProfileRow) ---
 
+const RELATION_LABELS: Record<Relation['type'], string> = {
+  none: '（なし）',
+  friend: '友達',
+  best_friend: '親友',
+  lover: '恋人',
+  family: '家族',
+};
+
+const FEELING_LABELS: Record<Feeling['label'], string> = {
+  none: '（なし）',
+  dislike: '苦手',
+  curious: '気になる',
+  maybe_like: '好きかも',
+  like: '好き',
+  love: '大好き',
+  awkward: '気まずい',
+};
 
 export default function ResidentDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -112,7 +130,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   const { data: feelings } = useFeelings();
   const remove = useDeleteResident();
 
-  // ★ (ここから) ID/名前マップと印象マップを作成
+  // ID/名前マップと印象マップを作成
   const residentNameMap = useMemo(() => {
     if (!allResidents) return new Map<string, string>();
     return new Map(allResidents.map(r => [r.id, r.name ?? '（名前なし）']));
@@ -122,8 +140,8 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   const relatedFeelings = feelings?.filter((feeling) => feeling.from_id === residentId || feeling.to_id === residentId) ?? [];
 
   const feelingMap = useMemo(() => {
-    if (!relatedFeelings) return new Map<string, string>();
-    const map = new Map<string, string>();
+    if (!relatedFeelings) return new Map<string, Feeling['label']>();
+    const map = new Map<string, Feeling['label']>();
     // この住人 (residentId) から相手 (to_id) への感情をマップする
     for (const feeling of relatedFeelings) {
       if (feeling.from_id === residentId) {
@@ -132,8 +150,6 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
     }
     return map;
   }, [relatedFeelings, residentId]);
-  // ★ (ここまで) ID/名前マップと印象マップを作成
-
 
   // ★ allResidents のロードも待つ
   if (isLoading || !allResidents) {
@@ -344,26 +360,34 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
                     // この住人 (residentId) から相手 (partnerId) への印象を取得
                     const impression = feelingMap.get(partnerId);
 
+                    // ★ (ここから) 日本語ラベル取得
+                    const relationType = relation.type ?? 'none';
+                    const relationLabel = RELATION_LABELS[relationType] ?? relationType;
+
+                    const impressionKey = impression ?? 'none';
+                    const impressionLabel = FEELING_LABELS[impressionKey] ?? impressionKey;
+                    // ★ (ここまで) 日本語ラベル取得
+
                     return (
                       <div
                         key={relation.id}
                         className="flex items-center justify-between rounded border p-3"
                       >
-                        <div className="flex flex-col md:flex-row md:items-center md:gap-4">
+                        <div className="flex flex-col md:flex-row md:items-center md:gap-6">
                           {/* 相手住人の名前 */}
                           <span className="font-medium">{partnerName}</span>
 
-                          {/* 関係性 */}
-                          <Badge variant="outline">{relation.type}</Badge>
-
-                          {/* 印象 */}
-                          <div className="text-sm text-muted-foreground mt-1 md:mt-0">
-                            <span className="mr-1">印象:</span>
-                            {impression ? (
-                              <Badge variant="secondary">{impression}</Badge>
-                            ) : (
-                              '（未設定）'
-                            )}
+                          {/* 情報 (関係と印象) */}
+                          <div className="flex flex-col md:flex-row md:gap-4 text-sm text-muted-foreground mt-1 md:mt-0">
+                            <span>
+                              関係：
+                              {/* 値を text-foreground にしてラベルと区別 */}
+                              <span className="ml-1 text-foreground">{relationLabel}</span>
+                            </span>
+                            <span>
+                              印象：
+                              <span className="ml-1 text-foreground">{impressionLabel}</span>
+                            </span>
                           </div>
                         </div>
 
