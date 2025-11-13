@@ -4,10 +4,8 @@ import { ResidentForm } from '@/components/forms/resident-form';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { SafeLink } from '@/components/layout/SafeLink';
 import { Button } from '@/components/ui/button';
-// ★ 追加: useQuery とローカルDBフック
 import { useQuery } from '@tanstack/react-query';
 import { getLocal, listLocal } from '@/lib/db-local';
-// ★ 追加: 関連する型をインポート
 import type {
   Resident,
   ResidentWithRelations,
@@ -19,7 +17,7 @@ import type {
 export default function EditResidentPage({ params }: { params: { id: string } }) {
   const residentId = params.id;
 
-  // ★ 変更: useResident() の代わりに、関連データもすべて取得する useQuery を使用
+  // useResident() の代わりに、関連データもすべて取得する useQuery を使用
   const { data: residentData, isLoading } = useQuery({
     queryKey: ['residentWithRelations', residentId], // このページ専用のクエリキー
     queryFn: async (): Promise<ResidentWithRelations | null> => {

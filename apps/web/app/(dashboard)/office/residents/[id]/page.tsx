@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useResident, useDeleteResident, useResidents } from '@/lib/data/residents';
+import { usePresets, type Preset } from '@/lib/data/presets';
 import { useRelations } from '@/lib/data/relations';
 import { useFeelings } from '@/lib/data/feelings';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,33 +15,6 @@ import { useMemo } from 'react';
 import Link from 'next/link'; // Linkを追加
 import { SleepProfile } from '../../../../../../../packages/shared/logic/schedule'; // 型をインポート
 import { Feeling, Relation } from '@/types';
-
-// --- (ここから) resident-form.tsx からモックデータとヘルパーを一時的に拝借 ---
-// (本来は共有ライブラリに置くべき)
-type ManagedPreset = { id: string; label: string; description?: string | null; isManaged: boolean };
-
-const MOCK_PRESETS_DB: Record<'speech' | 'occupation' | 'first_person', ManagedPreset[]> = {
-  speech: [
-    { id: 'uuid-s1', label: 'ていねい', description: '常に敬語を使い、相手を尊重する話し方。', isManaged: true },
-    { id: 'uuid-s2', label: 'くだけた', description: '友人や親しい人との間で使われる、フレンドリーな話し方。', isManaged: true },
-    { id: 'uuid-s3-temp', label: '武士（ござる）', description: '語尾に「ござる」を付ける。', isManaged: false }, // 非管理
-  ],
-  occupation: [
-    { id: 'uuid-o1', label: '学生', isManaged: true },
-    { id: 'uuid-o2', label: '会社員', isManaged: true },
-    { id: 'uuid-o3', label: 'エンジニア', isManaged: true },
-  ],
-  first_person: [
-    { id: 'uuid-f1', label: '私', isManaged: true },
-    { id: 'uuid-f2', label: '僕', isManaged: true },
-  ],
-};
-
-const findPresetFromDb = (id: string | undefined, category: 'speech' | 'occupation' | 'first_person'): ManagedPreset | undefined => {
-  if (!id) return undefined;
-  return MOCK_PRESETS_DB[category].find(p => p.id === id);
-};
-// --- (ここまで) resident-form.tsx からモックデータとヘルパーを一時的に拝借 ---
 
 // --- (ここから) traits の日本語ラベルと表示用コンポーネント ---
 const DEFAULT_TRAITS = {
@@ -130,6 +104,9 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   const { data: feelings } = useFeelings();
   const remove = useDeleteResident();
 
+  // プリセットデータを取得 (ローディング状態も)
+  const { data: allPresets = [], isLoading: isLoadingPresets } = usePresets();
+
   // ID/名前マップと印象マップを作成
   const residentNameMap = useMemo(() => {
     if (!allResidents) return new Map<string, string>();
@@ -151,8 +128,8 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
     return map;
   }, [relatedFeelings, residentId]);
 
-  // ★ allResidents のロードも待つ
-  if (isLoading || !allResidents) {
+  // allResidents と isLoadingPresets もローディング条件に追加
+  if (isLoading || !allResidents || isLoadingPresets) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> 読み込み中…
@@ -165,12 +142,13 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   }
 
   // --- (ここから) プリセットIDからラベルを取得 ---
-  const speechPreset = findPresetFromDb(resident.speechPreset, 'speech');
-  const occupationPreset = findPresetFromDb(resident.occupation, 'occupation');
-  const firstPersonPreset = findPresetFromDb(resident.firstPerson, 'first_person');
+  // allPresets から find する
+  const speechPreset = allPresets.find(p => p.id === resident.speechPreset);
+  const occupationPreset = allPresets.find(p => p.id === resident.occupation);
+  const firstPersonPreset = allPresets.find(p => p.id === resident.firstPerson);
 
   const sleepProfile = (resident.sleepProfile ?? {}) as Partial<SleepProfile>;
-  // ★ traits にデフォルト値をマージ (DBに traits が null の場合に対応)
+  // traits にデフォルト値をマージ (DBに traits が null の場合に対応)
   const traits = { ...DEFAULT_TRAITS, ...(resident.traits as any) };
   // --- (ここまで) プリセットIDからラベルを取得 ---
 

@@ -3,99 +3,89 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea'; //
+import { Textarea } from '@/components/ui/textarea';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'; //
-import { presetCategoryEnum } from '@/lib/drizzle/schema'; //
-import { Trash2 } from 'lucide-react';
-
-type PresetCategory = typeof presetCategoryEnum.enumValues[number];
-type PresetItem = {
-  id: string; // DBの主キー (uuid)
-  category: PresetCategory;
-  label: string; // 表示名
-  description?: string | null;
-  isManaged: boolean;
-};
-
-// 仮のデータ (isManaged: true のものが管理対象)
-const MOCK_DATA: Record<PresetCategory, PresetItem[]> = {
-  speech: [
-    { id: 'uuid-s1', category: 'speech', label: 'ていねい', description: '常に敬語を使い、相手を尊重する話し方。', isManaged: true },
-    { id: 'uuid-s2', category: 'speech', label: 'くだけた', description: '友人や親しい人との間で使われる、フレンドリーな話し方。', isManaged: true },
-  ],
-  occupation: [
-    { id: 'uuid-o1', category: 'occupation', label: '学生', isManaged: true },
-    { id: 'uuid-o2', category: 'occupation', label: '会社員', isManaged: true },
-    { id: 'uuid-o3', category: 'occupation', label: 'エンジニア', isManaged: true },
-    { id: 'uuid-o4', category: 'occupation', label: '浪人生', isManaged: false }, // これは表示されない
-  ],
-  first_person: [
-    { id: 'uuid-f1', category: 'first_person', label: '私', isManaged: true },
-    { id: 'uuid-f2', category: 'first_person', label: '僕', isManaged: true },
-    { id: 'uuid-f3', category: 'first_person', label: '拙者', isManaged: false }, // これは表示されない
-  ],
-};
+} from '@/components/ui/card';
+import { presetCategoryEnum } from '@/lib/drizzle/schema';
+import { Trash2, Loader2 } from 'lucide-react';
+import {
+  usePresetsByCategory,
+  useUpsertPreset,
+  useDeletePreset,
+  type Preset,
+  type PresetCategory,
+} from '@/lib/data/presets';
 
 const CATEGORY_DETAILS: Record<PresetCategory, { title: string; desc: string; labelHelp: string; descHelp?: string }> = {
   speech: {
     title: '話し方プリセット',
-    desc: '会話生成時にAIに渡す「話し方」を管理します。',
-    labelHelp: 'ラベル (例: ていねい)',
-    descHelp: 'AIへの指示 (例: 常に敬語を使い…)',
+    desc: '住人の会話における「話し方」を管理します。',
+    labelHelp: '例: ていねい',
+    descHelp: '例: 常に敬語を使い…',
   },
   occupation: {
     title: '職業プリセット',
-    desc: '住人フォームの「職業」サジェストを管理します。',
-    labelHelp: 'ラベル (例: 学生)',
+    desc: '「職業」の候補リストを管理します。',
+    labelHelp: '例: 学生',
   },
   first_person: {
     title: '一人称プリセット',
-    desc: '住人フォームの「一人称」サジェストを管理します。',
-    labelHelp: 'ラベル (例: 私)',
+    desc: '「一人称」候補リストを管理します。',
+    labelHelp: '例: 私',
   },
 };
 
 /**
- * カテゴリごとのプリセット管理UI (仮)
+ * カテゴリごとのプリセット管理UI (実データ対応版)
  */
 function PresetCategoryManager({ category }: { category: PresetCategory }) {
   const details = CATEGORY_DETAILS[category];
-  
-  // ★ 変更: isManaged: true のものだけをフィルタ
-  const [items, setItems] = useState(MOCK_DATA[category].filter(item => item.isManaged));
-  
+
+  // useState(MOCK_DATA) の代わりに usePresetsByCategory フックを使用
+  const { data: items = [], isLoading } = usePresetsByCategory(category);
+
+  // データの更新・削除用フックを呼び出し
+  const upsertPreset = useUpsertPreset();
+  const deletePreset = useDeletePreset();
+
   const [newLabel, setNewLabel] = useState('');
   const [newDescription, setNewDescription] = useState('');
 
   const handleAdd = () => {
     if (!newLabel || (category === 'speech' && !newDescription)) return;
-    
-    const newItem: PresetItem = {
-      id: crypto.randomUUID(), // DBの主キー (仮)
+
+    const newItem: Partial<Preset> = {
+      // id は upsert フック側で生成
       category,
       label: newLabel,
       description: category === 'speech' ? newDescription : undefined,
-      isManaged: true, // ★ このページで追加するものは isManaged: true
+      isManaged: true, // このページで追加するものは isManaged: true
     };
-    
-    setItems([...items, newItem]);
-    setNewLabel('');
-    setNewDescription('');
-    // TODO: API 呼び出し (addPreset.mutate(newItem))
-    console.log('Add Managed Preset:', newItem);
+
+    // setItems() の代わりに API (フック) を呼び出し
+    upsertPreset.mutate(newItem, {
+      onSuccess: () => {
+        // 成功したら入力欄をクリア
+        setNewLabel('');
+        setNewDescription('');
+      },
+      // (onError は useMutation のグローバル設定に任せるか、ここで toast を表示)
+    });
   };
 
   const handleDelete = (id: string) => {
-    setItems(items.filter((item) => item.id !== id));
-    // TODO: API 呼び出し (deletePreset.mutate(id))
-    // 実際には削除せず isManaged: false にする or 関連する住人がいないかチェックする
-    console.log('Delete/Unmanage Preset:', id);
+    // setItems() の代わりに API (フック) を呼び出し
+    if (window.confirm('このプリセットを削除しますか？ (関連する住人からは解除されます)')) {
+      deletePreset.mutate(id);
+    }
   };
+
+  // ローディング中と更新中の状態
+  const isMutating = upsertPreset.isPending || deletePreset.isPending;
 
   return (
     <Card>
@@ -104,9 +94,19 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
         <p className="text-sm text-muted-foreground">{details.desc}</p>
       </CardHeader>
       <CardContent className="space-y-4">
+
+        {/* ローディング表示 */}
+        {isLoading && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            読み込み中...
+          </div>
+        )}
+
         {/* 既存のリスト */}
         <div className="space-y-2">
-          {items.map((item) => (
+          {/* isManaged: true のものだけをフィルタ (フックが全件返す場合に備える) */}
+          {items.filter(item => item.isManaged).map((item) => (
             <div
               key={item.id}
               className="flex flex-col gap-1 rounded-md border p-3"
@@ -118,6 +118,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                   size="icon"
                   className="h-8 w-8 shrink-0"
                   onClick={() => handleDelete(item.id)}
+                  disabled={isMutating} // 更新中は無効化
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -137,6 +138,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
             placeholder={details.labelHelp}
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
+            disabled={isMutating} // 更新中は無効化
           />
 
           {category === 'speech' && (
@@ -145,15 +147,24 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
               value={newDescription}
               onChange={(e) => setNewDescription(e.target.value)}
               rows={2}
+              disabled={isMutating} // 更新中は無効化
             />
           )}
 
           <Button
             onClick={handleAdd}
-            disabled={!newLabel || (category === 'speech' && !newDescription)}
+            // upsertPreset.isPending もチェック
+            disabled={!newLabel || (category === 'speech' && !newDescription) || isMutating}
             className="mt-2"
           >
-            追加
+            {upsertPreset.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                追加中...
+              </>
+            ) : (
+              '追加'
+            )}
           </Button>
         </div>
       </CardContent>
@@ -161,13 +172,12 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
   );
 }
 
-// プリセット管理ページの本体
 export default function PresetsPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">プリセット管理</h1>
       <p className="text-sm text-muted-foreground">
-        住人登録フォームの選択リストに表示されるプリセット（話し方、職業、一人称）を管理します。
+        住人登録時の選択リストに表示されるプリセット（話し方、職業、一人称）を管理します。
       </p>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

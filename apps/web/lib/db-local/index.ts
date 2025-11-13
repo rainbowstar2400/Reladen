@@ -1,7 +1,7 @@
 'use client';
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import { EventLog, Feeling, Relation, Resident, Nickname } from '@/types';
+import { EventLog, Feeling, Relation, Resident, Nickname, Preset } from '@/types';
 import { newId } from '@/lib/newId';
 import {
   BeliefRecord,
@@ -20,7 +20,8 @@ export type LocalTableName =
   | 'beliefs'
   | 'notifications'
   | 'consult_answers'
-  | 'nicknames';
+  | 'nicknames'
+  | 'presets';
 
 type Entity =
   & BaseEntity
@@ -34,6 +35,7 @@ type Entity =
     | BeliefRecord
     | NotificationRecord
     | Nickname
+    | Preset
   );
 
 type PartialEntity<T extends Entity> = Partial<T> & Partial<BaseEntity>;
@@ -56,6 +58,7 @@ interface ReladenSchema extends DBSchema {
       deleted: boolean;
     };
   };
+  presets: { key: string; value: Preset; };
 }
 
 type Snapshot = Record<LocalTableName, Record<string, Entity>>;
@@ -85,11 +88,15 @@ function createEmptySnapshot(): Snapshot {
     notifications: {},
     consult_answers: {},
     nicknames: {},
+    presets: {},
   };
 }
 
 let dbPromise: Promise<IDBPDatabase<ReladenSchema>> | null = null;
 let tauriState: { snapshot: Snapshot; persist: () => Promise<void> } | null = null;
+
+const DB_NAME = 'reladen-db';
+const DB_VERSION = 2;
 
 async function getDb() {
   if (!dbPromise) {
@@ -111,6 +118,11 @@ async function getDb() {
         }
         if (oldVersion < 4) {
           database.createObjectStore('nicknames');
+        }
+        if (oldVersion < 2) {
+          if (!database.objectStoreNames.contains('presets')) {
+            database.createObjectStore('presets');
+          }
         }
       },
     });
@@ -174,7 +186,10 @@ export async function listLocal<T extends Entity>(table: LocalTableName): Promis
   return values as T[];
 }
 
-export async function getLocal<T extends Entity>(table: LocalTableName, id: string) {
+export async function getLocal<T extends Entity>(
+  table: LocalTableName,
+  id: string
+): Promise<T | undefined> {
   if (isTauri) {
     const state = await getTauriState();
     if (state) {
@@ -230,8 +245,8 @@ export async function clearLocalAll() {
   // ブラウザ IndexedDB: 既存ストアをクリア
   const db = await getDb();
   const stores: LocalTableName[] = [
-    'residents','relations','feelings','events',
-    'topic_threads','beliefs','notifications','consult_answers','nicknames'
+    'residents', 'relations', 'feelings', 'events',
+    'topic_threads', 'beliefs', 'notifications', 'consult_answers', 'nicknames'
   ];
   const tx = db.transaction(stores, 'readwrite');
   await Promise.all(stores.map((name) => tx.objectStore(name).clear()));

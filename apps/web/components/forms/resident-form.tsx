@@ -4,11 +4,12 @@ import React from 'react';
 
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Resident } from '@/types';
+import { Resident, Preset } from '@/types';
 import type {
   ResidentWithRelations,
   TempRelationData,
   RelationType,
+  PresetCategory,
 } from '@/types';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -31,8 +32,8 @@ import { Slider } from '@/components/ui/slider';
 import { relationTypeEnum } from '@/lib/drizzle/schema';
 import { useFormDirty } from '@/components/providers/FormDirtyProvider';
 import { useLeaveConfirm } from '@/lib/hooks/useLeaveConfirm';
-// ★ TODO: 将来的には usePresets フックなどから動的に取得する
-// import { usePresets } from '@/lib/data/presets';
+import { usePresets, useUpsertPreset } from '@/lib/data/presets';
+import { Loader2 } from 'lucide-react';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
 const MBTI_TYPES = [
@@ -51,38 +52,7 @@ const DEFAULT_TRAITS = {
   expressiveness: 3, // 表現力
 } as const;
 
-// ★ 変更:
-// モックデータに description を含める
-type ManagedPreset = { id: string; label: string; description?: string | null; isManaged: boolean };
-
-// ★ 変更: モックデータを isManaged を含む形に変更
-const MOCK_PRESETS_DB: Record<'speech' | 'occupation' | 'first_person', ManagedPreset[]> = {
-  speech: [
-    { id: 'uuid-s1', label: 'ていねい', description: '常に敬語を使い、相手を尊重する話し方。', isManaged: true },
-    { id: 'uuid-s2', label: 'くだけた', description: '友人や親しい人との間で使われる、フレンドリーな話し方。', isManaged: true },
-    { id: 'uuid-s3-temp', label: '武士（ござる）', description: '語尾に「ござる」を付ける。', isManaged: false }, // 非管理
-  ],
-  occupation: [
-    { id: 'uuid-o1', label: '学生', isManaged: true },
-    { id: 'uuid-o2', label: '会社員', isManaged: true },
-    { id: 'uuid-o3', label: 'エンジニア', isManaged: true },
-    { id: 'uuid-o4-temp', label: '浪人生', isManaged: false }, // 非管理
-  ],
-  first_person: [
-    { id: 'uuid-f1', label: '私', isManaged: true },
-    { id: 'uuid-f2', label: '僕', isManaged: true },
-    { id: 'uuid-f3-temp', label: '拙者', isManaged: false }, // 非管理
-  ],
-};
-
-// ★ 変更: フォームで使う「管理プリセット (isManaged: true)」のみを抽出
-const MOCK_MANAGED_PRESETS = {
-  speech: MOCK_PRESETS_DB.speech.filter(p => p.isManaged),
-  occupation: MOCK_PRESETS_DB.occupation.filter(p => p.isManaged),
-  first_person: MOCK_PRESETS_DB.first_person.filter(p => p.isManaged),
-};
-
-// ★ 追加: 0時〜23時の選択肢を生成
+// 追加: 0時〜23時の選択肢を生成
 const HOURS_OPTIONS = Array.from({ length: 24 }, (_, i) => {
   const hour = String(i);
   return {
@@ -91,10 +61,10 @@ const HOURS_OPTIONS = Array.from({ length: 24 }, (_, i) => {
   };
 });
 
-// ★ 1. 職業・一人称の <Select> で使う「手動入力」用の特別な値
+// 職業・一人称の <Select> で使う「手動入力」用の特別な値
 const MANUAL_INPUT_KEY = '--manual--';
 
-// フォームのZodスキーマ。DBスキーマ (Resident) とは異なる。
+// フォームのZodスキーマ
 // ここでは「ラベル」（文字列）と「管理フラグ」を保持する。
 const residentFormSchema = z.object({
   id: z.string().uuid().optional(),
@@ -113,7 +83,6 @@ const residentFormSchema = z.object({
   speechPreset: z.string().optional().nullable(),
   occupation: z.string().optional().nullable(),
   firstPerson: z.string().optional().nullable(),
-  // ★ 追加: 話し方の特徴
   speechPresetDescription: z.string().optional().nullable(),
 
   // --- プリセット管理フラグ ---
@@ -121,7 +90,6 @@ const residentFormSchema = z.object({
   isOccupationManaged: z.boolean().default(false),
   isFirstPersonManaged: z.boolean().default(false),
 
-  // --- その他 (変更なし) ---
   gender: z.preprocess(
     v => (v === '' || v == null ? undefined : v),
     z.enum(['male', 'female', 'nonbinary', 'other']).optional()
@@ -144,7 +112,6 @@ const residentFormSchema = z.object({
 
   interests: z.array(z.object({ value: z.string() })).optional(),
 
-  // ★ 変更: Age と同じ preprocess (数値) に
   // 必須項目にするため .number({ required_error: ... }) を使用
   sleepBedtime: z.preprocess(
     v => (v === '' || v == null ? undefined : Number(v)),
@@ -167,38 +134,6 @@ const defaultScores: Record<RelationType, number> = {
   family: 60,
 };
 
-// ★ 3. findOrCreatePreset (モック) のシグネチャを変更
-const findOrCreatePreset = async (
-  label: string | undefined | null,
-  category: 'speech' | 'occupation' | 'first_person',
-  isManaged: boolean,
-  description?: string | undefined | null
-): Promise<string | undefined> => {
-  if (!label || label.trim().length === 0) {
-    return undefined;
-  }
-  const trimmedLabel = label.trim();
-  const allPresetsMock = MOCK_PRESETS_DB[category];
-  const existing = allPresetsMock.find(p => p.label === trimmedLabel);
-
-  if (existing) {
-    if (isManaged && !existing.isManaged) {
-      console.log(`Preset ${trimmedLabel} (${existing.id}) を 'managed' に更新 (モック)`);
-      // TODO: API 呼び出し (updatePreset(existing.id, { isManaged: true, description }))
-    } else if (category === 'speech' && description !== existing.description) {
-      console.log(`Preset ${trimmedLabel} (${existing.id}) の 'description' を更新 (モック)`);
-      // TODO: API 呼び出し (updatePreset(existing.id, { description }))
-    }
-    return existing.id;
-  }
-
-  const newId = crypto.randomUUID();
-  console.log(`Preset ${trimmedLabel} を新規作成 (isManaged: ${isManaged}) (Desc: ${description}) (ID: ${newId}) (モック)`);
-  // TODO: API 呼び出し (createPreset({ label: trimmedLabel, category, isManaged, description }))
-  return newId;
-};
-
-// ★ 追加: 初期関係設定のデフォルト値
 const DEFAULT_TEMP_RELATION: TempRelationData = {
   relationType: 'none',
   feelingLabelTo: 'none',
@@ -213,27 +148,88 @@ export function ResidentForm({
   defaultValues,
   onSubmitted,
 }: {
-  // ★ 変更: 編集時は Relation データも受け取る
-  defaultValues?: Partial<Resident>; // ★ 変更: 互換性のため Partial<Resident> に戻す (実際のデータは Step 6 で ResidentWithRelations を期待)
+  // 編集時は Relation データも受け取る
+  defaultValues?: Partial<Resident>;
   onSubmitted?: () => void;
 }) {
   const router = useRouter();
 
   const formDefaultValues = defaultValues as Partial<ResidentWithRelations>;
 
-  const speechPresets = MOCK_MANAGED_PRESETS.speech;
-  const occupationPresets = MOCK_MANAGED_PRESETS.occupation;
-  const firstPersonPresets = MOCK_MANAGED_PRESETS.first_person;
+  const { data: allPresets = [], isLoading: isLoadingPresets } = usePresets();
+  const upsertPreset = useUpsertPreset();
 
-  // ★ 4. (モック) 編集時にDBから読み込んだプリセットが「管理」か「手動」かを判別する
-  const findPresetFromDb = (id: string | undefined, category: 'speech' | 'occupation' | 'first_person'): ManagedPreset | undefined => {
-    if (!id) return undefined;
-    return MOCK_PRESETS_DB[category].find(p => p.id === id);
+  const findOrCreatePreset = async (
+    label: string | undefined | null,
+    category: PresetCategory,
+    isManaged: boolean,
+    description?: string | undefined | null
+  ): Promise<string | undefined> => {
+    if (!label || label.trim().length === 0) {
+      return undefined;
+    }
+    const trimmedLabel = label.trim();
+
+    // (フックから取得した allPresets を参照)
+    const allCategoryPresets = allPresets.filter((p: Preset) => p.category === category);
+    const existing = allCategoryPresets.find((p: Preset) => p.label === trimmedLabel);
+
+    if (existing) {
+      let needsUpdate = false;
+      const updatePayload: Partial<Preset> = { id: existing.id };
+
+      if (isManaged && !existing.isManaged) {
+        updatePayload.isManaged = true;
+        needsUpdate = true;
+      }
+      if (category === 'speech' && description !== existing.description) {
+        updatePayload.description = description;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        console.log(`Preset ${trimmedLabel} (${existing.id}) を更新します`, updatePayload);
+        // (フックから取得した upsertPreset を参照)
+        await upsertPreset.mutateAsync(updatePayload);
+      }
+      return existing.id;
+    }
+
+    const newPreset: Partial<Preset> = {
+      label: trimmedLabel,
+      category,
+      isManaged,
+      description: category === 'speech' ? description : undefined,
+    };
+    console.log(`Preset ${trimmedLabel} を新規作成 (isManaged: ${isManaged})`, newPreset);
+    // (フックから取得した upsertPreset を参照)
+    const savedPreset = await upsertPreset.mutateAsync(newPreset);
+    return savedPreset.id;
   };
 
-  const defaultSpeechPreset = findPresetFromDb(formDefaultValues?.speechPreset, 'speech');
-  const defaultOccPreset = findPresetFromDb(formDefaultValues?.occupation, 'occupation');
-  const defaultFpPreset = findPresetFromDb(formDefaultValues?.firstPerson, 'first_person');
+  const findPresetById = (id: string | undefined): Preset | undefined => {
+    if (!id || isLoadingPresets) return undefined;
+    return allPresets.find((p: Preset) => p.id === id);
+  };
+
+
+  // フォームで使う「管理プリセット」
+  const managedPresets = useMemo(() => {
+    const speech = allPresets
+      .filter((p: Preset) => p.category === 'speech' && p.isManaged)
+      .sort((a: Preset, b: Preset) => a.label.localeCompare(b.label));
+    const occupation = allPresets
+      .filter((p: Preset) => p.category === 'occupation' && p.isManaged)
+      .sort((a: Preset, b: Preset) => a.label.localeCompare(b.label));
+    const first_person = allPresets
+      .filter((p: Preset) => p.category === 'first_person' && p.isManaged)
+      .sort((a: Preset, b: Preset) => a.label.localeCompare(b.label));
+    return { speech, occupation, first_person };
+  }, [allPresets]);
+
+  const defaultSpeechPreset = findPresetById(formDefaultValues?.speechPreset);
+  const defaultOccPreset = findPresetById(formDefaultValues?.occupation);
+  const defaultFpPreset = findPresetById(formDefaultValues?.firstPerson);
 
   const form = useForm<ResidentFormValues>({
     resolver: zodResolver(residentFormSchema),
@@ -242,21 +238,14 @@ export function ResidentForm({
         formDefaultValues?.traits && typeof formDefaultValues.traits === 'object'
           ? (formDefaultValues.traits as any)
           : { ...DEFAULT_TRAITS };
-
-      // ★ 変更: DBの HH:00 (string) をフォームの HH (number | undefined) に
       const timeToHour = (time: string | undefined): number | undefined => {
-        // time が文字列であり、かつ ':' を含む場合のみ処理を続行
         if (typeof time === 'string' && time.includes(':')) {
           const hour = parseInt(time.split(':')[0], 10);
           return isNaN(hour) ? undefined : hour;
         }
-        // それ以外 (undefined, null, 空文字, ':' がない文字列) は undefined を返す
         return undefined;
       };
-
       const currentSleepProfile = (formDefaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
-
-      // ★ 追加: 誕生日 (MM/DD) をフォーム用の 月/日 (number) に分解
       const [defaultMonth, defaultDay] = (formDefaultValues?.birthday ?? '/').split('/');
       const birthMonthNum = defaultMonth ? parseInt(defaultMonth, 10) : undefined;
       const birthDayNum = defaultDay ? parseInt(defaultDay, 10) : undefined;
@@ -281,11 +270,11 @@ export function ResidentForm({
         birthMonth: isNaN(birthMonthNum as number) ? undefined : birthMonthNum,
         birthDay: isNaN(birthDayNum as number) ? undefined : birthDayNum,
 
-        // ★ 変更: 変換関数を使い、デフォルトを undefined ('' ではない) に
         sleepBedtime: timeToHour(currentSleepProfile.baseBedtime),
         sleepWakeTime: timeToHour(currentSleepProfile.baseWakeTime),
       };
-    }, [formDefaultValues]),
+      // 依存配列にプリセットのロード状態を追加
+    }, [formDefaultValues, defaultSpeechPreset, defaultOccPreset, defaultFpPreset]),
   });
 
   // ローカルの isDirty 状態を取得
@@ -456,53 +445,55 @@ export function ResidentForm({
   const upsert = useUpsertResident();
 
   async function handleSubmit(values: ResidentFormValues) {
-    // ★ 1. フォームの「ラベル」から UUID を非同期で取得/作成
+    // findOrCreatePreset が DBフック (allPresets) を参照するため、
+    // ここで allPresets を参照できるようにする
+
+    // フォームの「ラベル」から UUID を非同期で取得/作成
     const [speechPresetId, occupationId, firstPersonId] = await Promise.all([
-      findOrCreatePreset(values.speechPreset, 'speech', values.isSpeechPresetManaged),
+      findOrCreatePreset(
+        values.speechPreset,
+        'speech',
+        values.isSpeechPresetManaged,
+        values.speechPresetDescription
+      ),
       findOrCreatePreset(values.occupation, 'occupation', values.isOccupationManaged),
       findOrCreatePreset(values.firstPerson, 'first_person', values.isFirstPersonManaged),
     ]);
 
-    // ★ 2. 他の項目を正規化 (変更なし)
+    // ... (normalizedMbti, gender, interests, hourToTime, sleepProfile, birthday のロジックは変更なし) ...
     const normalizedMbti: (typeof MBTI_TYPES)[number] | undefined =
       values.mbti && values.mbti.trim().length > 0
         ? (values.mbti as (typeof MBTI_TYPES)[number])
         : undefined;
     const gender = values.gender as ('male' | 'female' | 'nonbinary' | 'other') | undefined;
     const interests = values.interests?.map(item => item.value).filter(Boolean) ?? [];
-
-    // ★ 追加: フォームの HH (number) をDBの HH:00 (string) に変換
     const hourToTime = (hour: number | undefined): string | undefined => {
       if (hour == null) return undefined;
       return String(hour).padStart(2, '0') + ':00';
     };
-
     const currentSleepProfile = (formDefaultValues?.sleepProfile ?? {}) as Partial<SleepProfile>;
-
     const sleepProfile =
-      (values.sleepBedtime != null && values.sleepWakeTime != null) // 0 (0時) も許可
+      (values.sleepBedtime != null && values.sleepWakeTime != null)
         ? {
-          ...currentSleepProfile, // 既存の todaySchedule などを引き継ぐ
-          // ★ 変更: 変換関数を使う
+          ...currentSleepProfile,
           baseBedtime: hourToTime(values.sleepBedtime)!,
           baseWakeTime: hourToTime(values.sleepWakeTime)!,
           prepMinutes: 30,
         }
         : undefined;
-
     const birthday =
       values.birthMonth != null && values.birthDay != null
         ? `${String(values.birthMonth).padStart(2, '0')}/${String(values.birthDay).padStart(2, '0')}`
         : undefined;
 
-    // ★ 3. 最終的なペイロード (DBの型) を作成
+    // 最終的なペイロード (DBの型) を作成
     const payload: Partial<Resident> = {
       id: values.id,
       name: values.name,
       mbti: normalizedMbti,
       traits: values.traits,
 
-      // ★ ここに変換後の UUID をセット
+      // ここに変換後の UUID をセット
       speechPreset: speechPresetId,
       occupation: occupationId,
       firstPerson: firstPersonId,
@@ -514,22 +505,17 @@ export function ResidentForm({
       ...(sleepProfile ? { sleepProfile } : {}),
     };
 
-    // ★ 変更: 住民データ (payload) と関係データ (tempRelations) を渡す
+    // 住民データ (payload) と関係データ (tempRelations) を渡す
     const saved = await upsert.mutateAsync({
       resident: payload,
       relations: tempRelations,
     });
 
-    // (モック) 保存されたUUIDからプリセットを探す
-    const findPreset = (id: string | undefined, category: 'speech' | 'occupation' | 'first_person'): ManagedPreset | undefined => {
-      const presets: ManagedPreset[] = MOCK_MANAGED_PRESETS[category]; // 型を保証
-      return presets.find(p => p.id === id);
-    };
-    // ★ 4. フォームのリセット (saved は DB の型 = UUID持ち)
-    // (ここでも UUID から ラベルへの逆引きが必要)
-    const savedSpeechPreset = findPreset(saved.speechPreset, 'speech');
-    const savedOccPreset = findPreset(saved.occupation, 'occupation');
-    const savedFpPreset = findPreset(saved.firstPerson, 'first_person');
+    // フォームのリセット (saved は DB の型 = UUID持ち)
+    // (findPresetById を使う)
+    const savedSpeechPreset = findPresetById(saved.speechPreset);
+    const savedOccPreset = findPresetById(saved.occupation);
+    const savedFpPreset = findPresetById(saved.firstPerson);
 
     // ★ 変更: 変換ヘルパー (formDefaultValues と同じ)
     const timeToHour = (time: string | undefined): number | undefined => {
@@ -555,7 +541,7 @@ export function ResidentForm({
       traits: saved.traits ?? { ...DEFAULT_TRAITS },
       trustToPlayer: saved.trustToPlayer ?? 50,
 
-      // ★ フォームにはラベルを戻す
+      // DBデータ(savedPreset)からラベルをセット
       speechPreset: savedSpeechPreset?.label ?? (values.speechPreset ?? null),
       speechPresetDescription: savedSpeechPreset?.description ?? (values.speechPresetDescription ?? null),
       occupation: savedOccPreset?.label ?? (values.occupation ?? null),
@@ -580,7 +566,6 @@ export function ResidentForm({
     // onSubmitted の前にグローバル Dirty を手動で解除
     // handleSubmit が成功したら、遷移アラートは不要
     setGlobalDirty(false);
-
     onSubmitted?.();
   }
 
@@ -600,10 +585,10 @@ export function ResidentForm({
   const watchFirstPerson = form.watch('firstPerson');
   const watchName = form.watch('name');
 
-  // マネージドプリセットのラベルリスト（判定用）
-  const speechPresetLabels = useMemo(() => speechPresets.map(p => p.label), [speechPresets]);
-  const occupationPresetLabels = useMemo(() => occupationPresets.map(p => p.label), [occupationPresets]);
-  const firstPersonPresetLabels = useMemo(() => firstPersonPresets.map(p => p.label), [firstPersonPresets]);
+  // マネージドプリセットのリストを MOCK -> DBフック (managedPresets) に変更
+  const speechPresetLabels = useMemo(() => managedPresets.speech.map(p => p.label), [managedPresets.speech]);
+  const occupationPresetLabels = useMemo(() => managedPresets.occupation.map(p => p.label), [managedPresets.occupation]);
+  const firstPersonPresetLabels = useMemo(() => managedPresets.first_person.map(p => p.label), [managedPresets.first_person]);
 
   // 「手動入力」モードかどうかを判定
   // (値が空文字'' = 手動入力が選択された直後 OR 値が存在し、かつプリセットリストに無い = 手動入力中/非管理データ)
@@ -784,6 +769,7 @@ export function ResidentForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="block">職業</FormLabel>
+                    {/* プリセットロード中は Select を無効化 */}
                     <Select
                       onValueChange={(value) => {
                         if (value === MANUAL_INPUT_KEY) {
@@ -793,14 +779,15 @@ export function ResidentForm({
                         }
                       }}
                       value={isOccupationManual ? MANUAL_INPUT_KEY : field.value ?? ''}
+                      disabled={isLoadingPresets} // ★ 無効化
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="（未選択）" />
+                          <SelectValue placeholder={isLoadingPresets ? "読み込み中..." : "（未選択）"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {occupationPresets.map((preset) => (
+                        {managedPresets.occupation.map((preset) => (
                           <SelectItem key={preset.id} value={preset.label}>
                             {preset.label}
                           </SelectItem>
@@ -868,6 +855,7 @@ export function ResidentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>一人称</FormLabel>
+                  {/* ★ 20. プリセットロード中は Select を無効化 */}
                   <Select
                     onValueChange={(value) => {
                       if (value === MANUAL_INPUT_KEY) {
@@ -877,14 +865,16 @@ export function ResidentForm({
                       }
                     }}
                     value={isFirstPersonManual ? MANUAL_INPUT_KEY : field.value ?? ''}
+                    disabled={isLoadingPresets} // ★ 無効化
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="（未選択）" />
+                        <SelectValue placeholder={isLoadingPresets ? "読み込み中..." : "（未選択）"} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {firstPersonPresets.map((preset) => (
+                      {/* ★ 20. managedPresets.first_person を使用 */}
+                      {managedPresets.first_person.map((preset) => (
                         <SelectItem key={preset.id} value={preset.label}>
                           {preset.label}
                         </SelectItem>
@@ -946,29 +936,30 @@ export function ResidentForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>口調</FormLabel>
+                  {/* ★ 21. プリセットロード中は Select を無効化 */}
                   <Select
                     onValueChange={(value) => {
                       if (value === MANUAL_INPUT_KEY) {
-                        field.onChange(''); // 手動入力モードへ
-                        form.setValue('speechPresetDescription', ''); // 特徴もクリア
+                        field.onChange('');
+                        form.setValue('speechPresetDescription', '');
                       } else {
-                        // プリセットを選択
-                        field.onChange(value); // ラベルをセット
-                        // 対応する特徴をセット
-                        const preset = speechPresets.find(p => p.label === value);
+                        field.onChange(value);
+                        // ★ 21. managedPresets.speech を使用
+                        const preset = managedPresets.speech.find(p => p.label === value);
                         form.setValue('speechPresetDescription', preset?.description ?? '');
                       }
                     }}
-                    // (手動モードならMANUAL_INPUT_KEY、そうでなければ現在の値(空も含む))
                     value={isSpeechManual ? MANUAL_INPUT_KEY : field.value ?? ''}
+                    disabled={isLoadingPresets} // ★ 無効化
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="（未選択）" />
+                        <SelectValue placeholder={isLoadingPresets ? "読み込み中..." : "（未選択）"} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {speechPresets.map((preset) => (
+                      {/* ★ 21. managedPresets.speech を使用 */}
+                      {managedPresets.speech.map((preset) => (
                         <SelectItem key={preset.id} value={preset.label}>
                           {preset.label}
                         </SelectItem>
@@ -1431,7 +1422,8 @@ export function ResidentForm({
         )}
 
         <div className="flex justify-end gap-2">
-          <Button type="submit" disabled={upsert.isPending}>
+          {/* プリセット保存中もボタンを無効化 */}
+          <Button type="submit" disabled={upsert.isPending || upsertPreset.isPending}>
             {upsert.isPending ? '保存中…' : '保存'}
           </Button>
         </div>

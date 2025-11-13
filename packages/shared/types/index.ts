@@ -15,6 +15,13 @@ export const GenderEnum = z.enum([
   'other'
 ]);
 
+export const presetCategoryEnum = z.enum([
+  'speech',
+  'occupation',
+  'first_person',
+]);
+export type PresetCategory = z.infer<typeof presetCategoryEnum>;
+
 export const todayScheduleSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // 'YYYY-MM-DD'
   bedtime: z.string().regex(/^\d{2}:\d{2}$/),    // 'HH:mm'
@@ -96,6 +103,13 @@ export const eventSchema = baseEntitySchema.extend({
   payload: z.record(z.any()),
 });
 
+export const presetSchema = baseEntitySchema.extend({
+  category: presetCategoryEnum,
+  label: z.string().min(1),
+  description: z.string().nullable().optional(),
+  isManaged: z.boolean().default(false),
+});
+
 export const syncPayloadSchema = z.object({
   table: z.enum(['residents', 'relations', 'feelings', 'events', 'consult_answers']),
   changes: z.array(z.object({
@@ -112,6 +126,7 @@ export type Feeling = z.infer<typeof feelingSchema>;
 export type Nickname = z.infer<typeof nicknameSchema>;
 export type EventLog = z.infer<typeof eventSchema>;
 export type SyncPayload = z.infer<typeof syncPayloadSchema>;
+export type Preset = z.infer<typeof presetSchema>;
 export * from './conversation';
 export * from './base';
 
