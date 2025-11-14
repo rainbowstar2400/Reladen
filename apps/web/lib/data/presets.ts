@@ -13,7 +13,7 @@ const now = new Date().toISOString();
 
 const DEFAULT_PRESETS: Preset[] = [
     // Speech
-    { id: 'default_speech_1', category: 'speech', label: '優しい敬語', description: '「〜です」「〜ます」など丁寧で穏やかな話し方', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_speech_1', category: 'speech', label: '優しい敬語', description: '丁寧で穏やかな話し方：「〜です」「〜ます」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
     { id: 'default_speech_2', category: 'speech', label: '冷たい敬語', description: '距離感のある敬語：「ご自由にどうぞ」「そうですか」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
     { id: 'default_speech_3', category: 'speech', label: 'タメ口', description: 'フレンドリーな砕けた口調：「〜だよ」「〜じゃん」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
     { id: 'default_speech_4', category: 'speech', label: 'ギャル語', description: '砕けた陽気な話し方：「マジで？」「〜じゃね？」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
@@ -111,6 +111,9 @@ export function useUpsertPreset() {
             const id = isDefault || !input.id ? newId() : input.id;
 
             let existing: Preset | undefined;
+
+            const skipGetLocal = input.category && input.label;
+
             if (isDefault && input.id) {
                 // デフォルトデータを参照
                 existing = DEFAULT_PRESETS.find(p => p.id === input.id);
@@ -120,8 +123,8 @@ export function useUpsertPreset() {
                     input.label = input.label ?? existing.label;
                     input.description = input.description ?? existing.description;
                 }
-            } else if (input.id) {
-                // 既存のローカルデータを取得
+            } else if (input.id && !skipGetLocal) {
+                // (Switch操作では呼ばれなくなる)
                 existing = (await getLocal('presets', input.id)) as Preset | undefined;
             }
 
