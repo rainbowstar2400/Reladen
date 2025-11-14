@@ -148,10 +148,21 @@ export default function HomePage() {
 
       <div className="space-y-6">
         {/* お知らせ（実データ接続 + クリックで会話詳細） */}
-        <section className="rounded-2xl border bg-white p-4 text-sm text-gray-500">
+        <section>
           <Suspense
+            // fallback の中身を、NotificationsSectionClient/Panel のレイアウト（ヘッダー + 区切り線 + コンテンツ）に合わせる
             fallback={
-              <p>お知らせを読み込み中…</p>
+              <div className="rounded-2xl border bg-white p-4 text-sm text-gray-500">
+                {/* ヘッダー (スケルトン) */}
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-lg text-foreground">お知らせ</h3>
+                  <span className="text-sm text-muted-foreground">未読 ... 件</span>
+                </div>
+                {/* 区切り線 */}
+                <div className="h-px w-full bg-border mb-4" />
+                {/* コンポーネント読み込み中のテキスト */}
+                <p className="text-muted-foreground">お知らせを読み込み中…</p>
+              </div>
             }
           >
             <NotificationsSectionClient />

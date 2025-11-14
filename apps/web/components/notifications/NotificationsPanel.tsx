@@ -76,15 +76,6 @@ export default function NotificationsPanel() {
     }
   }
 
-
-  if (isLoading) {
-    return (
-      <div className="rounded-2xl border bg-white p-4 text-sm text-gray-500">
-        お知らせを読み込み中…
-      </div>
-    );
-  }
-
   const unread = notifications.filter((n) => n.status === 'unread').length;
 
   return (
@@ -95,6 +86,12 @@ export default function NotificationsPanel() {
       </div>
 
       <ul className="divide-y">
+
+        {/* 読み込み中の表示 */}
+        {isLoading && (
+          <li className="px-4 py-3 text-sm text-gray-500">お知らせを読み込み中…</li>
+        )}
+        
         {notifications.length === 0 && (
           <li className="px-4 py-6 text-sm text-gray-500">現在お知らせはありません。</li>
         )}
