@@ -37,29 +37,29 @@ function asHttpError(prefix: string, err: any) {
 
 // residents の許可カラム（DBにあるものだけ）
 const RESIDENTS_ALLOWED = new Set([
-  'id', 'name', 'updated_at', 'deleted', 'owner_id', // 既存
-  'mbti', 'traits', 'speechPreset', 'gender', 'age', // ★ 追加
-  'birthday', 'occupation', 'firstPerson', 'interests', 'sleepProfile' // ★ 追加
+  'id', 'name', 'updated_at', 'deleted', 'owner_id',
+  'mbti', 'traits', 'speech_preset', 'gender', 'age',
+  'birthday', 'occupation', 'first_person', 'interests', 'sleep_profile'
 ]);
 
-// ★ 追加: relations の許可カラム
+// relations の許可カラム
 const RELATIONS_ALLOWED = new Set([
-  'id', 'aId', 'bId', 'type', 'updated_at', 'deleted', 'owner_id'
+  'id', 'a_id', 'b_id', 'type', 'updated_at', 'deleted', 'owner_id'
 ]);
 
-// ★ 追加: feelings の許可カラム
+// feelings の許可カラム
 const FEELINGS_ALLOWED = new Set([
-  'id', 'fromId', 'toId', 'label', 'score', 'updated_at', 'deleted', 'owner_id'
+  'id', 'from_id', 'to_id', 'label', 'score', 'updated_at', 'deleted', 'owner_id'
 ]);
 
-// ★ 追加: nicknames の許可カラム
+// nicknames の許可カラム
 const NICKNAMES_ALLOWED = new Set([
-  'id', 'fromId', 'toId', 'nickname', 'updated_at', 'deleted', 'owner_id'
+  'id', 'from_id', 'to_id', 'nickname', 'updated_at', 'deleted', 'owner_id'
 ]);
 
-// ★ 追加: events の許可カラム (drizzle/schema.ts を参照)
+// events の許可カラム (drizzle/schema.ts を参照)
 const EVENTS_ALLOWED = new Set([
-  'id', 'kind', 'payload', 'updatedAt', 'deleted', 'ownerId'
+  'id', 'kind', 'payload', 'updated_at', 'deleted', 'owner_id'
 ]);
 
 // 許可リストのマップ
