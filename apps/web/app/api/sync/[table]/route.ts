@@ -91,6 +91,8 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
 
   const sb = createAuthedClient(req);
 
+  const camelToSnake = (s: string) => s.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+
   try {
     // --- 入力 ---
     const body = await req.json().catch(() => ({}));
@@ -117,48 +119,52 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     const incoming = parsed.data.changes ?? [];
     let pushed = 0;
     if (incoming.length > 0) {
-      // 汎用的な許可リストを取得
-      const allowedCols = ALLOWED_COLUMNS_MAP[table as AllowedTable]; //
+      // 汎用的な許可リストを取得 (snake_case)
+      const allowedCols = ALLOWED_COLUMNS_MAP[table as AllowedTable];
 
       // 許可リストが未定義の場合はロジックエラー (通常は発生しない)
       if (!allowedCols) {
         return jsonWithHeaders({ message: `table ${table} sync not configured` }, 500, requestId);
       }
 
-      // 許可リストが空(size 0)の場合は、RLSエラーを防ぐため何もしない
+      // 許可リストが空(size 0)の場合はスキップ
       if (allowedCols.size === 0) {
         console.warn(JSON.stringify({ lvl: 'warn', at: 'sync.skip', requestId, table, reason: 'allowed columns list is empty' }));
         // (push (upsert) をスキップして pull (select) に進む)
 
       } else {
-        // 許可リストがある場合のみ upsert 処理
+        // 許可リストがある場合、キーを変換して upsert
         const rows = incoming.map((c) => {
-          const d = { ...(c.data as Record<string, any>) };
-          if (typeof d.deleted !== 'boolean') d.deleted = !!c.deleted;
+          const incomingData = { ...(c.data as Record<string, any>) };
+          const payload: Record<string, any> = {};
 
-          // owner_id を強制上書き (変更なし)
-          d.owner_id = user.id; //
+          // 1) incomingData (camelCase) をループ
+          for (const camelKey of Object.keys(incomingData)) {
+            // 2) キーを snake_case に変換
+            const snakeKey = camelToSnake(camelKey); //例: 'firstPerson' -> 'first_person'
 
-          // 1) テーブル固有のクライアント専用フィールドを除去
-          if (table === 'residents') {
-            // 'sleepProfile' はDBのカラム に存在するため、削除しない
-            delete d.activityTendency; //
-          }
-          if (table === 'relations') {
-            delete d.aName; //
-            delete d.bName; //
-          }
-          // (他のテーブルも必要ならここに追加)
-
-          // 2) ホワイトリストでフィルタリング
-          for (const k of Object.keys(d)) {
-            if (!allowedCols.has(k)) {
-              delete d[k];
+            // 3) 変換後のキーが許可リストにあるかチェック
+            if (allowedCols.has(snakeKey)) {
+              // 4) payload には snake_case のキーで格納
+              payload[snakeKey] = incomingData[camelKey];
             }
           }
-          return d;
+
+          // 5) 'id' と 'deleted' はキー変換されないため、手動でチェック
+          if (incomingData.id && allowedCols.has('id')) {
+            payload.id = incomingData.id;
+          }
+          if (typeof incomingData.deleted === 'boolean' && allowedCols.has('deleted')) {
+            payload.deleted = incomingData.deleted;
+          }
+
+          // 6) owner_id を強制上書き
+          payload.owner_id = user.id;
+
+          return payload; // 最終的な payload は snake_case のキーを持つ
         });
 
+        // 7) upsert
         const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
         if (error) throw asHttpError('upsert failed', error);
         pushed = rows.length;
