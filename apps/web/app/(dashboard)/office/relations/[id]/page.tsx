@@ -10,6 +10,13 @@ import { Loader2, ArrowLeft, ChevronsLeftRight } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Feeling, Relation } from '@/types';
+import { useEvents } from '@/lib/data/events'; // 追加
+import { EventLog } from '@/types'; // EventLog をインポート
+import {
+    isConversationPayload,
+    toJstDateKey,
+    ConversationPayloadStrict
+} from '@/lib/repos/conversation-repo'; //
 
 const AffinityBar = ({ value }: { value: number }) => {
     // 0-100 の範囲外の値を丸める
@@ -121,8 +128,9 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
     // useResident フックは residentId が undefined だと実行されないように調整
     const { data: residentA, isLoading: isLoadingA } = useResident(residentAId!);
     const { data: residentB, isLoading: isLoadingB } = useResident(residentBId!);
-
     const { data: feelings, isLoading: isLoadingFeelings } = useFeelings();
+
+    const { data: eventsData, isLoading: isLoadingEvents } = useEvents();
 
     // A->B, B->A の情報を整理
     const { a_to_b, b_to_a } = useMemo(() => {
@@ -138,25 +146,45 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
         const a_to_b_feeling = feelings.find(f => f.from_id === residentAId && f.to_id === residentBId);
         const b_to_a_feeling = feelings.find(f => f.from_id === residentBId && f.to_id === residentAId);
 
-        // TODO: 好感度 (affinity) と 呼び方 (callName) は現在ダミーデータ
-        // これらは Relation テーブルのスキーマを拡張して保存する必要がある
-
         return {
             a_to_b: {
                 impression: a_to_b_feeling?.label ?? null,
-                affinity: 60, // ダミー
-                callName: null, // ダミー (Bの名前を表示するかもしれないが、スキーマにない)
+                affinity: a_to_b_feeling?.score ?? 0,
+                callName: null,
             },
             b_to_a: {
                 impression: b_to_a_feeling?.label ?? null,
-                affinity: 80, // ダミー
-                callName: null, // ダミー
+                affinity: b_to_a_feeling?.score ?? 0,
+                callName: null,
             },
         };
     }, [residentAId, residentBId, feelings]);
 
+    const relatedEvents = useMemo(() => {
+        if (!eventsData || !residentAId || !residentBId) {
+            return [];
+        }
 
-    const isLoading = isLoadingRelation || isLoadingA || isLoadingB || isLoadingFeelings;
+        const allEvents = eventsData.pages.flatMap(page => page.items);
+
+        const filtered = allEvents.filter(event => {
+            // conversation-repo.ts の isConversationPayload を使う
+            if (event.kind === 'conversation' && isConversationPayload(event.payload)) {
+                const participants = (event.payload as ConversationPayloadStrict).participants;
+                const hasA = participants.includes(residentAId);
+                const hasB = participants.includes(residentBId);
+                return hasA && hasB;
+            }
+            // TODO: 'consult' など他の種類のイベントも対象にする場合はここに追加
+            return false;
+        });
+
+        // useEvents は既にソート済みのはずだが、flatMapで順序が変わる場合に備えて再ソート
+        return filtered.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+
+    }, [eventsData, residentAId, residentBId]);
+
+    const isLoading = isLoadingRelation || isLoadingA || isLoadingB || isLoadingFeelings || isLoadingEvents;
 
     if (isLoading) {
         return (
@@ -173,7 +201,7 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
     const nameA = residentA.name ?? '住人A';
     const nameB = residentB.name ?? '住人B';
 
-    // ★ 関係タイプを日本語に変換 (デフォルトは 'none' 扱い)
+    // 関係タイプを日本語に変換 (デフォルトは 'none' 扱い)
     const relationType = relation.type ?? 'none';
     const relationLabel = RELATION_LABELS[relationType] ?? '（未設定）';
 
@@ -229,14 +257,34 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
                     <CardTitle>直近の関わり</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                        （ {nameA} と {nameB} の間の会話ログやイベントが表示されます - 未実装）
-                    </p>
-                    {/* TODO: 
-            1. useEvents() や useConversations() でログを取得
-            2. participants に A と B が両方含まれるものをフィルタリング
-            3. 時系列で表示
-          */}
+                    {isLoadingEvents ? (
+                        <p className="text-sm text-muted-foreground">履歴を読み込み中...</p>
+                    ) : relatedEvents.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                            （ {nameA} と {nameB} の間の会話や変化はまだありません）
+                        </p>
+                    ) : (
+                        <ul className="space-y-3">
+                            {/* 直近5件程度に絞る */}
+                            {relatedEvents.slice(0, 5).map(event => {
+                                // conversation-repo.ts のヘルパー関数で日付をフォーマット
+                                const { dateLabel, timeLabel } = toJstDateKey(event.updated_at);
+                                const payload = event.payload as ConversationPayloadStrict; //
+
+                                return (
+                                    <li key={event.id} className="text-sm border-b pb-2">
+                                        <p className="font-medium">
+                                            {dateLabel} {timeLabel}
+                                        </p>
+                                        <p className="text-muted-foreground truncate">
+                                            {payload.systemLine ?? (payload.lines[0]?.text ?? '会話')}
+                                        </p>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                    {/* TODO: ... のコメントは削除してOK */}
                 </CardContent>
             </Card>
         </div>

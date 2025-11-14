@@ -35,7 +35,7 @@ export type ConversationPayloadStrict = {
   topic?: string;
 };
 
-function isConversationPayload(p: unknown): p is ConversationPayloadStrict {
+export function isConversationPayload(p: unknown): p is ConversationPayloadStrict {
   const g = p as ConversationPayloadStrict | undefined;
   return !!g
     && typeof g.threadId === 'string'
@@ -264,7 +264,7 @@ export type ConversationDayGroup = {
   items: ConversationListItem[];
 };
 
-function toJstDateKey(iso: string): { dateKey: string; dateLabel: string; weekday: string; timeLabel: string } {
+export function toJstDateKey(iso: string): { dateKey: string; dateLabel: string; weekday: string; timeLabel: string } {
   const d = new Date(iso);
 
   const dateFmt = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
