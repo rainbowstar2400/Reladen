@@ -144,8 +144,6 @@ function useSyncInternal() {
       setRetryCount(0);
       return { ok: true };
     } catch (err: any) {
-      // 'Auth session missing!' はリトライ待ちの正常動作なので、
-      // console.error ではなく console.warn にする
       const isAuthError = (err?.message === 'Auth session missing!');
 
       if (isAuthError) {
@@ -154,53 +152,60 @@ function useSyncInternal() {
         setError(null); // UIにはエラーを表示しない
         setPhase('syncing'); // 'error' にせず 'syncing' を維持
 
-        // --- リトライロジック---
-        const MAX_RETRIES = 5;
-        if (retryCount < MAX_RETRIES) {
-          const base = 1000; // 1秒
-          const backoff = base * Math.pow(2, retryCount);
-          const jitter = Math.floor(Math.random() * 250); // 0〜250ms
-          const delay = Math.min(60000, backoff + jitter); // 上限60秒
-          setRetryCount((c) => c + 1);
-          window.setTimeout(() => { void syncAll(); }, delay);
-        } else {
-          // リトライ上限に達した場合のみ、UIにエラーを表示する
-          setRetryCount(0);
-          setError('Auth session timed out.');
-          setPhase('error');
-        }
+        // setRetryCount のコールバック内でリトライ処理を行う
+        // (これにより、常に最新の currentCount を参照し、無限ループを防ぐ)
+        setRetryCount((currentCount) => {
+          const MAX_RETRIES = 5;
+          if (currentCount < MAX_RETRIES) {
+            // リトライを実行
+            const base = 1000; // 1秒
+            const backoff = base * Math.pow(2, currentCount);
+            const jitter = Math.floor(Math.random() * 250); // 0〜250ms
+            const delay = Math.min(60000, backoff + jitter); // 上限60秒
+            
+            // setTimeout は syncAll を呼ぶ (ただし stale な関数)
+            window.setTimeout(() => { void syncAll(); }, delay);
+            
+            return currentCount + 1; // カウントを増やす
+          } else {
+            // リトライ上限に達した場合のみ、UIにエラーを表示する
+            setError('Auth session timed out.');
+            setPhase('error');
+            return 0; // カウントをリセット
+          }
+        });
 
-        // 呼び出し元 (SyncIndicator) にエラーを返さない
-        // (リトライで回復するため)
-        return { ok: true };
+        // 呼び出し元 (SyncIndicator) にはエラーを返さない
+        return { ok: true }; 
 
       } else {
         // 2. 認証以外の「本当のエラー」の場合 (元のロジック)
         console.error('Sync error:', err);
         setError(err?.message ?? 'unknown');
-        setPhase('error'); // UIにエラーを反映
+        setPhase('error');
+        
+        // (こちらはリトライロジックが簡略化されているが、元のロジックを踏襲)
+        setRetryCount((currentCount) => {
+          const MAX_RETRIES = 5;
+          if (currentCount < MAX_RETRIES) {
+            const base = 1000;
+            const backoff = base * Math.pow(2, currentCount);
+            const jitter = Math.floor(Math.random() * 250);
+            const delay = Math.min(60000, backoff + jitter);
+            window.setTimeout(() => { void syncAll(); }, delay);
+            return currentCount + 1;
+          } else {
+            return 0;
+          }
+        });
 
-        // 本当のエラーでもリトライを試みる (元のロジックを踏襲)
-        const MAX_RETRIES = 5;
-        if (retryCount < MAX_RETRIES) {
-          const base = 1000;
-          const backoff = base * Math.pow(2, retryCount);
-          const jitter = Math.floor(Math.random() * 250);
-          const delay = Math.min(60000, backoff + jitter);
-          setRetryCount((c) => c + 1);
-          window.setTimeout(() => { void syncAll(); }, delay);
-        } else {
-          setRetryCount(0);
-        }
-
-        // 呼び出し元 (SyncIndicator) にエラーを返す
         return { ok: false, reason: 'error', message: err?.message };
       }
     } finally {
       syncingRef.current = false;
     }
 
-  }, [lastSyncedAt, requestDebouncedSync, retryCount]);
+  }, [lastSyncedAt, requestDebouncedSync]);
 
   // online/offline での同期（重複登録・多重実行を避ける）
   useEffect(() => {
