@@ -10,12 +10,12 @@ import { makeOutboxKey, listPendingByTable, markSent /* , markFailed */ } from '
 const TABLES: SyncPayload['table'][] = [
   'residents',
   'relations',
-'feelings',
+  'feelings',
   'events',
-  'consult_answers', // ← 追加
+  'consult_answers',
 ];
 
-// ★ 追加：ヘルパー
+// ヘルパー
 async function getAccessToken(): Promise<string | null> {
   const sb = supabaseClient;
   if (!sb) return null;
@@ -60,15 +60,15 @@ function useSyncInternal() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // 追加: リトライ回数（指数バックオフ用）
+  // リトライ回数（指数バックオフ用）
   const [retryCount, setRetryCount] = useState(0);
 
-  // ★ 多重実行ガード & 連発防止
+  // 多重実行ガード & 連発防止
   const syncingRef = useRef(false);
   const lastRunRef = useRef(0);
   const MIN_INTERVAL_MS = 4000;
 
-  // ★ Realtimeイベントのデバウンス
+  // Realtimeイベントのデバウンス
   const debounceTimerRef = useRef<number | null>(null);
   const requestDebouncedSync = useCallback(() => {
     if (debounceTimerRef.current != null) return;
@@ -144,61 +144,69 @@ function useSyncInternal() {
       setRetryCount(0);
       return { ok: true };
     } catch (err: any) {
-      // ▼▼▼【重要】ここを修正 (2) ▼▼▼
       // 'Auth session missing!' はリトライ待ちの正常動作なので、
       // console.error ではなく console.warn にする
       const isAuthError = (err?.message === 'Auth session missing!');
 
-      if (!isAuthError) {
-        // 認証以外の本当のエラーはコンソールに出力する
+      if (isAuthError) {
+        // 1. 認証エラーの場合 (リトライ待ち)
+        console.warn('Sync delayed: auth session not yet available. Retrying...');
+        setError(null); // UIにはエラーを表示しない
+        setPhase('syncing'); // 'error' にせず 'syncing' を維持
+
+        // --- リトライロジック---
+        const MAX_RETRIES = 5;
+        if (retryCount < MAX_RETRIES) {
+          const base = 1000; // 1秒
+          const backoff = base * Math.pow(2, retryCount);
+          const jitter = Math.floor(Math.random() * 250); // 0〜250ms
+          const delay = Math.min(60000, backoff + jitter); // 上限60秒
+          setRetryCount((c) => c + 1);
+          window.setTimeout(() => { void syncAll(); }, delay);
+        } else {
+          // リトライ上限に達した場合のみ、UIにエラーを表示する
+          setRetryCount(0);
+          setError('Auth session timed out.');
+          setPhase('error');
+        }
+
+        // 呼び出し元 (SyncIndicator) にエラーを返さない
+        // (リトライで回復するため)
+        return { ok: true };
+
+      } else {
+        // 2. 認証以外の「本当のエラー」の場合 (元のロジック)
         console.error('Sync error:', err);
         setError(err?.message ?? 'unknown');
-      } else {
-        // 認証エラーはリトライ中であることだけを警告する
-        console.warn('Sync delayed: auth session not yet available. Retrying...');
-        // UIにはエラーを表示しない（自動リトライで回復するため）
-        setError(null);
-      }
-      
-      setPhase('error');
-      // ▲▲▲ 修正完了 (2) ▲▲▲
+        setPhase('error'); // UIにエラーを反映
 
-      // 追加: 指数バックオフ + ジッターで自動リトライ
-      const MAX_RETRIES = 5;
-      if (retryCount < MAX_RETRIES) {
-        const base = 1000; // 1秒
-        const backoff = base * Math.pow(2, retryCount);
-        const jitter = Math.floor(Math.random() * 250); // 0〜250ms
-        const delay = Math.min(60000, backoff + jitter); // 上限60秒
-        setRetryCount((c) => c + 1);
-        window.setTimeout(() => { void syncAll(); }, delay);
-      } else {
-        // 規定回数を超えたら自動再試行は一旦停止（手動/イベントで再開）
-        setRetryCount(0);
-        // リトライ上限に達した場合のみ、UIにエラーを表示する
-        if (isAuthError) {
-          setError('Auth session timed out.');
+        // 本当のエラーでもリトライを試みる (元のロジックを踏襲)
+        const MAX_RETRIES = 5;
+        if (retryCount < MAX_RETRIES) {
+          const base = 1000;
+          const backoff = base * Math.pow(2, retryCount);
+          const jitter = Math.floor(Math.random() * 250);
+          const delay = Math.min(60000, backoff + jitter);
+          setRetryCount((c) => c + 1);
+          window.setTimeout(() => { void syncAll(); }, delay);
+        } else {
+          setRetryCount(0);
         }
-      }
 
-      return { ok: false, reason: 'error', message: err?.message };
+        // 呼び出し元 (SyncIndicator) にエラーを返す
+        return { ok: false, reason: 'error', message: err?.message };
+      }
     } finally {
       syncingRef.current = false;
     }
 
-  }, [lastSyncedAt, requestDebouncedSync]); // (★ 依存配列を修正)
-
-  // (★ 以前の修正: マウント時の即時実行は削除済み)
-  // useEffect(() => {
-  //   let t = window.setTimeout(() => { void syncAll(); }, 0);
-  //   return () => window.clearTimeout(t);
-  // }, [syncAll]);
+  }, [lastSyncedAt, requestDebouncedSync, retryCount]);
 
   // online/offline での同期（重複登録・多重実行を避ける）
   useEffect(() => {
     const onOnline = () => {
       setPhase('online');
-      requestDebouncedSync(); // (★ 念のためデバウンス)
+      requestDebouncedSync(); // (念のためデバウンス)
     };
     const onOffline = () => setPhase('offline');
 
@@ -212,7 +220,7 @@ function useSyncInternal() {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
-  }, [requestDebouncedSync]); // (★ 依存配列を修正)
+  }, [requestDebouncedSync]);
 
   // Supabase Realtime 変更 → デバウンスして同期
   useEffect(() => {
@@ -239,17 +247,16 @@ function useSyncInternal() {
 
   // 追加: 外部からの明示同期リクエスト（window.dispatchEvent(new Event('reladen:request-sync'))）
   useEffect(() => {
-    const onRequest = () => { requestDebouncedSync(); }; // (★ デバウンス)
+    const onRequest = () => { requestDebouncedSync(); }; // (デバウンス)
     window.addEventListener('reladen:request-sync', onRequest);
     return () => window.removeEventListener('reladen:request-sync', onRequest);
-  }, [requestDebouncedSync]); // (★ 依存配列を修正)
+  }, [requestDebouncedSync]);
 
-  // ★ 追加：Auth 状態変化で同期をトリガ
+  // Auth 状態変化で同期をトリガ
   useEffect(() => {
     const sb = supabaseClient;
     if (!sb) return;
 
-    // ▼▼▼【重要】ここを修正 (1) ▼▼▼
     const { data: sub } = sb.auth.onAuthStateChange((event) => {
       // 'INITIAL_SESSION' (初回ロード時) は無視し、
       // 実際にサインイン/アウトした時だけ同期する
@@ -257,7 +264,6 @@ function useSyncInternal() {
         requestDebouncedSync(); // サインイン完了後に Authorization 付きで再同期
       }
     });
-    // ▲▲▲ 修正完了 (1) ▲▲▲
 
     return () => sub?.subscription?.unsubscribe();
   }, [requestDebouncedSync]);
