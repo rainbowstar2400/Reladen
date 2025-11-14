@@ -47,14 +47,52 @@ async function fetchPresets(): Promise<Preset[]> {
     return items.filter((item) => !item.deleted);
 }
 
+// デフォルトとローカルをマージする内部関数
+async function fetchPresetsWithDefaults(): Promise<Preset[]> {
+    // 1. ローカルDBのデータを取得
+    const localPresets = await fetchPresets(); // (deleted=false のみ)
+
+    // 2. すべてのデフォルトデータを取得
+    const categoryDefaults = DEFAULT_PRESETS;
+
+    // ラベルをキーにしてマージ処理
+    const finalMap = new Map<string, Preset>();
+
+    // 3. デフォルトを先に入れる (isManaged: true がデフォルト状態)
+    for (const p of categoryDefaults) {
+        finalMap.set(p.label, { ...p, isManaged: true });
+    }
+
+    // 4. ローカルデータで上書き
+    for (const item of localPresets) {
+        const existingDefault = finalMap.get(item.label);
+        if (existingDefault) {
+            // デフォルトと同じラベル -> ID, isManaged, owner_id などをローカルのもので上書き
+            finalMap.set(item.label, {
+                ...existingDefault,
+                id: item.id,
+                isManaged: item.isManaged,
+                owner_id: item.owner_id, // owner_id を上書き
+                updated_at: item.updated_at,
+                deleted: item.deleted,
+            });
+        } else {
+            // ユーザーが追加したカスタムプリセット
+            finalMap.set(item.label, item);
+        }
+    }
+
+    // Map の値を配列にして返す
+    return Array.from(finalMap.values());
+}
+
 /**
- * すべてのプリセットを取得する React Query フック (DBのみ)
- * (usePresetsByCategory がメインになるため、これは usePresetsDB にリネームしてもよい)
- */
+ * すべてのプリセットを取得する React Query フック (★ デフォルトとマージ)
+*/
 export function usePresets() {
     return useQuery({
         queryKey: KEY,
-        queryFn: fetchPresets,
+        queryFn: fetchPresetsWithDefaults,
     });
 }
 
@@ -66,34 +104,9 @@ export function usePresetsByCategory(category: PresetCategory) {
     return useQuery({
         queryKey: [...KEY, category],
         queryFn: async () => {
-            // 1. ローカルDBのデータを取得
-            const localPresets = (await fetchPresets()).filter(p => p.category === category);
-
-            // 2. このカテゴリのデフォルトデータを取得
-            const categoryDefaults = DEFAULT_PRESETS.filter(p => p.category === category);
-
-            // ラベルをキーにしてマージ処理
-            const finalMap = new Map<string, Preset>();
-
-            // 3. デフォルトを先に入れる (isManaged: true がデフォルト状態)
-            for (const p of categoryDefaults) {
-                finalMap.set(p.label, { ...p, isManaged: true });
-            }
-
-            // 4. ローカルデータで上書き
-            for (const item of localPresets) {
-                const existingDefault = finalMap.get(item.label);
-                if (existingDefault) {
-                    // デフォルトと同じラベル -> IDとisManagedをローカルのもので上書き
-                    finalMap.set(item.label, { ...existingDefault, id: item.id, isManaged: item.isManaged });
-                } else {
-                    // ユーザーが追加したカスタムプリセット
-                    finalMap.set(item.label, item);
-                }
-            }
-
-            // Map の値を配列にして返す
-            return Array.from(finalMap.values());
+            // fetchPresetsWithDefaults を呼び、カテゴリで絞り込む
+            const allPresets = await fetchPresetsWithDefaults();
+            return allPresets.filter(p => p.category === category);
         },
     });
 }

@@ -3,7 +3,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { MessageSquare, Cloud, AlertTriangle, Moon } from 'lucide-react';
+import { MessageSquare, Cloud, AlertTriangle, Moon, Loader2 } from 'lucide-react';
 import React, { useMemo } from 'react';
 import NotificationsSectionClient from '@/components/notifications/NotificationsSection.client';
 import { Suspense } from 'react';
@@ -17,7 +17,7 @@ import {
   type ActivityTendency,
 } from '../../../../../packages/shared/logic/schedule';
 import { useEffect, useState } from 'react';
-import { listLocal } from '@/lib/db-local';
+import { useResidents } from '@/lib/data/residents';
 import type { Resident } from '@/types';
 
 /* ---------------------------
@@ -39,11 +39,9 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function SituationBadge({ situation }: { situation: Situation }) {
   const label =
-    situation === 'sleeping'
-      ? '就寝中'
-      : situation === 'preparing'
-        ? '就寝準備中'
-        : '活動中';
+    situation === 'preparing'
+      ? '就寝準備中'
+      : '活動中';
 
   const style =
     situation === 'sleeping'
@@ -66,7 +64,6 @@ function SituationBadge({ situation }: { situation: Situation }) {
 type ResidentLite = {
   id: string;
   name: string;
-  // ★ 以前のダミーデータ互換 'status' プロパティは不要なため削除
 };
 
 function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation }) {
@@ -97,8 +94,8 @@ function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation 
    ページ本体
 ----------------------------- */
 export default function HomePage() {
-  // 実データ（IndexedDB）から取得
-  const [residents, setResidents] = useState<Resident[]>([]);
+  // useResidents フックからデータを取得
+  const { data: residents = [], isLoading: isLoadingResidents } = useResidents();
 
   // 1分ごとに tick して再レンダを促す。都度 new Date() を評価して calcSituation に渡す。
   const [tick, setTick] = useState(0);
@@ -109,53 +106,21 @@ export default function HomePage() {
     return () => clearInterval(timer);
   }, []);
 
-  // マウント時に IndexedDB から住人を読み込む
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const rows = await listLocal('residents');
-      if (!alive) return;
-
-      // ★ 追加: 読み込んだデータを処理し、「今日のスケジュール」を確定させる
-      const processedResidents = rows.map(r => {
-        let profile: SleepProfile | undefined = (r as any).sleepProfile;
-
-        // 1. もし sleepProfile がないなら、傾向(tendency)からデフォルトを生成
-        if (!profile && (r as any).activityTendency) {
-          profile = defaultSleepByTendency(
-            (r as any).activityTendency as ActivityTendency
-          );
-        }
-
-        // 2. プロファイルが確定したら、「今日のスケジュール」を（必要なら）生成
-        if (profile) {
-          // getOrGenerateTodaySchedule は純粋な関数（DB更新しない）
-          const { profile: updatedProfile } = getOrGenerateTodaySchedule(profile);
-          // 処理済みのプロファイルを resident オブジェクトに戻す
-          return { ...r, sleepProfile: updatedProfile };
-        }
-
-        return r; // プロファイルがない住人はそのまま返す
-      });
-
-      if (alive) {
-        setResidents(processedResidents as Resident[]);
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
-
   const now = new Date();
 
+  // 型エイリアスを定義 (map の引数で使用)
+  type SituationEntry = { r: ResidentLite, sit: Situation };
+
   const residentsWithSituation = useMemo(
-    () =>
-      residents.map((r) => {
+    () => {
+      // useResidents から取得した residents を使用
+      return residents.map((r) => {
         const profile = (r as any).sleepProfile as SleepProfile | undefined;
         let sit: Situation;
 
-        // useEffect で処理済みのプロファイルがあるか確認
+        // useResidents ですでにスケジュール処理済み
         if (profile && profile.todaySchedule) {
-          // ★ 新しい calcSituation を呼ぶ
+          // 新しい calcSituation を呼ぶ
           sit = calcSituation(now, profile);
         } else {
           // プロファイルがないか、今日のスケジュールが生成できなかった場合
@@ -168,7 +133,8 @@ export default function HomePage() {
           name: (r as any).name ?? '',
         };
         return { r: lite, sit };
-      }),
+      });
+    },
     [residents, now] // tick で 'now' が更新されるたびに再計算
   );
 
@@ -199,10 +165,16 @@ export default function HomePage() {
 
         <div className="overflow-x-auto">
           <div className="flex gap-4 pb-2">
-            {residentsWithSituation.length === 0 ? (
+            {/* ローディング状態を追加 */}
+            {isLoadingResidents ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground px-2 py-1">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                読み込み中…
+              </div>
+            ) : residentsWithSituation.length === 0 ? (
               <div className="text-sm text-muted-foreground px-2 py-1">住人がいません。</div>
             ) : (
-              residentsWithSituation.map(({ r, sit }) => (
+              residentsWithSituation.map(({ r, sit }: SituationEntry) => (
                 <ResidentTile key={r.id} r={r} situation={sit} />
               ))
             )}
