@@ -39,7 +39,9 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function SituationBadge({ situation }: { situation: Situation }) {
   const label =
-    situation === 'preparing'
+  situation === 'sleeping'
+  ? null
+    : situation === 'preparing'
       ? '就寝準備中'
       : '活動中';
 
