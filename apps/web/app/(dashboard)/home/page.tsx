@@ -69,7 +69,7 @@ type ResidentLite = {
 function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation }) {
   const disabled = situation === 'sleeping';
   return (
-    <div className="relative flex h-32 w-32 flex-shrink-0 flex-col items-center justify-center gap-3 rounded-lg border p-3 text-center">
+    <div className="relative flex h-32 w-32 flex-shrink-0 flex-col items-center justify-end gap-3 rounded-lg border p-3 text-center">
       {/* 右上バッジ */}
       <span className="absolute right-2 top-2">
         <SituationBadge situation={situation} />
