@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Pencil, Check, X, Ban } from 'lucide-react';
 import {
   usePresetsByCategory,
   useUpsertPreset,
@@ -44,7 +44,7 @@ const CATEGORY_DETAILS: Record<PresetCategory, { title: string; desc: string; la
 };
 
 /**
- * カテゴリごとのプリセット管理UI (★ タブの中身)
+ * カテゴリごとのプリセット管理UI
  */
 function PresetCategoryManager({ category }: { category: PresetCategory }) {
   const details = CATEGORY_DETAILS[category];
@@ -57,6 +57,10 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
 
   const [newLabel, setNewLabel] = useState('');
   const [newDescription, setNewDescription] = useState('');
+
+  const [editingItem, setEditingItem] = useState<Preset | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editDescription, setEditDescription] = useState('');
 
   const handleAdd = () => {
     if (!newLabel || (category === 'speech' && !newDescription)) return;
@@ -96,8 +100,43 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
     upsertPreset.mutate({ id, isManaged: newIsManaged });
   };
 
-  // ローディング中と更新中の状態
+  // 編集開始処理 (モーダルの時と同じ)
+  const handleOpenEdit = (item: Preset) => {
+    setEditingItem(item);
+    setEditLabel(item.label);
+    setEditDescription(item.description ?? '');
+  };
+
+  // 編集キャンセル処理 (モーダルの時と同じ)
+  const handleCloseEdit = () => {
+    setEditingItem(null);
+    setEditLabel('');
+    setEditDescription('');
+  };
+
+  // 編集保存処理 (モーダルの時と同じ)
+  const handleSaveEdit = () => {
+    if (!editingItem || !editLabel) return;
+
+    if (editingItem.owner_id === 'SYSTEM' && editingItem.label !== editLabel) {
+      alert('デフォルトプリセットの名前は変更できません。');
+      return;
+    }
+
+    upsertPreset.mutate({
+      id: editingItem.id,
+      label: editLabel,
+      description: category === 'speech' ? editDescription : undefined,
+    }, {
+      onSuccess: () => {
+        handleCloseEdit(); // 成功したら編集モードを解除
+      }
+    });
+  };
+
   const isMutating = upsertPreset.isPending;
+
+  const isEditingAny = editingItem !== null;
 
   return (
     <Card>
@@ -114,36 +153,130 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
 
         {/* 既存のリスト */}
         <div className="space-y-2">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              // isManaged: false の場合は少し薄く表示
-              className={`flex flex-col gap-1 rounded-md border p-3 ${!item.isManaged ? 'border-dashed opacity-70' : ''
-                }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-semibold">{item.label}</span>
+          {/* map の中身をインライン編集に対応 */}
+          {items.map((item) => {
+            const isThisEditing = editingItem?.id === item.id;
 
-                {/* 削除ボタンの代わりに Switch を使用 */}
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id={`switch-${item.id}`}
-                    checked={item.isManaged}
-                    onCheckedChange={(checked) => handleToggleManaged(item.id, checked)}
-                    disabled={isMutating} // 更新中は無効化
-                  />
-                  <Label htmlFor={`switch-${item.id}`} className="text-xs text-muted-foreground">
-                    {item.isManaged ? 'リスト表示' : '非表示'}
-                  </Label>
-                </div>
+            return (
+              <div
+                key={item.id}
+                className={`flex flex-col gap-1 rounded-md border p-3 ${!item.isManaged ? 'border-dashed opacity-70' : ''
+                  } ${
+                  // 編集中は背景色を変える
+                  isThisEditing ? 'bg-muted/50' : ''
+                  }`}
+              >
+                {isThisEditing ? (
+                  // インライン編集中の表示
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <Label htmlFor={`edit-label-${item.id}`}>ラベル</Label>
+                      <Input
+                        id={`edit-label-${item.id}`}
+                        value={editLabel}
+                        onChange={(e) => setEditLabel(e.target.value)}
+                        placeholder={details.labelHelp}
+                        disabled={isMutating || item.owner_id === 'SYSTEM'}
+                      />
+                      {item.owner_id === 'SYSTEM' && (
+                        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Ban className="h-3 w-3" />
+                          デフォルトプリセットの名前は変更できません。
+                        </p>
+                      )}
+                    </div>
+
+                    {category === 'speech' && (
+                      <div className="space-y-1">
+                        <Label htmlFor={`edit-desc-${item.id}`}>説明</Label>
+                        <Textarea
+                          id={`edit-desc-${item.id}`}
+                          value={editDescription}
+                          onChange={(e) => setEditDescription(e.target.value)}
+                          placeholder={details.descHelp}
+                          rows={2}
+                          disabled={isMutating}
+                        />
+                      </div>
+                    )}
+
+                    {/* 保存・キャンセルボタン */}
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={handleCloseEdit}
+                        disabled={isMutating}
+                        aria-label="キャンセル"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={handleSaveEdit}
+                        disabled={
+                          !editLabel ||
+                          (category === 'speech' && !editDescription) ||
+                          isMutating
+                        }
+                        aria-label="保存"
+                      >
+                        {isMutating ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                ) : (
+                  // 通常時の表示
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">{item.label}</span>
+
+                      <div className="flex items-center space-x-2">
+                        {/* 編集ボタン */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => handleOpenEdit(item)}
+                          // 他の項目を編集中、または更新中は無効化
+                          disabled={isMutating || isEditingAny}
+                          aria-label="編集"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+
+                        {/* Switch */}
+                        <Switch
+                          id={`switch-${item.id}`}
+                          checked={item.isManaged}
+                          onCheckedChange={(checked) => handleToggleManaged(item.id, checked)}
+                          // 他の項目を編集中、または更新中は無効化
+                          disabled={isMutating || isEditingAny}
+                        />
+                        <Label htmlFor={`switch-${item.id}`} className="text-xs text-muted-foreground">
+                          {item.isManaged ? 'リスト表示' : '非表示'}
+                        </Label>
+                      </div>
+                    </div>
+                    {item.description && (
+                      <p className="pl-1 text-xs text-gray-600 dark:text-gray-400">
+                        {item.description}
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
-              {item.description && (
-                <p className="pl-1 text-xs text-gray-600 dark:text-gray-400">
-                  {item.description}
-                </p>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* 新規追加フォーム */}

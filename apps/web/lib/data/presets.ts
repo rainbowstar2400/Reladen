@@ -75,9 +75,9 @@ export function usePresetsByCategory(category: PresetCategory) {
             // ラベルをキーにしてマージ処理
             const finalMap = new Map<string, Preset>();
 
-            // 3. デフォルトを先に入れる (isManaged: false がデフォルト状態)
+            // 3. デフォルトを先に入れる (isManaged: true がデフォルト状態)
             for (const p of categoryDefaults) {
-                finalMap.set(p.label, { ...p, isManaged: false });
+                finalMap.set(p.label, { ...p, isManaged: true });
             }
 
             // 4. ローカルデータで上書き
