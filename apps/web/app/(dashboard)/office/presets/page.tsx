@@ -175,10 +175,38 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                   }`}
               >
                 {isThisEditing ? (
-                  // === ★ インライン編集中の表示 ===
+                  // インライン編集中の表示
                   <div className="space-y-3">
-                    {/* (Label, Input, Textarea...) */}
-                    {/* ... (変更なし) ... */}
+                    <div className="space-y-1">
+                      <Label htmlFor={`edit-label-${item.id}`}>ラベル</Label>
+                      <Input
+                        id={`edit-label-${item.id}`}
+                        value={editLabel}
+                        onChange={(e) => setEditLabel(e.target.value)}
+                        placeholder={details.labelHelp}
+                        disabled={isMutating || item.owner_id === 'SYSTEM'}
+                      />
+                      {item.owner_id === 'SYSTEM' && (
+                        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Ban className="h-3 w-3" />
+                          デフォルトプリセットの名前は変更できません。
+                        </p>
+                      )}
+                    </div>
+
+                    {category === 'speech' && (
+                      <div className="space-y-1">
+                        <Label htmlFor={`edit-desc-${item.id}`}>説明</Label>
+                        <Textarea
+                          id={`edit-desc-${item.id}`}
+                          value={editDescription}
+                          onChange={(e) => setEditDescription(e.target.value)}
+                          placeholder={details.descHelp}
+                          rows={2}
+                          disabled={isMutating}
+                        />
+                      </div>
+                    )}
 
                     {/* 保存・キャンセルボタン */}
                     <div className="flex justify-end gap-2">
