@@ -35,6 +35,8 @@ function asHttpError(prefix: string, err: any) {
   return jsonWithHeaders({ message: `${prefix}: ${m}` }, status);
 }
 
+// 許可リストを DB の snake_case カラム名に統一する
+
 // residents の許可カラム（DBにあるものだけ）
 const RESIDENTS_ALLOWED = new Set([
   'id', 'name', 'updated_at', 'deleted', 'owner_id',
@@ -57,13 +59,12 @@ const NICKNAMES_ALLOWED = new Set([
   'id', 'from_id', 'to_id', 'nickname', 'updated_at', 'deleted', 'owner_id'
 ]);
 
-// events の許可カラム (drizzle/schema.ts を参照)
+// events の許可カラム
 const EVENTS_ALLOWED = new Set([
   'id', 'kind', 'payload', 'updated_at', 'deleted', 'owner_id'
 ]);
 
-// 許可リストのマップ
-// このマップのキーは sync.ts の allowedTables と完全に一致させる必要があります
+// 許可リストのマップ (キーは sync.ts と一致)
 const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
   residents: RESIDENTS_ALLOWED,
   relations: RELATIONS_ALLOWED,
@@ -71,11 +72,6 @@ const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
   nicknames: NICKNAMES_ALLOWED,
   events: EVENTS_ALLOWED,
   consult_answers: new Set(),
-  // --- 以下のテーブルは allowedTables に含まれないため削除 ---
-  // presets: new Set(), (TS(2353)エラーの原因)
-  // topic_threads: new Set(),
-  // beliefs: new Set(),
-  // notifications: new Set(),
 };
 
 export async function POST(req: NextRequest, { params }: { params: { table: string } }) {
@@ -85,13 +81,13 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
   const userAgent = req.headers.get('user-agent') || 'unknown';
   let table: AllowedTable | string = params.table;
 
+  const camelToSnake = (s: string) => s.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return jsonWithHeaders({ message: 'supabase env missing' }, 500, requestId);
   }
 
   const sb = createAuthedClient(req);
-
-  const camelToSnake = (s: string) => s.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 
   try {
     // --- 入力 ---
@@ -116,41 +112,41 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     }
 
     // --- push (upsert) ---
+    // push ロジックを汎用化
     const incoming = parsed.data.changes ?? [];
     let pushed = 0;
     if (incoming.length > 0) {
-      // 汎用的な許可リストを取得 (snake_case)
+
+      // 1. snake_case の許可リストを取得
       const allowedCols = ALLOWED_COLUMNS_MAP[table as AllowedTable];
 
-      // 許可リストが未定義の場合はロジックエラー (通常は発生しない)
       if (!allowedCols) {
         return jsonWithHeaders({ message: `table ${table} sync not configured` }, 500, requestId);
       }
 
-      // 許可リストが空(size 0)の場合はスキップ
+      // 2. 許可リストが空 (consult_answers など) の場合は upsert をスキップ
       if (allowedCols.size === 0) {
         console.warn(JSON.stringify({ lvl: 'warn', at: 'sync.skip', requestId, table, reason: 'allowed columns list is empty' }));
-        // (push (upsert) をスキップして pull (select) に進む)
 
       } else {
-        // 許可リストがある場合、キーを変換して upsert
+        // 3. 許可リストがある場合、キーを変換して upsert
         const rows = incoming.map((c) => {
-          const incomingData = { ...(c.data as Record<string, any>) };
-          const payload: Record<string, any> = {};
+          const incomingData = { ...(c.data as Record<string, any>) }; // camelCase キー
+          const payload: Record<string, any> = {}; // snake_case キー
 
-          // 1) incomingData (camelCase) をループ
+          // 4. incomingData (camelCase) をループ
           for (const camelKey of Object.keys(incomingData)) {
-            // 2) キーを snake_case に変換
-            const snakeKey = camelToSnake(camelKey); //例: 'firstPerson' -> 'first_person'
+            // 5. キーを snake_case に変換
+            const snakeKey = camelToSnake(camelKey);
 
-            // 3) 変換後のキーが許可リストにあるかチェック
+            // 6. 変換後のキーが snake_case 許可リストにあるかチェック
             if (allowedCols.has(snakeKey)) {
-              // 4) payload には snake_case のキーで格納
+              // 7. payload には snake_case のキーで格納
               payload[snakeKey] = incomingData[camelKey];
             }
           }
 
-          // 5) 'id' と 'deleted' はキー変換されないため、手動でチェック
+          // 8. 'id' と 'deleted' はキー変換されないため、手動でチェック
           if (incomingData.id && allowedCols.has('id')) {
             payload.id = incomingData.id;
           }
@@ -158,13 +154,13 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
             payload.deleted = incomingData.deleted;
           }
 
-          // 6) owner_id を強制上書き
+          // 9. owner_id を強制上書き
           payload.owner_id = user.id;
 
           return payload; // 最終的な payload は snake_case のキーを持つ
         });
 
-        // 7) upsert
+        // 10. upsert (snake_case のデータを送信)
         const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
         if (error) throw asHttpError('upsert failed', error);
         pushed = rows.length;
@@ -185,7 +181,7 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     const resp = syncResponseSchema.parse({
       table,
       changes: cloud.map((row) => ({
-        data: row,
+        data: row, // DBからは snake_case で返る (client-side Drizzle が処理する)
         updated_at: row.updated_at,
         deleted: !!row.deleted,
       })),
