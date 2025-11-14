@@ -8,9 +8,11 @@ export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
 import { makeOutboxKey, listPendingByTable, markSent /* , markFailed */ } from '@/lib/sync/outbox';
 
 const TABLES: SyncPayload['table'][] = [
+  'presets',
   'residents',
   'relations',
   'feelings',
+  'nicknames',
   'events',
   'consult_answers',
 ];

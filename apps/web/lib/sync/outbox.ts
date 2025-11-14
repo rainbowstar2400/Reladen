@@ -1,5 +1,5 @@
 // apps/web/lib/sync/outbox.ts
-export type OutboxTable = 'residents'|'relations'|'feelings'|'events'|'consult_answers';
+export type OutboxTable = 'residents' | 'relations' | 'feelings' | 'events' | 'presets' | 'nicknames' | 'consult_answers';
 
 export type OutboxEntry = {
   id: string;                       // レコードID
@@ -7,7 +7,7 @@ export type OutboxEntry = {
   data: Record<string, any>;        // upsert対象（deleted含む）
   updated_at: string;               // ISO (LWW)
   deleted?: boolean;
-  status: 'pending'|'sent'|'failed';
+  status: 'pending' | 'sent' | 'failed';
   lastError?: string;
   enqueuedAt: string;               // 監査用
   attempts: number;                 // 送信試行回数
@@ -45,7 +45,7 @@ function stripKey<T extends { key?: string }>(obj: T) {
 }
 
 /** upsert: id+table で一意。updated_at が新しければ置き換え */
-export async function enqueueOutbox(entry: Omit<OutboxEntry,'status'|'enqueuedAt'|'attempts'>) {
+export async function enqueueOutbox(entry: Omit<OutboxEntry, 'status' | 'enqueuedAt' | 'attempts'>) {
   const db = await openDB();
   const s = store(db, 'readwrite');
   const key = makeOutboxKey(entry.table, entry.id);

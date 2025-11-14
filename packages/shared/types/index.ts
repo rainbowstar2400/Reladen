@@ -111,7 +111,7 @@ export const presetSchema = baseEntitySchema.extend({
 });
 
 export const syncPayloadSchema = z.object({
-  table: z.enum(['residents', 'relations', 'feelings', 'events', 'consult_answers']),
+  table: z.enum(['residents', 'relations', 'feelings', 'events', 'presets', 'nicknames', 'consult_answers']),
   changes: z.array(z.object({
     data: z.record(z.any()),
     updated_at: z.string().datetime(),

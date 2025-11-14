@@ -64,6 +64,12 @@ const EVENTS_ALLOWED = new Set([
   'id', 'kind', 'payload', 'updated_at', 'deleted', 'owner_id'
 ]);
 
+// presets の許可カラム
+const PRESETS_ALLOWED = new Set([
+  'id', 'category', 'label', 'description', 
+  'is_managed', 'owner_id', 'updated_at', 'deleted'
+]);
+
 // 許可リストのマップ (キーは sync.ts と一致)
 const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
   residents: RESIDENTS_ALLOWED,
@@ -71,6 +77,7 @@ const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
   feelings: FEELINGS_ALLOWED,
   nicknames: NICKNAMES_ALLOWED,
   events: EVENTS_ALLOWED,
+  presets: PRESETS_ALLOWED,
   consult_answers: new Set(),
 };
 
