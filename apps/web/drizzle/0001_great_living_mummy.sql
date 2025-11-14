@@ -1,1 +1,0 @@
-ALTER TABLE "residents" ADD COLUMN "birthday" text;

@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS "residents" (
 	"speech_preset" uuid,
 	"gender" text,
 	"age" integer,
+	"birthday" text,
 	"occupation" uuid,
 	"first_person" uuid,
 	"interests" jsonb,
