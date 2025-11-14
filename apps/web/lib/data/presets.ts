@@ -11,7 +11,7 @@ export type PresetCategory = PresetCategoryType;
 // デフォルトプリセットを定義
 const now = new Date().toISOString();
 
-const DEFAULT_PRESETS: Preset[] = [
+export const DEFAULT_PRESETS: Preset[] = [
     // Speech
     { id: 'fdc5f580-a7c6-dbb1-28f6-64ad237831aa', category: 'speech', label: '優しい敬語', description: '丁寧で穏やかな話し方：「〜です」「〜ます」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
     { id: '33ff24b3-0861-6bc0-7aa0-4ac350fe5c51', category: 'speech', label: '冷たい敬語', description: '距離感のある敬語：「ご自由にどうぞ」「そうですか」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },

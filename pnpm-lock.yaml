@@ -96,7 +96,7 @@ importers:
         version: 2.1.1
       drizzle-orm:
         specifier: ^0.30.10
-        version: 0.30.10(@opentelemetry/api@1.9.0)(@types/react@18.2.79)(pg@8.16.3)(react@18.3.1)
+        version: 0.30.10(@opentelemetry/api@1.9.0)(@types/react@18.2.79)(pg@8.16.3)(postgres@3.4.7)(react@18.3.1)
       framer-motion:
         specifier: ^11.0.24
         version: 11.18.2(react-dom@18.3.1)(react@18.3.1)
@@ -197,6 +197,9 @@ importers:
       postcss:
         specifier: ^8.4.38
         version: 8.5.6
+      postgres:
+        specifier: ^3.4.7
+        version: 3.4.7
       prettier:
         specifier: ^3.2.5
         version: 3.6.2
@@ -6723,7 +6726,7 @@ packages:
       - supports-color
     dev: true
 
-  /drizzle-orm@0.30.10(@opentelemetry/api@1.9.0)(@types/react@18.2.79)(pg@8.16.3)(react@18.3.1):
+  /drizzle-orm@0.30.10(@opentelemetry/api@1.9.0)(@types/react@18.2.79)(pg@8.16.3)(postgres@3.4.7)(react@18.3.1):
     resolution: {integrity: sha512-IRy/QmMWw9lAQHpwbUh1b8fcn27S/a9zMIzqea1WNOxK9/4EB8gIo+FZWLiPXzl2n9ixGSv8BhsLZiOppWEwBw==}
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
@@ -6806,6 +6809,7 @@ packages:
       '@opentelemetry/api': 1.9.0
       '@types/react': 18.2.79
       pg: 8.16.3
+      postgres: 3.4.7
       react: 18.3.1
     dev: false
 
@@ -9450,6 +9454,10 @@ packages:
     engines: {node: '>=0.10.0'}
     dependencies:
       xtend: 4.0.2
+
+  /postgres@3.4.7:
+    resolution: {integrity: sha512-Jtc2612XINuBjIl/QTWsV5UvE8UHuNblcO3vVADSrKsrc6RqGX6lOW1cEo3CM2v0XG4Nat8nI+YM7/f26VxXLw==}
+    engines: {node: '>=12'}
 
   /prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}

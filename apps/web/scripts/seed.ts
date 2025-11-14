@@ -1,58 +1,41 @@
-import { createClient } from '@supabase/supabase-js';
-import { newId } from '../lib/newId';
+// apps/web/scripts/seed.ts
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+import * as dotenv from 'dotenv';
+import * as path from 'path';
 
-if (!url || !key) {
-  console.error('SupabaseのURLまたはService Roleキーが設定されていません (.env を確認してください)');
-  process.exit(1);
+// .env.local ファイルを明示的に読み込む
+// __dirname は /apps/web/scripts なので、../ で /apps/web に移動する
+dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import { presets } from '../lib/drizzle/schema'; //
+import { DEFAULT_PRESETS } from '../lib/data/presets'; //
+
+const connectionString = process.env.DATABASE_URL; //
+if (!connectionString) {
+  throw new Error('DATABASE_URL is not set!');
 }
 
-const supabase = createClient(url, key, { auth: { persistSession: false } });
+// Drizzle のマイグレーション（drizzle-kit）とは別に、
+// スクリプトからDBを操作するためにクライアント接続を確立します。
+const client = postgres(connectionString, { max: 1 });
+const db = drizzle(client);
 
 async function seed() {
-  const now = new Date().toISOString();
-  const residents = [
-    { id: newId(), name: 'アカリ', mbti: 'INFP', traits: { likes: ['紅茶'], hobby: '散歩' }, updated_at: now, deleted: false },
-    { id: newId(), name: 'リク', mbti: 'ENTJ', traits: { likes: ['バトル'], hobby: 'トレーニング' }, updated_at: now, deleted: false },
-  ];
+  console.log('Seeding default presets...');
 
-  const { error: residentError } = await supabase.from('residents').upsert(residents);
-  if (residentError) throw residentError;
+  // lib/data/presets.ts の DEFAULT_PRESETS 配列 のデータを
+  // Supabase DB の presets テーブル に INSERT します。
+  await db.insert(presets)
+    .values(DEFAULT_PRESETS)
+    .onConflictDoNothing(); // 既に同じIDが存在する場合は何もしない（安全対策）
 
-  const relation = {
-    id: newId(),
-    a_id: residents[0].id < residents[1].id ? residents[0].id : residents[1].id,
-    b_id: residents[0].id < residents[1].id ? residents[1].id : residents[0].id,
-    type: 'friend',
-    updated_at: now,
-    deleted: false,
-  };
-  const { error: relationError } = await supabase.from('relations').upsert(relation);
-  if (relationError) throw relationError;
-
-  const feelings = [
-    { id: newId(), from_id: residents[0].id, to_id: residents[1].id, label: 'curious', updated_at: now, deleted: false },
-    { id: newId(), from_id: residents[1].id, to_id: residents[0].id, label: 'like', updated_at: now, deleted: false },
-  ];
-  const { error: feelingsError } = await supabase.from('feelings').upsert(feelings);
-  if (feelingsError) throw feelingsError;
-
-  const event = {
-    id: newId(),
-    kind: 'seed_created',
-    payload: { residents: residents.map((r) => r.name) },
-    updated_at: now,
-    deleted: false,
-  };
-  const { error: eventsError } = await supabase.from('events').upsert(event);
-  if (eventsError) throw eventsError;
-
-  console.log('サンプルデータの投入が完了しました');
+  console.log('Seeding complete.');
+  await client.end();
 }
 
-seed().catch((error) => {
-  console.error('シードに失敗しました', error);
+seed().catch((err) => {
+  console.error('Seeding failed:', err);
   process.exit(1);
 });
