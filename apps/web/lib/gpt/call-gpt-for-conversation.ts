@@ -13,7 +13,7 @@ export async function callGptForConversation(
   const userPrompt = buildUserPromptConversation(params);
 
   const res = await client.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-5-chat-latest",
     temperature: 0.8,
     response_format: { type: "json_object" },
     messages: [

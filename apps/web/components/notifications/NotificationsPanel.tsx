@@ -91,8 +91,8 @@ export default function NotificationsPanel() {
         {isLoading && (
           <li className="px-4 py-3 text-sm text-gray-500">お知らせを読み込み中…</li>
         )}
-        
-        {notifications.length === 0 && (
+
+        {notifications.length === 0 && !isLoading && (
           <li className="px-4 py-6 text-sm text-gray-500">現在お知らせはありません。</li>
         )}
 
