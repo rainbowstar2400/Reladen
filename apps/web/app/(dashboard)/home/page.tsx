@@ -148,12 +148,10 @@ export default function HomePage() {
 
       <div className="space-y-6">
         {/* お知らせ（実データ接続 + クリックで会話詳細） */}
-        <section>
+        <section className="rounded-2xl border bg-white p-4 text-sm text-gray-500">
           <Suspense
             fallback={
-              <div className="rounded-2xl border bg-white p-4 text-sm text-gray-500">
-                お知らせを読み込み中…
-              </div>
+              <p>お知らせを読み込み中…</p>
             }
           >
             <NotificationsSectionClient />
