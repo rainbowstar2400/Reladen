@@ -24,11 +24,9 @@ import { ClickableRatingBox } from '@/components/ui/clickable-rating-box';
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-// ★ 追加: UIコンポーネント
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
-// ★ 追加: スキーマ (schema.ts)
 import { relationTypeEnum } from '@/lib/drizzle/schema';
 import { useFormDirty } from '@/components/providers/FormDirtyProvider';
 import { useLeaveConfirm } from '@/lib/hooks/useLeaveConfirm';
@@ -80,9 +78,9 @@ const residentFormSchema = z.object({
   trustToPlayer: z.number().min(0).max(100).optional(),
 
   // --- プリセット項目 (ラベル) ---
-  speechPreset: z.string().optional().nullable(),
+  speechPreset: z.string({ required_error: '口調を選択してください' }).min(1, '口調を選択してください'),
   occupation: z.string().optional().nullable(),
-  firstPerson: z.string().optional().nullable(),
+  firstPerson: z.string({ required_error: '一人称を選択してください' }).min(1, '一人称を選択してください'),
   speechPresetDescription: z.string().optional().nullable(),
 
   // --- プリセット管理フラグ ---
@@ -92,7 +90,9 @@ const residentFormSchema = z.object({
 
   gender: z.preprocess(
     v => (v === '' || v == null ? undefined : v),
-    z.enum(['male', 'female', 'nonbinary', 'other']).optional()
+    z.enum(['male', 'female', 'nonbinary', 'other'], {
+      required_error: '性別を選択してください'
+    })
   ),
   age: z.preprocess(
     v => (v === '' || v == null ? undefined : Number(v)),
@@ -263,14 +263,14 @@ export function ResidentForm({
       return {
         ...formDefaultValues,
         name: formDefaultValues?.name ?? '',
-        mbti: formDefaultValues?.mbti ?? '',
+        mbti: formDefaultValues?.mbti ?? undefined,
         traits: traitsObj,
         trustToPlayer: formDefaultValues?.trustToPlayer ?? 50,
 
-        speechPreset: defaultSpeechPreset?.label ?? null,
+        speechPreset: defaultSpeechPreset?.label ?? undefined,
         speechPresetDescription: defaultSpeechPreset?.description ?? null,
         occupation: defaultOccPreset?.label ?? null,
-        firstPerson: defaultFpPreset?.label ?? null,
+        firstPerson: defaultFpPreset?.label ?? undefined,
 
         isSpeechPresetManaged: false,
         isOccupationManaged: false,
@@ -310,7 +310,7 @@ export function ResidentForm({
     family: '家族',
   };
 
-  // ★ 1. 他の住人リストを取得 (自分を除く)
+  // 他の住人リストを取得 (自分を除く)
   const { data: allResidents } = useResidents();
   const otherResidents = useMemo(() => {
     if (!allResidents) return [];
@@ -323,16 +323,15 @@ export function ResidentForm({
     return allResidents;
   }, [allResidents, formDefaultValues?.id]);
 
-  // ★ 2. フォーム内の関係設定を管理する State (★ 変更: 初期化ロジック)
+  // フォーム内の関係設定を管理する State
   const [tempRelations, setTempRelations] = useState<Record<string, TempRelationData>>(() => {
-    // ★ 変更:
     // defaultValues.initialRelations (加工済み) ではなく、
     // defaultValues (DBからの生データ) と otherResidents から
     // フォーム用の tempRelations を「生成」する
     return initializeTempRelations(formDefaultValues, otherResidents);
   });
 
-  // ★ 3. (追加) defaultValues や otherResidents が非同期でロードされたら State を再同期
+  // (追加) defaultValues や otherResidents が非同期でロードされたら State を再同期
   // (useState の遅延初期化は一度しか実行されないため、
   //  DBデータ (formDefaultValues) や住人リスト (otherResidents) が
   //  後からロードされた場合に備えて Effect で再設定する)
@@ -352,7 +351,7 @@ export function ResidentForm({
 
   }, [formDefaultValues, otherResidents]); // 依存配列に
 
-  // ★ 3. 関係設定の State を更新するヘルパー
+  // 関係設定の State を更新するヘルパー
   const handleRelationChange = (
     targetId: string,
     field: keyof TempRelationData,
@@ -371,14 +370,14 @@ export function ResidentForm({
     });
   };
 
-  // ★ 4. (追加) 初期化ロジック (コンポーネント内ヘルパー)
+  //  初期化ロジック (コンポーネント内ヘルパー)
   function initializeTempRelations(
     defaults: Partial<ResidentWithRelations>,
     others: Resident[]
   ): Record<string, TempRelationData> {
 
     // 編集モードでない、または他の住人がいない場合は空
-    // ★ 変更: `!defaults` のチェックを先頭に追加
+    // `!defaults` のチェックを先頭に追加
     if (!defaults || !defaults.id || !others || others.length === 0) {
       return {};
     }
@@ -408,10 +407,10 @@ export function ResidentForm({
         relationType: relation?.type ?? 'none',
 
         feelingLabelTo: feelingTo?.label ?? 'none',
-        feelingScoreTo: feelingTo?.score ?? 50, // ★ score を参照 (デフォルト 50)
+        feelingScoreTo: feelingTo?.score ?? 50,
 
         feelingLabelFrom: feelingFrom?.label ?? 'none',
-        feelingScoreFrom: feelingFrom?.score ?? 50, // ★ score を参照 (デフォルト 50)
+        feelingScoreFrom: feelingFrom?.score ?? 50,
 
         nicknameTo: nicknameTo?.nickname ?? '',
         nicknameFrom: nicknameFrom?.nickname ?? '',
@@ -527,7 +526,7 @@ export function ResidentForm({
     const savedOccPreset = findPresetById(saved.occupation);
     const savedFpPreset = findPresetById(saved.firstPerson);
 
-    // ★ 変更: 変換ヘルパー (formDefaultValues と同じ)
+    // 変換ヘルパー (formDefaultValues と同じ)
     const timeToHour = (time: string | undefined): number | undefined => {
       // time が文字列であり、かつ ':' を含む場合のみ処理を続行
       if (typeof time === 'string' && time.includes(':')) {
@@ -557,18 +556,18 @@ export function ResidentForm({
       occupation: savedOccPreset?.label ?? (values.occupation ?? null),
       firstPerson: savedFpPreset?.label ?? (values.firstPerson ?? null),
 
-      // ★ 管理フラグはリセット
+      // 管理フラグはリセット
       isSpeechPresetManaged: false,
       isOccupationManaged: false,
       isFirstPersonManaged: false,
 
-      // ★ DB の型からフォームの型へ
+      // DB の型からフォームの型へ
       interests: saved.interests?.map(val => ({ value: val })) ?? [],
 
       birthMonth: isNaN(resetBirthMonth as number) ? undefined : resetBirthMonth,
       birthDay: isNaN(resetBirthDay as number) ? undefined : resetBirthDay,
 
-      // ★ 変更: 変換関数を使う
+      // 変更: 変換関数を使う
       sleepBedtime: timeToHour(saved.sleepProfile?.baseBedtime),
       sleepWakeTime: timeToHour(saved.sleepProfile?.baseWakeTime),
     });
@@ -579,17 +578,16 @@ export function ResidentForm({
     onSubmitted?.();
   }
 
-  // ... (useFieldArray, newInterest のロジックは変更なし) ...
-  // ★ 追加: 興味・関心 (useFieldArray)
+  // 興味・関心 (useFieldArray)
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "interests",
   });
 
-  // ★ 追加: 新しく追加する興味・関心の入力値を管理
+  // 新しく追加する興味・関心の入力値を管理
   const [newInterest, setNewInterest] = useState('');
 
-  // ★ 5. 3つのプリセットすべての状態を監視
+  // 3つのプリセットすべての状態を監視
   const watchSpeechPreset = form.watch('speechPreset');
   const watchOccupation = form.watch('occupation');
   const watchFirstPerson = form.watch('firstPerson');
@@ -609,7 +607,7 @@ export function ResidentForm({
   return (
     <Form {...form}>
 
-      {/* ★ 追加: 0時〜23時の Datalist (Age を参考に) */}
+      {/* 0時〜23時の Datalist (Age を参考に) */}
       <datalist id="hour-options">
         {Array.from({ length: 24 }, (_, i) => i).map((n) => (
           <option key={n} value={n} />
@@ -627,7 +625,7 @@ export function ResidentForm({
             name="name"
             render={({ field }) => (
               <FormItem className="space-y-2">
-                <FormLabel>名前</FormLabel>
+                <FormLabel>名前 <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <Input placeholder="例：アカリ" {...field} />
                 </FormControl>
@@ -668,7 +666,6 @@ export function ResidentForm({
                             <option key={n} value={n} />
                           ))}
                         </datalist>
-                        {/* ★ 削除: <p id="age-help">...</p> (スペース確保のため) */}
                       </>
                     </FormControl>
                     <FormMessage />
@@ -747,7 +744,7 @@ export function ResidentForm({
                   return (
                     <FormItem className="space-y-2">
                       {/* ラベルは常に上段に出す */}
-                      <FormLabel className="block">性別</FormLabel>
+                      <FormLabel className="block">性別 <span className="text-red-500">*</span></FormLabel>
                       <FormControl>
                         <select
                           className="w-[150px] rounded border px-3 py-2"
@@ -789,7 +786,7 @@ export function ResidentForm({
                         }
                       }}
                       value={isOccupationManual ? MANUAL_INPUT_KEY : field.value ?? ''}
-                      disabled={isLoadingPresets} // ★ 無効化
+                      disabled={isLoadingPresets}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -864,8 +861,8 @@ export function ResidentForm({
               name="firstPerson"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>一人称</FormLabel>
-                  {/* ★ 20. プリセットロード中は Select を無効化 */}
+                  <FormLabel>一人称 <span className="text-red-500">*</span></FormLabel>
+                  {/* プリセットロード中は Select を無効化 */}
                   <Select
                     onValueChange={(value) => {
                       if (value === MANUAL_INPUT_KEY) {
@@ -875,7 +872,7 @@ export function ResidentForm({
                       }
                     }}
                     value={isFirstPersonManual ? MANUAL_INPUT_KEY : field.value ?? ''}
-                    disabled={isLoadingPresets} // ★ 無効化
+                    disabled={isLoadingPresets}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -883,7 +880,7 @@ export function ResidentForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {/* ★ 20. managedPresets.first_person を使用 */}
+                      {/* managedPresets.first_person を使用 */}
                       {managedPresets.first_person.map((preset) => (
                         <SelectItem key={preset.id} value={preset.label}>
                           {preset.label}
@@ -939,14 +936,14 @@ export function ResidentForm({
           </div>
 
           {/* 話し方プリセット (Select + Manual UI) */}
-          <div className="md:col-span-5 min-w-0 space-y-3">
+          <div className="md:col-sppan-5 min-w-0 space-y-3">
             <FormField
               control={form.control}
               name="speechPreset"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>口調</FormLabel>
-                  {/* ★ 21. プリセットロード中は Select を無効化 */}
+                  <FormLabel>口調 <span className="text-red-500">*</span></FormLabel>
+                  {/* プリセットロード中は Select を無効化 */}
                   <Select
                     onValueChange={(value) => {
                       if (value === MANUAL_INPUT_KEY) {
@@ -954,13 +951,13 @@ export function ResidentForm({
                         form.setValue('speechPresetDescription', '');
                       } else {
                         field.onChange(value);
-                        // ★ 21. managedPresets.speech を使用
+                        // managedPresets.speech を使用
                         const preset = managedPresets.speech.find(p => p.label === value);
                         form.setValue('speechPresetDescription', preset?.description ?? '');
                       }
                     }}
                     value={isSpeechManual ? MANUAL_INPUT_KEY : field.value ?? ''}
-                    disabled={isLoadingPresets} // ★ 無効化
+                    disabled={isLoadingPresets}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -968,7 +965,7 @@ export function ResidentForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {/* ★ 21. managedPresets.speech を使用 */}
+                      {/* managedPresets.speech を使用 */}
                       {managedPresets.speech.map((preset) => (
                         <SelectItem key={preset.id} value={preset.label}>
                           {preset.label}
@@ -983,7 +980,7 @@ export function ResidentForm({
               )}
             />
 
-            {/* ★ 手動入力が選択された時だけ「入力欄」を表示 */}
+            {/* 手動入力が選択された時だけ「入力欄」を表示 */}
             {isSpeechManual && (
               <div className="space-y-3 pl-2 border-l-2 border-dashed">
                 <FormField
@@ -1040,7 +1037,7 @@ export function ResidentForm({
               </div>
             )}
 
-            {/* ★ プリセット選択中（かつ手動ではない）場合、「特徴の表示」を表示 */}
+            {/* プリセット選択中（かつ手動ではない）場合、「特徴の表示」を表示 */}
             {!isSpeechManual && (
               <FormItem>
                 <FormLabel className="text-sm text-muted-foreground">特徴</FormLabel>
@@ -1109,7 +1106,7 @@ export function ResidentForm({
               name="sleepBedtime"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>就寝</FormLabel>
+                  <FormLabel>就寝 <span className="text-red-500">*</span></FormLabel> {/* 変更済 */}
                   <FormControl>
                     {/* Input + Suffix */}
                     <div className="flex items-center gap-2">
@@ -1138,7 +1135,7 @@ export function ResidentForm({
               name="sleepWakeTime"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>起床</FormLabel>
+                  <FormLabel>起床 <span className="text-red-500">*</span></FormLabel> {/* 変更済 */}
                   <FormControl>
                     {/* Input + Suffix */}
                     <div className="flex items-center gap-2">
