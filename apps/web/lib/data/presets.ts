@@ -13,18 +13,27 @@ const now = new Date().toISOString();
 
 const DEFAULT_PRESETS: Preset[] = [
     // Speech
-    { id: 'default_speech_1', category: 'speech', label: 'ていねい', description: '常に敬語を使い、相手に敬意を払う。', isManaged: false, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: 'default_speech_3', category: 'speech', label: 'くだけた', description: '友人や家族と話すような、親しみやすい話し方。', isManaged: false, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_speech_1', category: 'speech', label: '優しい敬語', description: '「〜です」「〜ます」など丁寧で穏やかな話し方', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_speech_2', category: 'speech', label: '冷たい敬語', description: '距離感のある敬語：「ご自由にどうぞ」「そうですか」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_speech_3', category: 'speech', label: 'タメ口', description: 'フレンドリーな砕けた口調：「〜だよ」「〜じゃん」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_speech_4', category: 'speech', label: 'ギャル語', description: '砕けた陽気な話し方：「マジで？」「〜じゃね？」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_speech_5', category: 'speech', label: 'お嬢様風', description: '上品で古風な敬語：「〜ですわ」「〜ですこと」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_speech_6', category: 'speech', label: '関西弁', description: '柔らかい関西口調：「〜やで」「ほんま？」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_speech_7', category: 'speech', label: '子供っぽい', description: '幼い印象の話し方：「〜だね！」「やったぁ」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_speech_8', category: 'speech', label: '無口', description: '短く省略がち：「……別に」「うん」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_speech_9', category: 'speech', label: 'ご婦人風', description: '華やかな柔らかい口調：「〜かしら」「あらやだ」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
 
     // Occupation
-    { id: 'default_occupation_1', category: 'occupation', label: '高校生', description: null, isManaged: false, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: 'default_occupation_2', category: 'occupation', label: '会社員', description: null, isManaged: false, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: 'default_occupation_3', category: 'occupation', label: '公務員', description: null, isManaged: false, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_occupation_1', category: 'occupation', label: '高校生', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_occupation_2', category: 'occupation', label: '大学生', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_occupation_3', category: 'occupation', label: '会社員', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_occupation_4', category: 'occupation', label: '公務員', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
 
     // First Person
-    { id: 'default_first_person_1', category: 'first_person', label: '私（わたし）', description: null, isManaged: false, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: 'default_first_person_2', category: 'first_person', label: '僕（ぼく）', description: null, isManaged: false, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: 'default_first_person_3', category: 'first_person', label: '俺（おれ）', description: null, isManaged: false, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_first_person_1', category: 'first_person', label: '私', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_first_person_2', category: 'first_person', label: '僕', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_first_person_3', category: 'first_person', label: '俺', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'default_first_person_4', category: 'first_person', label: '自分', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
 ];
 
 
