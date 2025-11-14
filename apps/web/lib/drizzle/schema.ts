@@ -46,23 +46,6 @@ export const residents = pgTable('residents', {
   occupation: uuid('occupation').references(() => presets.id, { onDelete: 'set null' }),
   firstPerson: uuid('first_person').references(() => presets.id, { onDelete: 'set null' }),
   interests: jsonb('interests'),
-
-  /**
-   * ★ 変更: 新しい仕様の睡眠プロファイル (jsonb)
-   * *型定義 (参考):
-   * type SleepProfile = {
-   * // 1. ユーザーが設定する基準値
-   * baseBedtime: string;   // 'HH:mm' (例: '01:00')
-   * baseWakeTime: string;  // 'HH:mm' (例: '07:00')
-   * prepMinutes: number;   // (例: 30)
-   * * // 2. 毎日抽選・更新されるスケジュール
-   * todaySchedule?: {
-   * date: string;       // 'YYYY-MM-DD'
-   * bedtime: string;    // 'HH:mm' (抽選された今日の就寝時刻)
-   * wakeTime: string;   // 'HH:mm' (抽選された今日の起床時刻)
-   * };
-   * };
-   */
   sleepProfile: jsonb('sleep_profile'),
 
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

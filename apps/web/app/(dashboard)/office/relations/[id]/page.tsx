@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Loader2, ArrowLeft, ChevronsLeftRight } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { Feeling, Relation } from '@/types';
+import { useNicknames } from '@/lib/data/nicknames';
+import { Feeling, Relation, Nickname } from '@/types';
 import { useEvents } from '@/lib/data/events'; // 追加
 import { EventLog } from '@/types'; // EventLog をインポート
 import {
@@ -129,12 +130,14 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
     const { data: residentA, isLoading: isLoadingA } = useResident(residentAId!);
     const { data: residentB, isLoading: isLoadingB } = useResident(residentBId!);
     const { data: feelings, isLoading: isLoadingFeelings } = useFeelings();
+    const { data: nicknames, isLoading: isLoadingNicknames } = useNicknames();
 
     const { data: eventsData, isLoading: isLoadingEvents } = useEvents();
 
     // A->B, B->A の情報を整理
     const { a_to_b, b_to_a } = useMemo(() => {
-        if (!residentAId || !residentBId || !feelings) {
+        // ★ nicknames を
+        if (!residentAId || !residentBId || !feelings || !nicknames) {
             const defaultData = {
                 impression: null,
                 affinity: 0,
@@ -146,19 +149,23 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
         const a_to_b_feeling = feelings.find(f => f.from_id === residentAId && f.to_id === residentBId);
         const b_to_a_feeling = feelings.find(f => f.from_id === residentBId && f.to_id === residentAId);
 
+        // ★ ニックネームを検索 (スキーマ定義に合わせて fromId, toId を使用)
+        const a_to_b_nickname = nicknames.find(n => n.from_id === residentAId && n.to_id === residentBId);
+        const b_to_a_nickname = nicknames.find(n => n.from_id === residentBId && n.to_id === residentAId);
+
         return {
             a_to_b: {
                 impression: a_to_b_feeling?.label ?? null,
-                affinity: a_to_b_feeling?.score ?? 0,
-                callName: null,
+                affinity: a_to_b_feeling?.score ?? 0, // (feelings の修正)
+                callName: a_to_b_nickname?.nickname ?? null, // ★ 修正
             },
             b_to_a: {
                 impression: b_to_a_feeling?.label ?? null,
-                affinity: b_to_a_feeling?.score ?? 0,
-                callName: null,
+                affinity: b_to_a_feeling?.score ?? 0, // (feelings の修正)
+                callName: b_to_a_nickname?.nickname ?? null, // ★ 修正
             },
         };
-    }, [residentAId, residentBId, feelings]);
+    }, [residentAId, residentBId, feelings, nicknames]);
 
     const relatedEvents = useMemo(() => {
         if (!eventsData || !residentAId || !residentBId) {
@@ -184,7 +191,7 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
 
     }, [eventsData, residentAId, residentBId]);
 
-    const isLoading = isLoadingRelation || isLoadingA || isLoadingB || isLoadingFeelings || isLoadingEvents;
+    const isLoading = isLoadingRelation || isLoadingA || isLoadingB || isLoadingFeelings || isLoadingEvents || isLoadingNicknames;
 
     if (isLoading) {
         return (
