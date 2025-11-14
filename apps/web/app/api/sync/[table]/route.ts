@@ -1,6 +1,6 @@
 // apps/web/app/api/sync/[table]/route.ts
 
-export const runtime = 'nodejs'; // ← 追加：Edge事故回避
+export const runtime = 'nodejs';
 
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
@@ -36,11 +36,47 @@ function asHttpError(prefix: string, err: any) {
 }
 
 // residents の許可カラム（DBにあるものだけ）
-const RESIDENTS_ALLOWED = new Set(['id', 'name', 'updated_at', 'deleted', 'owner_id']);
-// 補足: RLSポリシーのため、'owner_id' は必須
+const RESIDENTS_ALLOWED = new Set([
+  'id', 'name', 'updated_at', 'deleted', 'owner_id', // 既存
+  'mbti', 'traits', 'speechPreset', 'gender', 'age', // ★ 追加
+  'birthday', 'occupation', 'firstPerson', 'interests', 'sleepProfile' // ★ 追加
+]);
 
-// relations の許可カラム
-const RELATIONS_ALLOWED = new Set(['id', 'a_id', 'b_id', 'type', 'updated_at', 'deleted', 'owner_id']);
+// ★ 追加: relations の許可カラム
+const RELATIONS_ALLOWED = new Set([
+  'id', 'aId', 'bId', 'type', 'updated_at', 'deleted', 'owner_id'
+]);
+
+// ★ 追加: feelings の許可カラム
+const FEELINGS_ALLOWED = new Set([
+  'id', 'fromId', 'toId', 'label', 'score', 'updated_at', 'deleted', 'owner_id'
+]);
+
+// ★ 追加: nicknames の許可カラム
+const NICKNAMES_ALLOWED = new Set([
+  'id', 'fromId', 'toId', 'nickname', 'updated_at', 'deleted', 'owner_id'
+]);
+
+// ★ 追加: events の許可カラム (drizzle/schema.ts を参照)
+const EVENTS_ALLOWED = new Set([
+  'id', 'kind', 'payload', 'updatedAt', 'deleted', 'ownerId'
+]);
+
+// 許可リストのマップ
+// このマップのキーは sync.ts の allowedTables と完全に一致させる必要があります
+const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
+  residents: RESIDENTS_ALLOWED,
+  relations: RELATIONS_ALLOWED,
+  feelings: FEELINGS_ALLOWED,
+  nicknames: NICKNAMES_ALLOWED,
+  events: EVENTS_ALLOWED,
+  consult_answers: new Set(),
+  // --- 以下のテーブルは allowedTables に含まれないため削除 ---
+  // presets: new Set(), (TS(2353)エラーの原因)
+  // topic_threads: new Set(),
+  // beliefs: new Set(),
+  // notifications: new Set(),
+};
 
 export async function POST(req: NextRequest, { params }: { params: { table: string } }) {
   const started = Date.now();
@@ -81,40 +117,52 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     const incoming = parsed.data.changes ?? [];
     let pushed = 0;
     if (incoming.length > 0) {
-      const rows = incoming.map((c) => {
-        const d = { ...(c.data as Record<string, any>) };
-        if (typeof d.deleted !== 'boolean') d.deleted = !!c.deleted;
+      // 汎用的な許可リストを取得
+      const allowedCols = ALLOWED_COLUMNS_MAP[table as AllowedTable]; //
 
-        // owner_id を強制上書き
-        // クライアント側のデータに関わらず、サーバー側で認証ユーザーIDを owner_id として設定する
-        // これにより、RLSポリシー (INSERT/UPDATE) を確実に満たす
-        d.owner_id = user.id;
+      // 許可リストが未定義の場合はロジックエラー (通常は発生しない)
+      if (!allowedCols) {
+        return jsonWithHeaders({ message: `table ${table} sync not configured` }, 500, requestId);
+      }
 
-        if (table === 'residents') {
-          // 1) まず camelCase のクライアント専用フィールドを除去
-          delete d.activityTendency;
-          delete d.sleepProfile;
-          // 2) 念のためホワイトリストでフィルタ
-          for (const k of Object.keys(d)) {
-            if (!RESIDENTS_ALLOWED.has(k)) delete d[k];
+      // 許可リストが空(size 0)の場合は、RLSエラーを防ぐため何もしない
+      if (allowedCols.size === 0) {
+        console.warn(JSON.stringify({ lvl: 'warn', at: 'sync.skip', requestId, table, reason: 'allowed columns list is empty' }));
+        // (push (upsert) をスキップして pull (select) に進む)
+
+      } else {
+        // 許可リストがある場合のみ upsert 処理
+        const rows = incoming.map((c) => {
+          const d = { ...(c.data as Record<string, any>) };
+          if (typeof d.deleted !== 'boolean') d.deleted = !!c.deleted;
+
+          // owner_id を強制上書き (変更なし)
+          d.owner_id = user.id; //
+
+          // 1) テーブル固有のクライアント専用フィールドを除去
+          if (table === 'residents') {
+            // 'sleepProfile' はDBのカラム に存在するため、削除しない
+            delete d.activityTendency; //
           }
-        }
-        else if (table === 'relations') {
-          // 1) (もしあれば) クライアント専用フィールドを除去
-          delete d.aName; 
-          delete d.bName;
-          // 2) ホワイトリストでフィルタ
-          for (const k of Object.keys(d)) {
-            if (!RELATIONS_ALLOWED.has(k)) delete d[k];
+          if (table === 'relations') {
+            delete d.aName; //
+            delete d.bName; //
           }
-        }
+          // (他のテーブルも必要ならここに追加)
 
-        return d;
-      });
+          // 2) ホワイトリストでフィルタリング
+          for (const k of Object.keys(d)) {
+            if (!allowedCols.has(k)) {
+              delete d[k];
+            }
+          }
+          return d;
+        });
 
-      const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
-      if (error) throw asHttpError('upsert failed', error);
-      pushed = rows.length;
+        const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
+        if (error) throw asHttpError('upsert failed', error);
+        pushed = rows.length;
+      }
     }
 
     // --- pull (select) ---

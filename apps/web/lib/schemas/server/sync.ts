@@ -1,7 +1,7 @@
 // apps/web/lib/schemas/server/sync.ts
 import { z } from 'zod';
 
-export const allowedTables = ['residents','relations','feelings','events','consult_answers'] as const;
+export const allowedTables = ['residents', 'relations', 'feelings', 'nicknames', 'events', 'consult_answers'] as const;
 export type AllowedTable = typeof allowedTables[number];
 
 const isoDate = z.string().refine(
