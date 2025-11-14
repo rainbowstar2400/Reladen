@@ -7,15 +7,19 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
-import { presetCategoryEnum } from '@/lib/drizzle/schema';
-import { Trash2, Loader2 } from 'lucide-react';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Loader2 } from 'lucide-react';
 import {
   usePresetsByCategory,
   useUpsertPreset,
-  useDeletePreset,
   type Preset,
   type PresetCategory,
 } from '@/lib/data/presets';
@@ -40,17 +44,16 @@ const CATEGORY_DETAILS: Record<PresetCategory, { title: string; desc: string; la
 };
 
 /**
- * カテゴリごとのプリセット管理UI (実データ対応版)
+ * カテゴリごとのプリセット管理UI (★ タブの中身)
  */
 function PresetCategoryManager({ category }: { category: PresetCategory }) {
   const details = CATEGORY_DETAILS[category];
 
-  // useState(MOCK_DATA) の代わりに usePresetsByCategory フックを使用
+  // usePresetsByCategory フックを使用 (ステップ2でマージ対応)
   const { data: items = [], isLoading } = usePresetsByCategory(category);
 
   // データの更新・削除用フックを呼び出し
   const upsertPreset = useUpsertPreset();
-  const deletePreset = useDeletePreset();
 
   const [newLabel, setNewLabel] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -58,42 +61,48 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
   const handleAdd = () => {
     if (!newLabel || (category === 'speech' && !newDescription)) return;
 
-    const newItem: Partial<Preset> = {
-      // id は upsert フック側で生成
-      category,
-      label: newLabel,
-      description: category === 'speech' ? newDescription : undefined,
-      isManaged: true, // このページで追加するものは isManaged: true
-    };
+    // 既存の項目に同じラベルがないかチェック
+    const existing = items.find(item => item.label === newLabel);
 
-    // setItems() の代わりに API (フック) を呼び出し
-    upsertPreset.mutate(newItem, {
-      onSuccess: () => {
-        // 成功したら入力欄をクリア
-        setNewLabel('');
-        setNewDescription('');
-      },
-      // (onError は useMutation のグローバル設定に任せるか、ここで toast を表示)
-    });
+    if (existing && !existing.isManaged) {
+      // 既存の非管理プリセットを管理対象にする (Switch をオンにするのと同じ)
+      upsertPreset.mutate({ id: existing.id, isManaged: true }, {
+        onSuccess: () => {
+          setNewLabel('');
+          setNewDescription('');
+        }
+      });
+    } else if (!existing) {
+      // 新規追加
+      const newItem: Partial<Preset> = {
+        category,
+        label: newLabel,
+        description: category === 'speech' ? newDescription : undefined,
+        isManaged: true, // このフォームから追加するものは isManaged: true
+      };
+      upsertPreset.mutate(newItem, {
+        onSuccess: () => {
+          setNewLabel('');
+          setNewDescription('');
+        }
+      });
+    }
+    // (既に isManaged: true の場合は何もしない)
   };
 
-  const handleDelete = (id: string) => {
-    // setItems() の代わりに API (フック) を呼び出し
-    if (window.confirm('このプリセットを削除しますか？ (関連する住人からは解除されます)')) {
-      deletePreset.mutate(id);
-    }
+  // isManaged をトグルする関数
+  const handleToggleManaged = (id: string, newIsManaged: boolean) => {
+    // API (フック) を呼び出し
+    upsertPreset.mutate({ id, isManaged: newIsManaged });
   };
 
   // ローディング中と更新中の状態
-  const isMutating = upsertPreset.isPending || deletePreset.isPending;
+  const isMutating = upsertPreset.isPending;
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{details.title}</CardTitle>
-        <p className="text-sm text-muted-foreground">{details.desc}</p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      {/* <CardHeader> (Tabs 側で表示) </CardHeader> */}
+      <CardContent className="space-y-4 pt-6">
 
         {/* ローディング表示 */}
         {isLoading && (
@@ -105,23 +114,28 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
 
         {/* 既存のリスト */}
         <div className="space-y-2">
-          {/* isManaged: true のものだけをフィルタ (フックが全件返す場合に備える) */}
-          {items.filter(item => item.isManaged).map((item) => (
+          {items.map((item) => (
             <div
               key={item.id}
-              className="flex flex-col gap-1 rounded-md border p-3"
+              // isManaged: false の場合は少し薄く表示
+              className={`flex flex-col gap-1 rounded-md border p-3 ${!item.isManaged ? 'border-dashed opacity-70' : ''
+                }`}
             >
               <div className="flex items-center justify-between">
                 <span className="font-semibold">{item.label}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={() => handleDelete(item.id)}
-                  disabled={isMutating} // 更新中は無効化
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+
+                {/* 削除ボタンの代わりに Switch を使用 */}
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id={`switch-${item.id}`}
+                    checked={item.isManaged}
+                    onCheckedChange={(checked) => handleToggleManaged(item.id, checked)}
+                    disabled={isMutating} // 更新中は無効化
+                  />
+                  <Label htmlFor={`switch-${item.id}`} className="text-xs text-muted-foreground">
+                    {item.isManaged ? 'リスト表示' : '非表示'}
+                  </Label>
+                </div>
               </div>
               {item.description && (
                 <p className="pl-1 text-xs text-gray-600 dark:text-gray-400">
@@ -134,6 +148,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
 
         {/* 新規追加フォーム */}
         <div className="flex flex-col gap-2 rounded-md border border-dashed p-3">
+          <p className="text-sm font-medium">新規プリセットを追加</p>
           <Input
             placeholder={details.labelHelp}
             value={newLabel}
@@ -153,14 +168,13 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
 
           <Button
             onClick={handleAdd}
-            // upsertPreset.isPending もチェック
             disabled={!newLabel || (category === 'speech' && !newDescription) || isMutating}
             className="mt-2"
           >
-            {upsertPreset.isPending ? (
+            {isMutating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                追加中...
+                更新中...
               </>
             ) : (
               '追加'
@@ -173,6 +187,10 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
 }
 
 export default function PresetsPage() {
+  // タブの制御
+  const [activeTab, setActiveTab] = useState<PresetCategory>('speech');
+  const activeDetails = CATEGORY_DETAILS[activeTab];
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">プリセット管理</h1>
@@ -180,11 +198,40 @@ export default function PresetsPage() {
         住人登録時の選択リストに表示されるプリセット（話し方、職業、一人称）を管理します。
       </p>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <PresetCategoryManager category="speech" />
-        <PresetCategoryManager category="occupation" />
-        <PresetCategoryManager category="first_person" />
-      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as PresetCategory)}
+        className="w-full"
+      >
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="speech">
+            {CATEGORY_DETAILS['speech'].title}
+          </TabsTrigger>
+          <TabsTrigger value="occupation">
+            {CATEGORY_DETAILS['occupation'].title}
+          </TabsTrigger>
+          <TabsTrigger value="first_person">
+            {CATEGORY_DETAILS['first_person'].title}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* タブの説明 */}
+        <p className="mt-2 text-sm text-muted-foreground">
+          {activeDetails.desc}
+        </p>
+
+        <div className="mt-4">
+          <TabsContent value="speech">
+            <PresetCategoryManager category="speech" />
+          </TabsContent>
+          <TabsContent value="occupation">
+            <PresetCategoryManager category="occupation" />
+          </TabsContent>
+          <TabsContent value="first_person">
+            <PresetCategoryManager category="first_person" />
+          </TabsContent>
+        </div>
+      </Tabs>
     </div>
   );
 }

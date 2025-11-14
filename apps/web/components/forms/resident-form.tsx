@@ -32,7 +32,7 @@ import { Slider } from '@/components/ui/slider';
 import { relationTypeEnum } from '@/lib/drizzle/schema';
 import { useFormDirty } from '@/components/providers/FormDirtyProvider';
 import { useLeaveConfirm } from '@/lib/hooks/useLeaveConfirm';
-import { usePresets, useUpsertPreset } from '@/lib/data/presets';
+import { usePresetsByCategory, useUpsertPreset } from '@/lib/data/presets';
 import { Loader2 } from 'lucide-react';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
@@ -156,7 +156,18 @@ export function ResidentForm({
 
   const formDefaultValues = defaultValues as Partial<ResidentWithRelations>;
 
-  const { data: allPresets = [], isLoading: isLoadingPresets } = usePresets();
+  const { data: speechPresets = [], isLoading: isLoadingSpeech } = usePresetsByCategory('speech');
+  const { data: occPresets = [], isLoading: isLoadingOcc } = usePresetsByCategory('occupation');
+  const { data: fpPresets = [], isLoading: isLoadingFp } = usePresetsByCategory('first_person');
+
+  // すべてのプリセットをマージ (デフォルトプリセット含む)
+  const allPresets = useMemo(() => {
+    return [...speechPresets, ...occPresets, ...fpPresets];
+  }, [speechPresets, occPresets, fpPresets]);
+
+  // ローディング状態をマージ
+  const isLoadingPresets = isLoadingSpeech || isLoadingOcc || isLoadingFp;
+
   const upsertPreset = useUpsertPreset();
 
   const findOrCreatePreset = async (
@@ -170,7 +181,6 @@ export function ResidentForm({
     }
     const trimmedLabel = label.trim();
 
-    // (フックから取得した allPresets を参照)
     const allCategoryPresets = allPresets.filter((p: Preset) => p.category === category);
     const existing = allCategoryPresets.find((p: Preset) => p.label === trimmedLabel);
 
