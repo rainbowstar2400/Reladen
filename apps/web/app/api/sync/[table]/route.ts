@@ -13,7 +13,7 @@ const SUPABASE_ANON_KEY =
 
 function jsonWithHeaders(data: unknown, status = 200, requestId?: string) {
   const headers = new Headers();
-  headers.set('Content-Type', 'application/json'); // ★ 明示
+  headers.set('Content-Type', 'application/json');
   headers.set('X-Server-Time', new Date().toISOString());
   if (requestId) headers.set('X-Request-Id', requestId);
   return new Response(JSON.stringify(data), { status, headers });
@@ -38,6 +38,9 @@ function asHttpError(prefix: string, err: any) {
 // residents の許可カラム（DBにあるものだけ）
 const RESIDENTS_ALLOWED = new Set(['id', 'name', 'updated_at', 'deleted', 'owner_id']);
 // 補足: RLSポリシーのため、'owner_id' は必須
+
+// relations の許可カラム
+const RELATIONS_ALLOWED = new Set(['id', 'a_id', 'b_id', 'type', 'updated_at', 'deleted', 'owner_id']);
 
 export async function POST(req: NextRequest, { params }: { params: { table: string } }) {
   const started = Date.now();
@@ -65,7 +68,6 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       return jsonWithHeaders({ message: 'table not allowed' }, 400, requestId);
     }
 
-    // --- ★ 修正点 1: 認証ユーザー情報を取得 ---
     // RLSポリシーを満たすため、ここでユーザーIDを取得する
     const {
       data: { user },
@@ -74,7 +76,6 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     if (authError || !user) {
       return jsonWithHeaders({ message: 'auth error: ' + (authError?.message ?? 'no user') }, 401, requestId);
     }
-    // --- ★ 修正完了 (1) ---
 
     // --- push (upsert) ---
     const incoming = parsed.data.changes ?? [];
@@ -84,11 +85,10 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
         const d = { ...(c.data as Record<string, any>) };
         if (typeof d.deleted !== 'boolean') d.deleted = !!c.deleted;
 
-        // --- ★ 修正点 2: owner_id を強制上書き ---
+        // owner_id を強制上書き
         // クライアント側のデータに関わらず、サーバー側で認証ユーザーIDを owner_id として設定する
         // これにより、RLSポリシー (INSERT/UPDATE) を確実に満たす
         d.owner_id = user.id;
-        // --- ★ 修正完了 (2) ---
 
         if (table === 'residents') {
           // 1) まず camelCase のクライアント専用フィールドを除去
@@ -99,6 +99,16 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
             if (!RESIDENTS_ALLOWED.has(k)) delete d[k];
           }
         }
+        else if (table === 'relations') {
+          // 1) (もしあれば) クライアント専用フィールドを除去
+          delete d.aName; 
+          delete d.bName;
+          // 2) ホワイトリストでフィルタ
+          for (const k of Object.keys(d)) {
+            if (!RELATIONS_ALLOWED.has(k)) delete d[k];
+          }
+        }
+
         return d;
       });
 
@@ -143,6 +153,6 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       }
     }
     console.error(JSON.stringify({ lvl: 'error', at: 'sync.fail', requestId, clientIp, userAgent, table, durationMs, status, body, stack: e?.stack }));
-    return jsonWithHeaders(body, status, requestId); // ★ 常に本文を返す
+    return jsonWithHeaders(body, status, requestId);
   }
 }
