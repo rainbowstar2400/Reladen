@@ -20,6 +20,8 @@ export default function SettingsPage() {
     setTheme(v)
   }
 
+  const contactUrl = process.env.NEXT_PUBLIC_CONTACT_URL;
+
   return (
     <div className="space-y-10">
 
@@ -145,8 +147,19 @@ export default function SettingsPage() {
           {/* 連絡フォーム（外部リンク可） */}
           <Card><CardContent className="flex items-center justify-between py-3">
             <div className="font-medium">連絡フォーム</div>
-            <Button variant="outline" asChild>
-              <a href={process.env.NEXT_PUBLIC_CONTACT_URL ?? '/contact'} target={process.env.NEXT_PUBLIC_CONTACT_URL ? '_blank' : '_self'} rel="noopener noreferrer">
+            {/* 外部リンクが設定されている場合のみボタンを有効化 */}
+            <Button
+              variant="outline"
+              asChild
+              disabled={!contactUrl}
+              title={!contactUrl ? '環境変数 NEXT_PUBLIC_CONTACT_URL を設定してください' : undefined}
+            >
+              {/* 変更箇所3: hrefをcontactUrlに固定し、外部リンクのためtarget="_blank"に固定 */}
+              <a
+                href={contactUrl ?? '#'} // リンクがない場合は # にフォールバック (disabledなので押せないが安全のため)
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 開く
               </a>
             </Button>
@@ -161,7 +174,7 @@ function AccountButtons(): JSX.Element {
   const { ready, user, signInWithGoogle, signOut, hasSupabase, linkWithGoogle } = useAuth();
 
   if (!hasSupabase) return <Button variant="outline" disabled>ローカル動作中</Button>;
-  if (!ready)       return <Button variant="outline" disabled>状態確認中…</Button>;
+  if (!ready) return <Button variant="outline" disabled>状態確認中…</Button>;
   if (!user) {
     return (
       <div className="flex items-center gap-2">
@@ -174,7 +187,7 @@ function AccountButtons(): JSX.Element {
   return (
     <div className="flex items-center gap-3">
       <span className="text-sm text-muted-foreground">
-        {user.email ?? 'ログイン中'}　
+        {user.email ?? 'ログイン中'}
         {linked.size > 0 && (
           <span className="inline-flex items-center gap-1">
             <span className="text-xs">連携済み：</span>
