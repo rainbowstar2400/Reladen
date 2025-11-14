@@ -5,9 +5,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useSettings } from '@/lib/use-settings'
-import { useAuth } from '@/lib/auth/use-auth';                // ★追加
-import { clearLocalAll } from '@/lib/db-local';               // ★追加
-import { supabaseClient } from '@/lib/db-cloud/supabase';     // （任意）状態表示用
+import { useAuth } from '@/lib/auth/use-auth';
+import { clearLocalAll } from '@/lib/db-local';
+import { supabaseClient } from '@/lib/db-cloud/supabase';
+import { deleteAccountAction } from '@/app/actions/delete-account';
 
 const ROLLOVERS = ['00:00', '04:00', '05:00', '06:00', '07:00', '08:00'] as const
 
@@ -56,19 +57,36 @@ export default function SettingsPage() {
             </div>
           </CardContent></Card>
 
-          {/* 初期化（実装版） */}
+          {/* ★ 変更箇所: 初期化（実装版）をアカウント削除に置き換え */}
           <Card><CardContent className="flex items-center justify-between py-3">
             <div>
-              <div className="font-medium">初期化</div>
-              <div className="text-xs text-muted-foreground">ローカルの全データを削除します（クラウドは削除しません）</div>
+              <div className="font-medium">アカウント削除</div>
+              <div className="text-xs text-muted-foreground">アカウントと関連する全てのデータ（ローカルおよびクラウド）を削除します。</div>
             </div>
-            <Button variant="destructive" onClick={async () => {
-              if (!confirm('ローカルの全データを削除します。元に戻せません。実行しますか？')) return;
-              await clearLocalAll();
-              try { window.dispatchEvent(new Event('reladen:request-sync')); } catch { }
-              alert('ローカルデータを初期化しました。');
-            }}>初期化する</Button>
+            <Button
+              variant="destructive"
+              // ログイン中でない、またはSupabase未設定の場合はボタンを無効化
+              disabled={!supabaseClient || !useAuth().user}
+              onClick={async () => {
+                // ローカルデータも削除されることを明示
+                if (!confirm('【最終確認】アカウントと全てのデータが削除されます。元に戻せません。本当に実行しますか？')) return;
+
+                // 1. サーバーアクションを呼び出し、クラウドデータを削除し、ログアウトさせる
+                const result = await deleteAccountAction();
+
+                if (result.success) {
+                  // 2. 成功したらローカルデータも削除し、UIを更新
+                  await clearLocalAll();
+                  alert('アカウントと全てのデータが削除されました。リダイレクトします。');
+                } else {
+                  alert(`アカウント削除に失敗しました: ${result.message}\n（失敗した場合、ローカルデータは残っています）`);
+                }
+              }}
+            >
+              アカウントを削除する
+            </Button>
           </CardContent></Card>
+
         </div>
       </section>
 
