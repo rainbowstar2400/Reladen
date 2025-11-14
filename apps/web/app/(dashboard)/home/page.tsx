@@ -39,9 +39,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function SituationBadge({ situation }: { situation: Situation }) {
   const label =
-  situation === 'sleeping'
-  ? null
-    : situation === 'preparing'
+    situation === 'preparing'
       ? '就寝準備中'
       : '活動中';
 
@@ -74,15 +72,15 @@ function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation 
     <div className="relative flex h-32 w-32 flex-shrink-0 flex-col items-center justify-end gap-3 rounded-lg border p-3 text-center">
       {/* 右上バッジ */}
       <span className="absolute right-2 top-2">
-        <SituationBadge situation={situation} />
+        {/* situation に応じて表示を切り替え */}
+        {situation === 'sleeping' ? (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <Moon className="h-3 w-3" /> Zzz…
+          </span>
+        ) : (
+          <SituationBadge situation={situation} />
+        )}
       </span>
-
-      {/* 既存のZzz演出（互換・任意） */}
-      {situation === 'sleeping' && (
-        <span className="absolute right-2 top-8 inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <Moon className="h-3 w-3" /> Zzz…
-        </span>
-      )}
 
       <div className="font-medium">{r.name}</div>
       <Button size="sm" disabled={disabled} className="min-w-20">
