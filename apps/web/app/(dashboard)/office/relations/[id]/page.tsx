@@ -127,8 +127,8 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
     const residentBId = relation?.b_id;
 
     // useResident フックは residentId が undefined だと実行されないように調整
-    const { data: residentA, isLoading: isLoadingA } = useResident(residentAId!);
-    const { data: residentB, isLoading: isLoadingB } = useResident(residentBId!);
+    const { data: residentA, isLoading: isLoadingA } = useResident(residentAId);
+    const { data: residentB, isLoading: isLoadingB } = useResident(residentBId);
     const { data: feelings, isLoading: isLoadingFeelings } = useFeelings();
     const { data: nicknames, isLoading: isLoadingNicknames } = useNicknames();
 
