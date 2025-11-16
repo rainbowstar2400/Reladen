@@ -36,12 +36,17 @@ async function updateRelationsAndFeelings(params: {
   const [a, b] = params.participants;
   const now = new Date().toISOString();
 
-  // listAny は Entity[]（Union）を返すため、Feeling[] に明示キャストして扱う
-  const feelings = (await listAny("feelings")) as unknown as Feeling[];
+  // listAny は null を返す可能性がある
+  const feelings = (await listAny("feelings")) as unknown as Feeling[] | null;
 
   // 既存レコード検索（a->b / b->a）
-  const findFeeling = (fromId: string, toId: string) =>
-    feelings.find((f) => (f as any).a_id === fromId && (f as any).b_id === toId);
+  const findFeeling = (fromId: string, toId: string) => {
+    // feelings が配列の場合のみ .find を呼び出す
+    if (!Array.isArray(feelings)) return undefined;
+    return feelings.find(
+      (f) => (f as any).a_id === fromId && (f as any).b_id === toId,
+    );
+  };
 
   const recAB = findFeeling(a, b);
   const recBA = findFeeling(b, a);
@@ -106,13 +111,13 @@ async function updateThreadAfterEvent(params: {
   let finalStatus: TopicThread["status"] = "ongoing"; // ★ デフォルト
 
   if (params.status) {
-    // ★ 1. status (評価側) があれば最優先
+    // 1. status (評価側) があれば最優先
     finalStatus = params.status;
   } else if (params.signal === "close") {
-    // ★ 2. signal (GPT側)
+    // 2. signal (GPT側)
     finalStatus = "done";
   } else if (params.signal === "park") {
-    // ★ 2. signal (GPT側)
+    // 2. signal (GPT側)
     finalStatus = "paused";
   }
   // (signal が 'continue' または undefined の場合は 'ongoing' のまま)
@@ -120,7 +125,7 @@ async function updateThreadAfterEvent(params: {
   await putAny("topic_threads", {
     id: params.threadId,
     lastEventId: params.lastEventId,
-    status: finalStatus, // ★ 変更
+    status: finalStatus,
     updated_at: now,
     deleted: false,
   } as any);
@@ -163,7 +168,6 @@ export async function persistConversation(params: {
 
   // 1) events へ保存
   const eventId = newId();
-  // const systemLine = makeSystemLine(gptOut, evalResult); ← 削除
 
   await putAny("events", {
     id: eventId,
@@ -173,32 +177,40 @@ export async function persistConversation(params: {
     payload: {
       ...gptOut,
       deltas: evalResult.deltas,      // impression はラベル型でOK（数値ではない）
-      systemLine: evalResult.systemLine, // ★ ここを評価側のsystemLineに
+      systemLine: evalResult.systemLine,
     },
   } as any);
 
 
   // 2) topic_threads の更新
-  // const next = evalResult.threadNextState ?? gptOut.meta.signals?.[0]; // ← 型が混在するため削除
   await updateThreadAfterEvent({
     threadId: gptOut.threadId,
     lastEventId: eventId,
-    signal: gptOut.meta.signals?.[0],    // ★ GPT側の Signal
-    status: evalResult.threadNextState, // ★ 評価側の Status (こちらが優先される)
+    signal: gptOut.meta.signals?.[0],    // GPT側の Signal
+    status: evalResult.threadNextState, // 評価側の Status (こちらが優先される)
   });
 
   // 3) beliefs を更新（冪等）
   async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
-    const arr = (await listAny("beliefs")) as unknown as BeliefRecord[];
+    // arr が null の可能性を考慮
+    const arr = (await listAny("beliefs")) as unknown as BeliefRecord[] | null;
     const dict: Record<string, BeliefRecord> = {};
-    for (const rec of arr) dict[rec.residentId] = rec;
+
+    // arr が配列であることを確認してからループ
+    if (Array.isArray(arr)) {
+      for (const rec of arr) {
+        if (rec && rec.residentId) {
+          dict[rec.residentId] = rec;
+        }
+      }
+    }
     return dict;
   }
 
   // 既存の loadBeliefsDict はそのまま利用
   async function upsertBeliefsFromNewKnowledge(
     items: Array<{ target: string; key: string }>,
-    participants: [string, string]
+    participants: [string, string],
   ) {
     if (!items?.length) return;
 
