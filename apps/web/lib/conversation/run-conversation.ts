@@ -44,9 +44,18 @@ export type RunConversationResult = {
 
 /** beliefs を Record<residentId, BeliefRecord> でロード */
 async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
-  const arr = (await listAny("beliefs")) as unknown as BeliefRecord[];
+  // arr が null の可能性を考慮
+  const arr = (await listAny("beliefs")) as unknown as BeliefRecord[] | null;
   const dict: Record<string, BeliefRecord> = {};
-  for (const rec of arr) dict[rec.residentId] = rec;
+
+  // arr が配列であることを確認してからループ
+  if (Array.isArray(arr)) {
+    for (const rec of arr) {
+      if (rec && rec.residentId) {
+        dict[rec.residentId] = rec;
+      }
+    }
+  }
   return dict;
 }
 
@@ -58,22 +67,30 @@ async function ensureThreadForGpt(input: {
   const now = new Date().toISOString();
 
   if (input.threadId) {
-    // listAny はフィルタ引数なし → 全件取得してから絞り込み
-    const allThreads = (await listAny("topic_threads")) as unknown as TopicThread[];
-    const found = allThreads.find((t) => t.id === input.threadId);
+    // allThreads が null の可能性を考慮
+    const allThreads = (await listAny("topic_threads")) as unknown as
+      | TopicThread[]
+      | null;
 
-    if (found) {
-      const t = found;
-      const status: "ongoing" | "paused" | "done" = (t.status ?? "ongoing") as any;
-      return {
-        id: t.id,
-        participants: (t.participants as [string, string]) ?? input.participants,
-        status,
-        topic: t.topic,
-        lastEventId: t.lastEventId,
-        updated_at: t.updated_at ?? now,
-        deleted: !!t.deleted,
-      };
+    // allThreads が配列であることを確認
+    if (Array.isArray(allThreads)) {
+      const found = allThreads.find((t) => t.id === input.threadId);
+
+      if (found) {
+        const t = found;
+        const status: "ongoing" | "paused" | "done" = (t.status ??
+          "ongoing") as any;
+        return {
+          id: t.id,
+          participants:
+            (t.participants as [string, string]) ?? input.participants,
+          status,
+          topic: t.topic,
+          lastEventId: t.lastEventId,
+          updated_at: t.updated_at ?? now,
+          deleted: !!t.deleted,
+        };
+      }
     }
   }
 
