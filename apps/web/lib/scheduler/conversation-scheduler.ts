@@ -17,8 +17,6 @@ export type SchedulerOptions = {
   enabled?: boolean;
   /** ベース間隔(ms)。実際は ±20% のジッターが乗ります */
   baseIntervalMs?: number;
-  /** 例: [0, 6] は 0:00-6:59 を静穏帯としてスキップ */
-  quietHours?: [number, number];
   /** “新規会話” 用のデフォルト参加者ペア（スレッドが無いときに使う） */
   defaultParticipants?: [string, string];
 };
@@ -26,7 +24,6 @@ export type SchedulerOptions = {
 const DEFAULTS: Required<SchedulerOptions> = {
   enabled: true,
   baseIntervalMs: 90_000, // 会話生成間隔：90秒
-  quietHours: [1, 6],     // 01:00-06:59 はスキップ（任意で調整）
   defaultParticipants: ["resident_A", "resident_B"],
 };
 
@@ -89,11 +86,14 @@ function inQuietHours(quiet: [number, number]): boolean {
   }
 }
 
-// --- 実行対象の選定（非常に単純な実装：最古更新のスレッドを選ぶ） ---------
-async function pickThreadOrDefault(defaultPair: [string, string]): Promise<{
+// --- 実行対象の選定 ---------
+async function pickThreadOrDefault(
+  /** 現在活動中の住人リスト */
+  awakeCandidates: Resident[],
+): Promise<{
   threadId?: string;
   participants: [string, string];
-}> {
+} | null> { // null を返す可能性を追加
   const allThreads = (await listLocal("topic_threads")) as unknown as TopicThread[];
   // 条件：status が "ongoing" のものを優先、updated_at が古いものから順
   const ongoing = allThreads.filter((t) => (t as any).status === "ongoing");
@@ -105,11 +105,27 @@ async function pickThreadOrDefault(defaultPair: [string, string]): Promise<{
   const first = sorted[0];
 
   if (first) {
-    const ps = (first.participants as [string, string]) ?? defaultPair;
-    return { threadId: first.id, participants: ps };
+    const ps = first.participants as [string, string];
+    // 既存スレッドに参加者が正しく設定されていれば、それを返す
+    if (ps && ps.length === 2) {
+      return { threadId: first.id, participants: ps };
+    }
+    // ※ 参加者がいない異常なスレッドは無視し、新規会話ロジックへ
   }
-  // スレッドが1つも無ければデフォルトペアで新規会話
-  return { participants: defaultPair };
+
+  // スレッドが1つも無いか、スレッドに参加者がいない場合：
+  // 活動中の住人から新規ペアを選ぶ
+  if (awakeCandidates.length < 2) {
+    // 新規会話の候補がいない
+    return null;
+  }
+
+  // 活動中の住人をシャッフルして先頭2名を選ぶ
+  const shuffled = [...awakeCandidates].sort(() => 0.5 - Math.random());
+  const newPair: [string, string] = [shuffled[0].id, shuffled[1].id];
+
+  // 新規会話として参加者ペアを返す（threadId はなし）
+  return { participants: newPair };
 }
 
 // --- 反復タスク --------------------------------------------------------------
@@ -119,57 +135,76 @@ function jitter(base: number) {
 }
 
 export function startConversationScheduler(opts?: SchedulerOptions) {
-  if (typeof window === "undefined") return { stop: () => {} }; // SSRでは何もしない
+  if (typeof window === "undefined") return { stop: () => { } }; // SSRでは何もしない
 
   const O = { ...DEFAULTS, ...(opts ?? {}) };
-  if (!O.enabled) return { stop: () => {} };
+  if (!O.enabled) return { stop: () => { } };
 
   let timer: number | null = null;
   let stopped = false;
 
   const tick = async () => {
     try {
-      // タブ切替などで重複させない（visibility が hidden のときは軽くスキップでもOK）
+      // タブ切替などで重複させない
       if (document.hidden) {
         scheduleNext();
         return;
       }
-      if (inQuietHours(O.quietHours)) {
-        scheduleNext();
-        return;
-      }
+      // 他タブが担当中ならスキップ
       if (!tryAcquireLock()) {
-        // 他タブが担当中
         scheduleNext();
         return;
       }
 
-      // ロック継続（長時間処理に備えて適当に更新しておく）
+      // ロック継続
       refreshLock();
 
-      // 対象選定 → 会話開始
-      const target = await pickThreadOrDefault(O.defaultParticipants);
-
-      // 選定された参加者が活動中か（寝ていないか）確認する
+      // 先に活動中の住人を選定
       const allResidents = (await listLocal("residents")) as Resident[];
       const now = new Date();
-      // 'candidates.ts' のロジックを使って活動中の住人リストを取得
       const awakeCandidates = selectConversationCandidates(now, allResidents);
-      const awakeIds = new Set(awakeCandidates.map(r => r.id));
+      const awakeIds = new Set(awakeCandidates.map((r) => r.id));
 
-      const [pA, pB] = target.participants;
-      if (!awakeIds.has(pA) || !awakeIds.has(pB)) {
-        // 参加者のどちらかが就寝中のため、会話をスキップ
-        console.log(`[Scheduler] Skipping conversation: ${pA} or ${pB} is sleeping.`);
-        refreshLock(); // スキップも「実行」とみなし、ロックを更新して次のインターバルまで待つ
+      // 会話可能な住人が2人未満の場合はスキップ
+      if (awakeCandidates.length < 2) {
+        console.log(
+          "[Scheduler] Skipping: Not enough awake residents to start a conversation.",
+        );
+        refreshLock();
         scheduleNext();
         return;
       }
 
+      // 対象選定（既存スレッド or 新規ペア）
+      const target = await pickThreadOrDefault(awakeCandidates);
+
+      // 対象が見つからない場合（通常は発生しない）
+      if (!target) {
+        console.log(
+          "[Scheduler] Skipping: No target thread or new pair found.",
+        );
+        refreshLock();
+        scheduleNext();
+        return;
+      }
+
+      // 選定された参加者が活動中か最終確認
+      // （主に既存スレッドが選ばれたが、その参加者が寝たケース）
+      const [pA, pB] = target.participants;
+      if (!awakeIds.has(pA) || !awakeIds.has(pB)) {
+        // ログメッセージが実際のID（pA, pB）で表示される
+        console.log(
+          `[Scheduler] Skipping conversation: ${pA} or ${pB} is sleeping.`,
+        );
+        refreshLock();
+        scheduleNext();
+        return;
+      }
+
+      // 会話開始
       await startConversation({
-        threadId: target.threadId,         // 既存スレッドがあれば継続
-        participants: target.participants, // 無い場合は新規としてGPT側で適切に生成
-        // topicHint/lastSummary は必要なら追加で
+        threadId: target.threadId, // 既存スレッドがあれば継続
+        participants: target.participants, // 必須
       });
 
       // 成功 → ロック更新
@@ -177,12 +212,11 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
     } catch (e) {
       // 失敗時はロックを解放（次回リトライのため）
       clearLock();
-      // ログは必要なら console.warn(e)
+      console.warn("[Scheduler] Failed to run conversation:", e);
     } finally {
       scheduleNext();
     }
   };
-
   const scheduleNext = () => {
     if (stopped) return;
     const ms = jitter(O.baseIntervalMs);
