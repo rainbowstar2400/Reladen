@@ -240,6 +240,12 @@ export async function persistConversation(params: {
 
       // 2) 相手 aboutId のセクションを確保し、key を追加
       const aboutId = resolveAboutId(target);
+
+      // 既存レコードの personKnowledge が null の場合、初期化する
+      if (!rec.personKnowledge) {
+        rec.personKnowledge = {};
+      }
+
       if (!rec.personKnowledge[aboutId]) {
         rec.personKnowledge[aboutId] = { keys: [], learnedAt: nowIso };
       }
