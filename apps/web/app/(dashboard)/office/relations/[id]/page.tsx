@@ -291,7 +291,6 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
                             })}
                         </ul>
                     )}
-                    {/* TODO: ... のコメントは削除してOK */}
                 </CardContent>
             </Card>
         </div>

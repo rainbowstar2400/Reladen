@@ -371,8 +371,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
 
                         {/* 詳細ボタン */}
                         <Button variant="ghost" size="sm" asChild>
-                          {/* TODO: 関係詳細画面のパスを指定する */}
-                          <Link href={`/office/relations/${relation.id}`}> {/* 仮のパス */}
+                          <Link href={`/office/relations/${relation.id}`}>
                             詳細
                             <ChevronRight className="h-4 w-4 ml-1" />
                           </Link>
