@@ -74,18 +74,6 @@ function refreshLock() {
   writeLock(nowTs());
 }
 
-// --- 時間帯判定 --------------------------------------------------------------
-function inQuietHours(quiet: [number, number]): boolean {
-  const h = new Date().getHours();
-  const [from, to] = quiet;
-  if (from <= to) {
-    return h >= from && h <= to;
-  } else {
-    // 例: [22, 5] のような翌日跨ぎ
-    return h >= from || h <= to;
-  }
-}
-
 // --- 実行対象の選定 ---------
 async function pickThreadOrDefault(
   /** 現在活動中の住人リスト */
