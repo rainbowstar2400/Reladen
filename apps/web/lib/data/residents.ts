@@ -68,9 +68,16 @@ export function useResidents() {
   return useQuery({ queryKey: KEY, queryFn: fetchResidents });
 }
 
-export function useResident(id: string) {
-  // (useResident も fetchResidents をベースにしているため、自動で恩恵を受ける)
-  return useQuery({ queryKey: [...KEY, id], queryFn: async () => (await fetchResidents()).find((r) => r.id === id) });
+export function useResident(id?: string) {
+  // id が未定義のときはクエリを走らせない
+  return useQuery({
+    queryKey: [...KEY, id ?? ''],
+    queryFn: async () => {
+      if (!id) return undefined;
+      return (await fetchResidents()).find((r) => r.id === id);
+    },
+    enabled: Boolean(id),
+  });
 }
 
 // 関係データをまとめて保存するヘルパー関数
