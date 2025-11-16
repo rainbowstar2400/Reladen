@@ -85,6 +85,9 @@ export function evaluateConversation(input: EvalInput): EvaluationResult {
   const [a, b] = input.participants;
   const now = new Date().toISOString(); // learnedAt などに使う場合はここから渡す
 
+  // input.lines が null/undefined の場合、空配列 [] にフォールバックする
+  const lines = Array.isArray(input.lines) ? input.lines : [];
+
   // 1) タグ重み集計（A→B / B→A 同加算。必要なら話者向きで差別化可能）
   let a2bFavor = 0;
   let b2aFavor = 0;
@@ -96,8 +99,13 @@ export function evaluateConversation(input: EvalInput): EvaluationResult {
   }
 
   // 2) 会話バランス（均衡に微加点）
-  const speakCountA = input.lines.filter((l: { speaker: string; text: string }) => l.speaker === a).length;
-  const speakCountB = input.lines.filter((l: { speaker: string; text: string }) => l.speaker === b).length;
+  // 安全な `lines` 変数を使う
+  const speakCountA = lines.filter(
+    (l: { speaker: string; text: string }) => l.speaker === a,
+  ).length;
+  const speakCountB = lines.filter(
+    (l: { speaker: string; text: string }) => l.speaker === b,
+  ).length;
   const total = Math.max(1, speakCountA + speakCountB);
   const balance = Math.abs(speakCountA - speakCountB) / total; // 0=均衡, 1=偏り
   const balanceGain = (1 - balance) * 0.2;
