@@ -138,11 +138,14 @@ export function evaluateConversation(input: EvalInput): EvaluationResult {
   const newBeliefs: Array<{ target: string; key: string }> = [];
   const nkList: Array<{ target: string; key: string }> = meta.newKnowledge ?? [];
   for (const nk of nkList) {
-    const { target, key } = nk; // ← これがないと target/key 未定義になる
+    // nk 自体が null/undefined の場合、ループをスキップ
+    if (!nk) continue;
+
+    // これで安全にデストラクチャリングできる
+    const { target, key } = nk;
     if (!target || !key) continue;
-    // aboutId を扱う場合は: const aboutId = target === a ? b : a;
+
     newBeliefs.push({ target, key });
-    // learnedAt を返したい場合は型を広げて { target, key, learnedAt: now } にする
   }
 
   // 6) クリップと印象1段階制限
