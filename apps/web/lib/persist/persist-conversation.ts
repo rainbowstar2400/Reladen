@@ -186,8 +186,9 @@ export async function persistConversation(params: {
   await updateThreadAfterEvent({
     threadId: gptOut.threadId,
     lastEventId: eventId,
-    signal: gptOut.meta.signals?.[0],    // GPT側の Signal
-    status: evalResult.threadNextState, // 評価側の Status (こちらが優先される)
+    // gptOut.meta が null の場合を考慮
+    signal: gptOut.meta?.signals?.[0],
+    status: evalResult.threadNextState,
   });
 
   // 3) beliefs を更新（冪等）
@@ -289,8 +290,12 @@ export async function persistConversation(params: {
   });
 
   // 5) 通知登録
-  const first = gptOut.lines[0];
-  const snippet = first ? `${first.speaker.slice(0, 4)}: ${first.text.slice(0, 28)}…` : undefined;
+  // gptOut.lines が null の場合を考慮
+  const first = Array.isArray(gptOut.lines) ? gptOut.lines[0] : undefined;
+  const snippet = first
+    ? `${first.speaker.slice(0, 4)}: ${first.text.slice(0, 28)}…`
+    : undefined;
+
   await createNotification({
     linkedEventId: eventId,
     threadId: gptOut.threadId,
