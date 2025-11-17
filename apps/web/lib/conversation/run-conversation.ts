@@ -104,11 +104,16 @@ async function ensureThreadForGpt(input: {
   };
 }
 
-export async function runConversation(args: RunConversationArgs): Promise<RunConversationResult> {
+export async function runConversation(
+  args: RunConversationArgs,
+): Promise<RunConversationResult> {
   const { participants, threadId, topicHint, lastSummary } = args;
 
   // 1) thread / beliefs を用意
-  const thread: ThreadForGpt = await ensureThreadForGpt({ threadId, participants });
+  const thread: ThreadForGpt = await ensureThreadForGpt({
+    threadId,
+    participants,
+  });
   const beliefs: Record<string, BeliefRecord> = await loadBeliefsDict();
 
   // 2) GPT 生成
@@ -119,6 +124,14 @@ export async function runConversation(args: RunConversationArgs): Promise<RunCon
     topicHint,
     lastSummary,
   });
+
+  // gptOut 自体が null/undefined の場合、即時エラー
+  // (APIエラーやZodパース失敗の可能性があるため)
+  if (!gptOut) {
+    throw new Error(
+      "[runConversation] gptOut is null or undefined. callGptForConversation likely failed.",
+    );
+  }
 
   // 念のため threadId を GPT の返却値から確定
   const ensuredThreadId = gptOut.threadId;
