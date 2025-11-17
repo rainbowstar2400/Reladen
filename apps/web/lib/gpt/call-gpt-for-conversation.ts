@@ -6,12 +6,22 @@ import { env } from "@/env";
 
 const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
-function extractTextFromResponse(res: Awaited<ReturnType<typeof client.responses.create>>): string | null {
-  if (Array.isArray(res.output_text) && res.output_text.length > 0) {
+type ResponsesCreateReturn = Awaited<ReturnType<typeof client.responses.create>>;
+
+function hasOutputText(res: ResponsesCreateReturn): res is ResponsesCreateReturn & { output_text: string[] } {
+  return "output_text" in res;
+}
+
+function hasOutput(res: ResponsesCreateReturn): res is ResponsesCreateReturn & { output: unknown } {
+  return "output" in res;
+}
+
+function extractTextFromResponse(res: ResponsesCreateReturn): string | null {
+  if (hasOutputText(res) && Array.isArray(res.output_text) && res.output_text.length > 0) {
     return res.output_text.join("\n").trim();
   }
 
-  if (!Array.isArray(res.output)) return null;
+  if (!hasOutput(res) || !Array.isArray(res.output)) return null;
   for (const item of res.output) {
     if (item.type !== "message" || !Array.isArray(item.content)) continue;
     const textChunks = item.content
