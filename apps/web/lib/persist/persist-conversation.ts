@@ -9,6 +9,7 @@ import type {
 } from "@repo/shared/types/conversation";
 import type { EvaluationResult } from "@/lib/evaluation/evaluate-conversation";
 import type { Feeling } from "@/types";
+import { beliefRowToRecord, recordToBeliefRow } from "@/lib/conversation/belief-mapper";
 
 
 /**
@@ -88,10 +89,7 @@ async function updateBeliefs(newBeliefs: Record<string, BeliefRecord>) {
   const now = new Date().toISOString();
   for (const [residentId, rec] of Object.entries(newBeliefs)) {
     await putAny("beliefs", {
-      ...rec,
-      residentId,           // 念のため residentId をキーに合わせて上書き
-      updated_at: now,
-      deleted: false,
+      ...recordToBeliefRow({ ...rec, residentId, updated_at: now, deleted: false }),
     });
   }
 }
@@ -123,7 +121,7 @@ async function updateThreadAfterEvent(params: {
 
   await putAny("topic_threads", {
     id: params.threadId,
-    lastEventId: params.lastEventId,
+    last_event_id: params.lastEventId,
     status: finalStatus,
     updated_at: now,
     deleted: false,
@@ -152,7 +150,18 @@ async function createNotification(params: {
     priority: 0,
     updated_at: now,
   };
-  await putAny("notifications", n);
+  await putAny("notifications", {
+    id: n.id,
+    type: n.type,
+    linked_event_id: n.linkedEventId,
+    thread_id: n.threadId,
+    participants: n.participants,
+    snippet: n.snippet,
+    occurred_at: n.occurredAt,
+    status: n.status,
+    priority: n.priority,
+    updated_at: n.updated_at,
+  });
 }
 
 /**
@@ -193,13 +202,13 @@ export async function persistConversation(params: {
   // 3) beliefs を更新（冪等）
   async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
     // arr が null の可能性を考慮
-    const arr = (await listAny("beliefs")) as unknown as BeliefRecord[] | null;
+    const arr = (await listAny("beliefs")) as unknown as Array<Record<string, unknown>> | null;
     const dict: Record<string, BeliefRecord> = {};
 
-    // arr が配列であることを確認してからループ
     if (Array.isArray(arr)) {
-      for (const rec of arr) {
-        if (rec && rec.residentId) {
+      for (const raw of arr) {
+        const rec = beliefRowToRecord(raw as any);
+        if (rec?.residentId) {
           dict[rec.residentId] = rec;
         }
       }
@@ -271,12 +280,7 @@ export async function persistConversation(params: {
       }
 
       // 3) upsert（冪等）
-      await putAny("beliefs", {
-        ...rec,
-        residentId: rec.residentId,
-        updated_at: rec.updated_at,
-        deleted: false,
-      });
+      await putAny("beliefs", recordToBeliefRow({ ...rec, deleted: false }));
     }
   }
 
