@@ -1,5 +1,6 @@
 // apps/web/lib/gpt/call-gpt-for-conversation.ts
 import OpenAI from "openai";
+import type { ResponseCreateParamsNonStreaming } from "openai/resources/responses/responses";
 import { gptConversationOutputSchema, type GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
 import { systemPromptConversation, buildUserPromptConversation } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { env } from "@/env";
@@ -80,7 +81,7 @@ const conversationResponseSchema = {
 } as const;
 
 type ResponseCreateParamsWithFormat =
-  OpenAI.ResponseCreateParamsNonStreaming & {
+  ResponseCreateParamsNonStreaming & {
     response_format?: {
       type: "json_schema";
       json_schema: typeof conversationResponseSchema;
