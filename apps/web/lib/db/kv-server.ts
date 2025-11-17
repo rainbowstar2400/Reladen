@@ -10,11 +10,35 @@ type Table =
   | "feelings"
   | "residents";
 
+const TABLES_REQUIRING_OWNER: Record<Table, boolean> = {
+  events: true,
+  feelings: true,
+  residents: true,
+  topic_threads: false,
+  notifications: false,
+  beliefs: false,
+};
+
+async function ensureOwnerId(sb: ReturnType<typeof sbServer>): Promise<string> {
+  const { data, error } = await sb.auth.getUser();
+  if (error || !data?.user?.id) {
+    throw new Error("認証済みユーザーが取得できませんでした。再ログインしてください。");
+  }
+  return data.user.id;
+}
+
 export async function putKV(table: Table, rec: any) {
   const sb = sbServer();
-  const { error } = await sb.from(table).upsert(rec, { onConflict: "id" });
+  let payload = rec;
+
+  if (TABLES_REQUIRING_OWNER[table]) {
+    const ownerId = rec?.owner_id ?? (await ensureOwnerId(sb));
+    payload = { ...rec, owner_id: ownerId };
+  }
+
+  const { error } = await sb.from(table).upsert(payload, { onConflict: "id" });
   if (error) throw error;
-  return rec;
+  return payload;
 }
 
 export async function listKV<T = any>(table: Table): Promise<T[]> {
