@@ -6,6 +6,79 @@ import { env } from "@/env";
 
 const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
+const conversationResponseSchema = {
+  name: "conversation_output",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      threadId: { type: "string" },
+      participants: {
+        type: "array",
+        items: { type: "string" },
+        minItems: 2,
+        maxItems: 2,
+      },
+      topic: { type: "string" },
+      lines: {
+        type: "array",
+        minItems: 1,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            speaker: { type: "string" },
+            text: { type: "string" },
+          },
+          required: ["speaker", "text"],
+        },
+      },
+      meta: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          tags: {
+            type: "array",
+            items: { type: "string" },
+            maxItems: 12,
+          },
+          newKnowledge: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                target: { type: "string" },
+                key: { type: "string" },
+              },
+              required: ["target", "key"],
+            },
+          },
+          signals: {
+            type: "array",
+            items: { enum: ["continue", "close", "park"] },
+          },
+          qualityHints: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              turnBalance: { enum: ["balanced", "skewed"] },
+              tone: { type: "string" },
+            },
+          },
+          debug: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+        required: ["tags", "newKnowledge"],
+      },
+    },
+    required: ["threadId", "participants", "topic", "lines", "meta"],
+  },
+  strict: true,
+} as const;
+
 type ResponsesCreateReturn = Awaited<ReturnType<typeof client.responses.create>>;
 
 type ResponseMessageContent = {
@@ -86,6 +159,10 @@ export async function callGptForConversation(
         ],
       },
     ],
+    response_format: {
+      type: "json_schema",
+      json_schema: conversationResponseSchema,
+    },
   });
 
   const content = extractTextFromResponse(res);
@@ -93,7 +170,13 @@ export async function callGptForConversation(
     throw new Error("GPT returned empty response.");
   }
 
-  const raw = JSON.parse(content);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(content);
+  } catch (error) {
+    console.error("[callGptForConversation] JSON parse failed", { content });
+    throw error;
+  }
   const sanitized = sanitizeGptConversationOutput(raw, {
     threadId: params.thread.id,
     participants: params.thread.participants,
