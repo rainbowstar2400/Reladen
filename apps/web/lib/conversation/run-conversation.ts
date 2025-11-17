@@ -9,6 +9,7 @@ import type { EvaluationResult, EvalInput } from "@/lib/evaluation/evaluate-conv
 import { evaluateConversation } from "@/lib/evaluation/evaluate-conversation";
 import { persistConversation } from "@/lib/persist/persist-conversation";
 import { callGptForConversation } from "@/lib/gpt/call-gpt-for-conversation";
+import { newId } from "@/lib/newId";
 
 import { listKV as listAny } from "@/lib/db/kv-server";
 import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
@@ -97,7 +98,7 @@ async function ensureThreadForGpt(input: {
 
   // 新規スレッド相当（最低限の形）
   return {
-    id: input.threadId ?? "TEMP",
+    id: input.threadId ?? newId(),
     participants: input.participants,
     status: "ongoing",
     updated_at: now,
