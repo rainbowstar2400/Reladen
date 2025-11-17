@@ -12,6 +12,7 @@ import { callGptForConversation } from "@/lib/gpt/call-gpt-for-conversation";
 
 import { listKV as listAny } from "@/lib/db/kv-server";
 import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
+import { beliefRowToRecord } from "@/lib/conversation/belief-mapper";
 
 /** GPTに渡す thread 形状 */
 type ThreadForGpt = {
@@ -45,13 +46,13 @@ export type RunConversationResult = {
 /** beliefs を Record<residentId, BeliefRecord> でロード */
 async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
   // arr が null の可能性を考慮
-  const arr = (await listAny("beliefs")) as unknown as BeliefRecord[] | null;
+  const arr = (await listAny("beliefs")) as unknown as Array<Record<string, unknown>> | null;
   const dict: Record<string, BeliefRecord> = {};
 
-  // arr が配列であることを確認してからループ
   if (Array.isArray(arr)) {
-    for (const rec of arr) {
-      if (rec && rec.residentId) {
+    for (const raw of arr) {
+      const rec = beliefRowToRecord(raw as any);
+      if (rec?.residentId) {
         dict[rec.residentId] = rec;
       }
     }
@@ -86,7 +87,7 @@ async function ensureThreadForGpt(input: {
             (t.participants as [string, string]) ?? input.participants,
           status,
           topic: t.topic,
-          lastEventId: t.lastEventId,
+          lastEventId: (t as any).lastEventId ?? (t as any).last_event_id,
           updated_at: t.updated_at ?? now,
           deleted: !!t.deleted,
         };
