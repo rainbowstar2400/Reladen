@@ -79,6 +79,14 @@ const conversationResponseSchema = {
   strict: true,
 } as const;
 
+type ResponseCreateParamsWithFormat =
+  OpenAI.ResponseCreateParamsNonStreaming & {
+    response_format?: {
+      type: "json_schema";
+      json_schema: typeof conversationResponseSchema;
+    };
+  };
+
 type ResponsesCreateReturn = Awaited<ReturnType<typeof client.responses.create>>;
 
 type ResponseMessageContent = {
@@ -163,7 +171,7 @@ export async function callGptForConversation(
       type: "json_schema",
       json_schema: conversationResponseSchema,
     },
-  });
+  } as ResponseCreateParamsWithFormat);
 
   const content = extractTextFromResponse(res);
   if (!content) {
