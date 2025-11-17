@@ -93,11 +93,115 @@ export async function callGptForConversation(
     throw new Error("GPT returned empty response.");
   }
 
-  const parsed = gptConversationOutputSchema.safeParse(JSON.parse(content));
+  const raw = JSON.parse(content);
+  const sanitized = sanitizeGptConversationOutput(raw, {
+    threadId: params.thread.id,
+    participants: params.thread.participants,
+  });
+
+  const parsed = gptConversationOutputSchema.safeParse(sanitized);
   if (!parsed.success) {
     console.error("GPT出力が不正です:", parsed.error);
     throw new Error("Invalid GPT output format.");
   }
 
   return parsed.data;
+}
+
+function sanitizeGptConversationOutput(
+  raw: unknown,
+  ctx: { threadId: string; participants: [string, string] },
+) {
+  const safeObject = isRecord(raw) ? { ...raw } : {};
+  const participants = ctx.participants;
+  const participantSet = new Set(participants);
+
+  const topic = typeof safeObject.topic === "string" && safeObject.topic.trim().length > 0
+    ? safeObject.topic.trim()
+    : "雑談";
+
+  const linesSource = Array.isArray((safeObject as any).lines) ? (safeObject as any).lines : [];
+  const lines = linesSource
+    .map((line: any, index: number) => {
+      if (!isRecord(line)) return null;
+      const text = typeof line.text === "string" ? line.text.trim() : "";
+      if (!text) return null;
+      const speakerRaw = typeof line.speaker === "string" ? line.speaker : undefined;
+      const speaker = speakerRaw && participantSet.has(speakerRaw)
+        ? speakerRaw
+        : participants[index % participants.length];
+      return { speaker, text };
+    })
+    .filter(
+      (
+        line: { speaker: string; text: string } | null,
+      ): line is { speaker: string; text: string } => Boolean(line),
+    );
+
+  if (lines.length === 0) {
+    lines.push({
+      speaker: participants[0],
+      text: `${participants[0]}と${participants[1]}の会話（自動補完）`,
+    });
+  }
+
+  const metaInput = isRecord((safeObject as any).meta) ? (safeObject as any).meta : {};
+  const tags = Array.isArray((metaInput as any).tags)
+    ? (metaInput as any).tags
+        .filter((tag: unknown): tag is string => typeof tag === "string" && tag.trim().length > 0)
+        .slice(0, 12)
+    : [];
+
+  const newKnowledge = Array.isArray((metaInput as any).newKnowledge)
+    ? (metaInput as any).newKnowledge
+        .map((item: any) => {
+          if (!isRecord(item)) return null;
+          const target = typeof item.target === "string" && participantSet.has(item.target)
+            ? item.target
+            : null;
+          const key = typeof item.key === "string" ? item.key.trim() : "";
+          if (!target || !key) return null;
+          return { target, key };
+        })
+        .filter(
+          (
+            item: { target: string; key: string } | null,
+          ): item is { target: string; key: string } => Boolean(item),
+        )
+    : [];
+
+  const signals = Array.isArray((metaInput as any).signals)
+    ? (metaInput as any).signals.filter((signal: unknown): signal is "continue" | "close" | "park" =>
+        signal === "continue" || signal === "close" || signal === "park",
+      )
+    : undefined;
+
+  const qualityHints = isRecord((metaInput as any).qualityHints)
+    ? {
+        ...(metaInput.qualityHints?.turnBalance === "balanced" || metaInput.qualityHints?.turnBalance === "skewed"
+          ? { turnBalance: metaInput.qualityHints.turnBalance }
+          : {}),
+        ...(typeof metaInput.qualityHints?.tone === "string" && metaInput.qualityHints.tone.trim().length > 0
+          ? { tone: metaInput.qualityHints.tone.trim() }
+          : {}),
+      }
+    : undefined;
+
+  const debug = Array.isArray((metaInput as any).debug)
+    ? (metaInput as any).debug.filter((item: unknown): item is string => typeof item === "string" && item.length > 0)
+    : undefined;
+
+  return {
+    threadId: ctx.threadId,
+    participants,
+    topic,
+    lines,
+    meta: {
+      tags,
+      newKnowledge,
+      ...(signals && signals.length > 0 ? { signals } : {}),
+      ...(qualityHints && Object.keys(qualityHints).length > 0 ? { qualityHints } : {}),
+      ...(debug && debug.length > 0 ? { debug } : {}),
+    },
+  } satisfies Partial<GptConversationOutput>;
 }

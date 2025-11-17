@@ -3,6 +3,7 @@
 
 import { useEffect, useRef } from "react";
 import { startConversationScheduler } from "@/lib/scheduler/conversation-scheduler";
+import { useAuth } from "@/lib/auth/use-auth";
 
 type Props = {
   enabled?: boolean;
@@ -20,19 +21,34 @@ export default function ConversationSchedulerProvider(props: Props) {
   } = props;
 
   const stopRef = useRef<null | { stop: () => void }>(null);
+  const { user, ready } = useAuth();
+  const shouldRunScheduler = Boolean(enabled && ready && user);
 
   useEffect(() => {
-    // マウント時に開始
+    // 既存のスケジューラがあれば停止
+    stopRef.current?.stop?.();
+    stopRef.current = null;
+
+    if (!shouldRunScheduler) {
+      if (enabled && ready && !user) {
+        console.info("[ConversationScheduler] スキップ: 未ログインのため会話生成を停止しています。");
+      }
+      return () => {
+        stopRef.current?.stop?.();
+      };
+    }
+
     stopRef.current = startConversationScheduler({
-      enabled,
+      enabled: true,
       baseIntervalMs,
       defaultParticipants,
     });
+
     return () => {
-      // アンマウント時に停止
       stopRef.current?.stop?.();
+      stopRef.current = null;
     };
-  }, [enabled, baseIntervalMs, defaultParticipants?.[0], defaultParticipants?.[1]]);
+  }, [shouldRunScheduler, baseIntervalMs, defaultParticipants?.[0], defaultParticipants?.[1]]);
 
   return <>{children}</>;
 }
