@@ -1,108 +1,116 @@
 // apps/web/lib/auth/use-auth.ts
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { AuthChangeEvent, Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { supabaseClient } from '@/lib/db-cloud/supabase';
 
-type User = {
-    id: string;
-    email?: string | null;
-    provider?: string | null;
-    providers?: string[];     // ★追加: 紐づいている全プロバイダ
+export type User = {
+  id: string;
+  email?: string | null;
+  provider?: string | null;
+  providers?: string[];
 };
 
+const SYNC_EVENTS: AuthChangeEvent[] = ['SIGNED_IN', 'TOKEN_REFRESHED', 'SIGNED_OUT'];
+
+async function syncServerSession(event: AuthChangeEvent, session: Session | null) {
+  if (!SYNC_EVENTS.includes(event)) return;
+  try {
+    await fetch('/api/auth/callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event, session }),
+    });
+  } catch (error) {
+    console.warn('[Auth] Failed to sync session to server', error);
+  }
+}
+
+function toUser(sessionUser: SupabaseUser | null | undefined): User | null {
+  if (!sessionUser) return null;
+  const identities = (sessionUser as any)?.identities ?? [];
+  const providers = Array.isArray(identities)
+    ? identities.map((i: any) => i?.provider).filter(Boolean)
+    : [];
+  return {
+    id: sessionUser.id,
+    email: sessionUser.email,
+    provider: sessionUser.app_metadata?.provider ?? null,
+    providers,
+  };
+}
+
 export function useAuth() {
-    const sb = supabaseClient;
-    const [user, setUser] = useState<User | null>(null);
-    const [ready, setReady] = useState<boolean>(false);
+  const sb = supabaseClient;
+  const [user, setUser] = useState<User | null>(null);
+  const [ready, setReady] = useState(false);
 
-    useEffect(() => {
-        let mounted = true;
-        (async () => {
-            try {
-                if (!sb) return; // 未初期化ならローカル動作
-                const { data } = await sb.auth.getUser();
-                if (!mounted) return;
-                if (data?.user) {
-                    const identities = (data.user as any)?.identities ?? [];
-                    const providers =
-                        Array.isArray(identities)
-                            ? identities.map((i: any) => i.provider).filter(Boolean)
-                            : [];
-                    setUser({
-                        id: data.user.id,
-                        email: data.user.email,
-                        provider: data.user.app_metadata?.provider ?? null,
-                        providers, // ← ここで参照OK（上で定義済み）
-                    });
-                } else {
-                    setUser(null);
-                }
-                setReady(true);
-            } finally {
-                setReady(true);
-            }
-        })();
+  useEffect(() => {
+    let mounted = true;
 
-        // セッション変化を購読
-        const sub = sb?.auth.onAuthStateChange?.((_event, session) => {
-            if (!mounted) return;
-            const u = session?.user;
-            if (u) {
-                const identities = (u as any)?.identities ?? [];
-                const providers =
-                    Array.isArray(identities)
-                        ? identities.map((i: any) => i.provider).filter(Boolean)
-                        : [];
-                setUser({
-                    id: u.id,
-                    email: u.email,
-                    provider: u.app_metadata?.provider ?? null,
-                    providers,
-                });
-            } else {
-                setUser(null);
-            }
-        });
-        return () => {
-            mounted = false;
-            sub?.data?.subscription?.unsubscribe();
-        };
-    }, [sb]);
+    if (!sb) {
+      setReady(true);
+      return () => {
+        mounted = false;
+      };
+    }
 
-    const signInWithGoogle = useCallback(async () => {
-        if (!sb) return;
-        await sb.auth.signInWithOAuth({
-            provider: 'google',
-            options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined },
-        });
-    }, [sb]);
+    (async () => {
+      try {
+        const { data } = await sb.auth.getSession();
+        const session = data?.session ?? null;
+        await syncServerSession(session ? 'SIGNED_IN' : 'SIGNED_OUT', session);
+        if (!mounted) return;
+        setUser(toUser(session?.user));
+      } finally {
+        if (mounted) setReady(true);
+      }
+    })();
 
-    const signOut = useCallback(async () => {
-        if (!sb) return;
-        await sb.auth.signOut();
-    }, [sb]);
-    const linkWithGoogle = useCallback(async () => {
-        if (!sb) return;
+    const { data: sub } = sb.auth.onAuthStateChange(async (event, session) => {
+      await syncServerSession(event, session);
+      if (!mounted) return;
+      setUser(toUser(session?.user));
+    });
 
-        // 1) 新APIがある場合（推奨）
-        const maybeLink = (sb.auth as any).linkIdentity;
-        if (typeof maybeLink === 'function') {
-            await maybeLink({
-                provider: 'google',
-                options: {
-                    redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
-                },
-            });
-            return;
-        }
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe();
+    };
+  }, [sb]);
 
-        // 2) フォールバック：そのまま Google で sign-in（同アドレスの既存ユーザーならマージされる構成が多い）
-        await sb.auth.signInWithOAuth({
-            provider: 'google',
-            options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined },
-        });
-    }, [sb]);
+  const signInWithGoogle = useCallback(async () => {
+    if (!sb) return;
+    await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined },
+    });
+  }, [sb]);
 
-    return { ready, user, signInWithGoogle, signOut, hasSupabase: !!sb, linkWithGoogle };
+  const signOut = useCallback(async () => {
+    if (!sb) return;
+    await sb.auth.signOut();
+    await syncServerSession('SIGNED_OUT', null);
+  }, [sb]);
+
+  const linkWithGoogle = useCallback(async () => {
+    if (!sb) return;
+
+    const maybeLink = (sb.auth as any).linkIdentity;
+    if (typeof maybeLink === 'function') {
+      await maybeLink({
+        provider: 'google',
+        options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined },
+      });
+      return;
+    }
+
+    await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined },
+    });
+  }, [sb]);
+
+  return { ready, user, signInWithGoogle, signOut, hasSupabase: !!sb, linkWithGoogle };
 }
