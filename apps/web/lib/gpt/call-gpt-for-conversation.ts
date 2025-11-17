@@ -66,7 +66,6 @@ export async function callGptForConversation(
   const res = await client.responses.create({
     model: "gpt-5-chat-latest",
     temperature: 0.8,
-    response_format: { type: "json_object" },
     input: [
       {
         role: "system",
