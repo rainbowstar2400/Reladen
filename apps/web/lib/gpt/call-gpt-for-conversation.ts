@@ -8,6 +8,31 @@ const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
 type ResponsesCreateReturn = Awaited<ReturnType<typeof client.responses.create>>;
 
+type ResponseMessageContent = {
+  type: string;
+  text?: unknown;
+};
+
+type ResponseMessageOutput = {
+  type: "message";
+  content: ResponseMessageContent[];
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isResponseMessageContentArray(value: unknown): value is ResponseMessageContent[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => isRecord(item) && typeof item.type === "string")
+  );
+}
+
+function isResponseMessageOutput(item: unknown): item is ResponseMessageOutput {
+  return isRecord(item) && item.type === "message" && isResponseMessageContentArray(item.content);
+}
+
 function hasOutputText(res: ResponsesCreateReturn): res is ResponsesCreateReturn & { output_text: string[] } {
   return "output_text" in res;
 }
@@ -23,10 +48,10 @@ function extractTextFromResponse(res: ResponsesCreateReturn): string | null {
 
   if (!hasOutput(res) || !Array.isArray(res.output)) return null;
   for (const item of res.output) {
-    if (item.type !== "message" || !Array.isArray(item.content)) continue;
+    if (!isResponseMessageOutput(item)) continue;
     const textChunks = item.content
       .filter((c) => c.type === "output_text" && typeof c.text === "string")
-      .map((c) => c.text.trim());
+      .map((c) => (c.text as string).trim());
     if (textChunks.length > 0) return textChunks.join("\n");
   }
   return null;
