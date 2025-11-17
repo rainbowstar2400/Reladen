@@ -72,7 +72,7 @@ export async function callGptForConversation(
         role: "system",
         content: [
           {
-            type: "text",
+            type: "input_text",
             text: systemPrompt,
           },
         ],
@@ -81,7 +81,7 @@ export async function callGptForConversation(
         role: "user",
         content: [
           {
-            type: "text",
+            type: "input_text",
             text: userPrompt,
           },
         ],
