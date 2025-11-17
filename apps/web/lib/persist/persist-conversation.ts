@@ -99,7 +99,9 @@ async function updateBeliefs(newBeliefs: Record<string, BeliefRecord>) {
  */
 async function updateThreadAfterEvent(params: {
   threadId: string;
+  participants: [string, string];
   lastEventId: string;
+  topic?: string;
   signal?: "continue" | "close" | "park";
   status?: TopicThread["status"]; // ★ 変更： status も受け取れるように
 }) {
@@ -121,6 +123,8 @@ async function updateThreadAfterEvent(params: {
 
   await putAny("topic_threads", {
     id: params.threadId,
+    participants: params.participants,
+    topic: params.topic,
     last_event_id: params.lastEventId,
     status: finalStatus,
     updated_at: now,
@@ -193,7 +197,9 @@ export async function persistConversation(params: {
   // 2) topic_threads の更新
   await updateThreadAfterEvent({
     threadId: gptOut.threadId,
+    participants: gptOut.participants,
     lastEventId: eventId,
+    topic: gptOut.topic,
     // gptOut.meta が null の場合を考慮
     signal: gptOut.meta?.signals?.[0],
     status: evalResult.threadNextState,
