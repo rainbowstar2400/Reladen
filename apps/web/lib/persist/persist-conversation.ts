@@ -41,11 +41,8 @@ async function updateRelationsAndFeelings(params: {
 
   // 既存レコード検索（a->b / b->a）
   const findFeeling = (fromId: string, toId: string) => {
-    // feelings が配列の場合のみ .find を呼び出す
     if (!Array.isArray(feelings)) return undefined;
-    return feelings.find(
-      (f) => (f as any).a_id === fromId && (f as any).b_id === toId,
-    );
+    return feelings.find((f) => f.from_id === fromId && f.to_id === toId);
   };
 
   const recAB = findFeeling(a, b);
@@ -54,29 +51,31 @@ async function updateRelationsAndFeelings(params: {
   const idAB = recAB?.id ?? newId();
   const idBA = recBA?.id ?? newId();
 
-  const curFavorAB = (recAB as any)?.favor ?? 0;
-  const curFavorBA = (recBA as any)?.favor ?? 0;
+  const curScoreAB = recAB?.score ?? 0;
+  const curScoreBA = recBA?.score ?? 0;
 
   // a -> b
   await putAny("feelings", {
     id: idAB,
-    a_id: a,
-    b_id: b,
-    // ここでは “数値を積み上げる” 簡易実装。プロジェクト本番ロジックが別にあれば差し替え可
-    favor: curFavorAB + params.deltas.aToB.favor,
+    from_id: a,
+    to_id: b,
+    label: recAB?.label ?? "none",
+    // 数値を積み上げる簡易実装。プロジェクト本番ロジックが別にあれば差し替えてください。
+    score: curScoreAB + params.deltas.aToB.favor,
     updated_at: now,
     deleted: false,
-  } as any);
+  });
 
   // b -> a
   await putAny("feelings", {
     id: idBA,
-    a_id: b,
-    b_id: a,
-    favor: curFavorBA + params.deltas.bToA.favor,
+    from_id: b,
+    to_id: a,
+    label: recBA?.label ?? "none",
+    score: curScoreBA + params.deltas.bToA.favor,
     updated_at: now,
     deleted: false,
-  } as any);
+  });
 
   // 印象ラベル（impression）は +1 / -1 の段差を別途管理している想定。
   // ラベルの正規ロジックが決まっていれば、ここで適用してください。
