@@ -82,9 +82,11 @@ const conversationResponseSchema = {
 
 type ResponseCreateParamsWithFormat =
   ResponseCreateParamsNonStreaming & {
-    response_format?: {
-      type: "json_schema";
-      json_schema: typeof conversationResponseSchema;
+    text?: {
+      format?: {
+        type: "json_schema";
+        json_schema: typeof conversationResponseSchema;
+      };
     };
   };
 
@@ -169,9 +171,11 @@ export async function callGptForConversation(
           ],
         },
       ],
-      response_format: {
-        type: "json_schema",
-        json_schema: conversationResponseSchema,
+      text: {
+        format: {
+          type: "json_schema",
+          json_schema: conversationResponseSchema,
+        },
       },
     } as ResponseCreateParamsWithFormat);
 
