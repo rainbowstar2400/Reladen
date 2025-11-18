@@ -7,15 +7,20 @@
 // ------------------------------------------------------------
 
 import { listLocal } from "@/lib/db-local";
-import type { TopicThread } from "@repo/shared/types/conversation";
+import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
 import { selectConversationCandidates } from "@/lib/conversation/candidates";
 import type { Resident } from "@/types";
+import type { ConversationResidentProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 
 type StartConversationPayload = {
   threadId?: string;
   participants: [string, string];
   topicHint?: string;
   lastSummary?: string;
+  context?: {
+    residents?: Record<string, ConversationResidentProfile>;
+    beliefs?: Record<string, BeliefRecord>;
+  };
 };
 
 async function callConversationApi(input: StartConversationPayload) {
@@ -42,6 +47,47 @@ async function callConversationApi(input: StartConversationPayload) {
   }
 
   return data as { eventId: string; threadId: string };
+}
+
+function toConversationProfile(resident: Resident): ConversationResidentProfile {
+  return {
+    id: resident.id,
+    name: resident.name ?? null,
+    mbti: resident.mbti ?? null,
+    gender: resident.gender ?? null,
+    age: typeof resident.age === "number" ? resident.age : null,
+    occupation: resident.occupation ?? null,
+    speechPreset: resident.speechPreset ?? null,
+    firstPerson: resident.firstPerson ?? null,
+    traits: resident.traits ?? null,
+    interests: resident.interests ?? null,
+  };
+}
+
+function buildContextForParticipants(
+  participantIds: [string, string],
+  residents: Resident[],
+  beliefs: BeliefRecord[],
+): NonNullable<StartConversationPayload["context"]> {
+  const residentMap = new Map(residents.map((r) => [r.id, r]));
+  const beliefMap = new Map(beliefs.map((b) => [b.residentId, b]));
+
+  const context: NonNullable<StartConversationPayload["context"]> = {};
+
+  for (const id of participantIds) {
+    const res = residentMap.get(id);
+    if (res) {
+      context.residents = context.residents ?? {};
+      context.residents[id] = toConversationProfile(res);
+    }
+    const belief = beliefMap.get(id);
+    if (belief) {
+      context.beliefs = context.beliefs ?? {};
+      context.beliefs[id] = belief;
+    }
+  }
+
+  return context;
 }
 
 export type SchedulerOptions = {
@@ -181,6 +227,7 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
 
       // 先に活動中の住人を選定
       const allResidents = (await listLocal("residents")) as Resident[];
+      const allBeliefs = (await listLocal("beliefs")) as BeliefRecord[];
       const now = new Date();
       const awakeCandidates = selectConversationCandidates(now, allResidents);
       const awakeIds = new Set(awakeCandidates.map((r) => r.id));
@@ -222,9 +269,12 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
       }
 
       // 会話開始
+      const context = buildContextForParticipants(target.participants, allResidents, allBeliefs);
+
       await callConversationApi({
         threadId: target.threadId, // 既存スレッドがあれば継続
         participants: target.participants, // 必須
+        context: Object.keys(context).length ? context : undefined,
       });
 
       // 成功 → ロック更新

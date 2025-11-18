@@ -36,6 +36,10 @@ export type RunConversationArgs = {
   topicHint?: string;
   /** 最終要約（任意） */
   lastSummary?: string;
+  /** クライアント側で把握している住人プロフィール */
+  residentProfilesOverride?: Record<string, ConversationResidentProfile>;
+  /** クライアント側で把握している Belief */
+  beliefsOverride?: Record<string, BeliefRecord>;
 };
 
 export type RunConversationResult = {
@@ -148,15 +152,47 @@ async function ensureThreadForGpt(input: {
 export async function runConversation(
   args: RunConversationArgs,
 ): Promise<RunConversationResult> {
-  const { participants, threadId, topicHint, lastSummary } = args;
+  const {
+    participants,
+    threadId,
+    topicHint,
+    lastSummary,
+    residentProfilesOverride,
+    beliefsOverride,
+  } = args;
 
   // 1) thread / beliefs を用意
   const thread: ThreadForGpt = await ensureThreadForGpt({
     threadId,
     participants,
   });
-  const beliefs: Record<string, BeliefRecord> = await loadBeliefsDict();
-  const residents = await loadResidentProfiles(participants);
+  const participantSet = new Set(participants);
+
+  let beliefs: Record<string, BeliefRecord> = {};
+  try {
+    beliefs = await loadBeliefsDict();
+  } catch (error) {
+    console.warn('[runConversation] Failed to load beliefs from server, fallback to overrides.', error);
+  }
+  if (beliefsOverride) {
+    for (const [residentId, rec] of Object.entries(beliefsOverride)) {
+      if (!participantSet.has(residentId) || !rec?.residentId) continue;
+      beliefs[residentId] = rec;
+    }
+  }
+
+  let residents: Record<string, ConversationResidentProfile> = {};
+  try {
+    residents = await loadResidentProfiles(participants);
+  } catch (error) {
+    console.warn('[runConversation] Failed to load residents from server, fallback to overrides.', error);
+  }
+  if (residentProfilesOverride) {
+    for (const [residentId, profile] of Object.entries(residentProfilesOverride)) {
+      if (!participantSet.has(residentId) || !profile?.id) continue;
+      residents[residentId] = profile;
+    }
+  }
 
   // 2) GPT 生成
   // ✅ ここがポイント：`threadId` を渡さない。代わりに `thread` と `beliefs` を渡す。
