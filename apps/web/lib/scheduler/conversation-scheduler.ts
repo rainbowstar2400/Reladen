@@ -68,11 +68,11 @@ function buildContextForParticipants(
   participantIds: [string, string],
   residents: Resident[],
   beliefs: BeliefRecord[],
-): StartConversationPayload["context"] {
+): NonNullable<StartConversationPayload["context"]> {
   const residentMap = new Map(residents.map((r) => [r.id, r]));
   const beliefMap = new Map(beliefs.map((b) => [b.residentId, b]));
 
-  const context: StartConversationPayload["context"] = {};
+  const context: NonNullable<StartConversationPayload["context"]> = {};
 
   for (const id of participantIds) {
     const res = residentMap.get(id);
