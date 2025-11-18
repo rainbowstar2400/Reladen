@@ -2,6 +2,13 @@
 // ※ Server Actions / RSC などサーバ実行専用
 import { sbServer } from "@/lib/supabase/server";
 
+export class KvUnauthenticatedError extends Error {
+  constructor(message = "認証済みユーザーが取得できませんでした。再ログインしてください。") {
+    super(message);
+    this.name = "KvUnauthenticatedError";
+  }
+}
+
 type Table =
   | "events"
   | "topic_threads"
@@ -22,7 +29,8 @@ const TABLES_REQUIRING_OWNER: Record<Table, boolean> = {
 async function ensureOwnerId(sb: ReturnType<typeof sbServer>): Promise<string> {
   const { data, error } = await sb.auth.getUser();
   if (error || !data?.user?.id) {
-    throw new Error("認証済みユーザーが取得できませんでした。再ログインしてください。");
+    // 既存の Error ではなく、KvUnauthenticatedError を投げる
+    throw new KvUnauthenticatedError();
   }
   return data.user.id;
 }

@@ -43,10 +43,14 @@ async function callConversationApi(input: StartConversationPayload) {
 
   if (!res.ok) {
     const reason = typeof data === "string" ? data : data?.error ?? "conversation_failed";
+
+    if (res.status === 401) {
+      // 認証切れ専用のエラー
+      throw new Error('Conversation API error: unauthenticated');
+    }
+
     throw new Error(`Conversation API error: ${reason}`);
   }
-
-  return data as { eventId: string; threadId: string };
 }
 
 function toConversationProfile(resident: Resident): ConversationResidentProfile {
@@ -280,12 +284,22 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
       // 成功 → ロック更新
       refreshLock();
     } catch (e) {
-      // 失敗時はロックを解放（次回リトライのため）
+      const msg = (e as any)?.message ?? String(e);
       clearLock();
+
+      if (typeof msg === "string" && msg.includes("unauthenticated")) {
+        console.warn(
+          "[Scheduler] Disabled: Conversations API returned unauthenticated. Please re-login.",
+        );
+        stopped = true; // 以後 scheduleNext は何もしないように
+        return;
+      }
+
       console.warn("[Scheduler] Failed to run conversation:", e);
     } finally {
       scheduleNext();
     }
+
   };
   const scheduleNext = () => {
     if (stopped) return;

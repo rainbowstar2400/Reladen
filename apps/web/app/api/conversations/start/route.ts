@@ -5,6 +5,7 @@ import type {
   ConversationResidentProfile,
 } from '@repo/shared/gpt/prompts/conversation-prompt';
 import type { BeliefRecord } from '@repo/shared/types/conversation';
+import { KvUnauthenticatedError } from '@/lib/db/kv-server';
 
 const residentProfileSchema = z.object({
   id: z.string().uuid(),
@@ -126,7 +127,17 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ eventId, threadId: ensuredThreadId });
   } catch (error) {
-    console.error('[Conversations API] Failed to run conversation', error);
+    console.error('[Conversations API] Failed to run conversation', {
+      name: (error as any)?.name,
+      message: (error as any)?.message,
+      stack: (error as any)?.stack,
+    });
+
+    // 認証エラーの場合は 401 を返す
+    if (error instanceof KvUnauthenticatedError) {
+      return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+    }
+
     return NextResponse.json({ error: 'conversation_failed' }, { status: 500 });
   }
 }
