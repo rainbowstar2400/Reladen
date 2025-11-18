@@ -14,6 +14,7 @@ import { newId } from "@/lib/newId";
 import { listKV as listAny } from "@/lib/db/kv-server";
 import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
 import { beliefRowToRecord } from "@/lib/conversation/belief-mapper";
+import type { ConversationResidentProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 
 /** GPTに渡す thread 形状 */
 type ThreadForGpt = {
@@ -58,6 +59,44 @@ async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
       }
     }
   }
+  return dict;
+}
+
+async function loadResidentProfiles(
+  participantIds: [string, string],
+): Promise<Record<string, ConversationResidentProfile>> {
+  const uniqueIds = Array.from(new Set(participantIds));
+  if (uniqueIds.length === 0) return {};
+
+  const rows = (await listAny("residents")) as unknown as Array<Record<string, unknown>> | null;
+  const dict: Record<string, ConversationResidentProfile> = {};
+  if (!Array.isArray(rows)) return dict;
+
+  const idSet = new Set(uniqueIds);
+  for (const raw of rows) {
+    const id = typeof raw?.id === "string" ? raw.id : undefined;
+    if (!id || !idSet.has(id)) continue;
+
+    const ageValue = raw && typeof (raw as any).age === "number"
+      ? (raw as any).age
+      : Number.isFinite(Number((raw as any)?.age))
+        ? Number((raw as any).age)
+        : null;
+
+    dict[id] = {
+      id,
+      name: (raw as any)?.name ?? null,
+      mbti: (raw as any)?.mbti ?? null,
+      gender: (raw as any)?.gender ?? null,
+      age: ageValue,
+      occupation: (raw as any)?.occupation ?? null,
+      speechPreset: (raw as any)?.speech_preset ?? null,
+      firstPerson: (raw as any)?.first_person ?? null,
+      traits: (raw as any)?.traits ?? null,
+      interests: (raw as any)?.interests ?? null,
+    };
+  }
+
   return dict;
 }
 
@@ -117,6 +156,7 @@ export async function runConversation(
     participants,
   });
   const beliefs: Record<string, BeliefRecord> = await loadBeliefsDict();
+  const residents = await loadResidentProfiles(participants);
 
   // 2) GPT 生成
   // ✅ ここがポイント：`threadId` を渡さない。代わりに `thread` と `beliefs` を渡す。
@@ -125,6 +165,7 @@ export async function runConversation(
     beliefs,
     topicHint,
     lastSummary,
+    residents,
   });
 
   // gptOut 自体が null/undefined の場合、即時エラー
