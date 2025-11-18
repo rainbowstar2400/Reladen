@@ -6,11 +6,43 @@
 // - 深夜など静穏時間帯はスキップ可能
 // ------------------------------------------------------------
 
-import { startConversation } from "@/app/actions/conversation";
 import { listLocal } from "@/lib/db-local";
 import type { TopicThread } from "@repo/shared/types/conversation";
 import { selectConversationCandidates } from "@/lib/conversation/candidates";
 import type { Resident } from "@/types";
+
+type StartConversationPayload = {
+  threadId?: string;
+  participants: [string, string];
+  topicHint?: string;
+  lastSummary?: string;
+};
+
+async function callConversationApi(input: StartConversationPayload) {
+  const res = await fetch("/api/conversations/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    credentials: "include",
+  });
+
+  const rawText = await res.text();
+  let data: any = null;
+  if (rawText) {
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = rawText;
+    }
+  }
+
+  if (!res.ok) {
+    const reason = typeof data === "string" ? data : data?.error ?? "conversation_failed";
+    throw new Error(`Conversation API error: ${reason}`);
+  }
+
+  return data as { eventId: string; threadId: string };
+}
 
 export type SchedulerOptions = {
   /** 有効/無効（UIからも切替できるようにしておくと便利） */
@@ -190,7 +222,7 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
       }
 
       // 会話開始
-      await startConversation({
+      await callConversationApi({
         threadId: target.threadId, // 既存スレッドがあれば継続
         participants: target.participants, // 必須
       });
