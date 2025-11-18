@@ -127,10 +127,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ eventId, threadId: ensuredThreadId });
   } catch (error) {
+    const err = error as any;
+
     console.error('[Conversations API] Failed to run conversation', {
-      name: (error as any)?.name,
-      message: (error as any)?.message,
-      stack: (error as any)?.stack,
+      name: err?.name,
+      message: err?.message,
+      stack: err?.stack,
     });
 
     // 認証エラーの場合は 401 を返す
@@ -138,6 +140,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
     }
 
-    return NextResponse.json({ error: 'conversation_failed' }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'conversation_failed',
+        name: err?.name ?? 'UnknownError',
+        message: err?.message ?? 'Unknown error',
+      },
+      { status: 500 },
+    );
   }
 }
