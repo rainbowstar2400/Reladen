@@ -9,6 +9,16 @@ export class KvUnauthenticatedError extends Error {
   }
 }
 
+function isAuthError(e: any): boolean {
+  const msg = e?.message ?? "";
+  const code = e?.code ?? "";
+  return (
+    (typeof msg === "string" &&
+      (msg.includes("JWT") || msg.includes("Auth") || msg.includes("authentication"))) ||
+    (typeof code === "string" && (code.includes("auth") || code.includes("JWT")))
+  );
+}
+
 type Table =
   | "events"
   | "topic_threads"
@@ -45,13 +55,23 @@ export async function putKV(table: Table, rec: any) {
   }
 
   const { error } = await sb.from(table).upsert(payload, { onConflict: "id" });
-  if (error) throw error;
+  if (error) {
+    if (isAuthError(error)) {
+      throw new KvUnauthenticatedError();
+    }
+    throw error;
+  }
   return payload;
 }
 
 export async function listKV<T = any>(table: Table): Promise<T[]> {
   const sb = sbServer();
   const { data, error } = await sb.from(table).select("*");
-  if (error) throw error;
+  if (error) {
+    if (isAuthError(error)) {
+      throw new KvUnauthenticatedError();
+    }
+    throw error;
+  }
   return (data as T[]) ?? [];
 }

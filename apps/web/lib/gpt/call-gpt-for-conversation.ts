@@ -145,59 +145,67 @@ export async function callGptForConversation(
   const systemPrompt = systemPromptConversation;
   const userPrompt = buildUserPromptConversation(params);
 
-  const res = await client.responses.create({
-    model: "gpt-5-chat-latest",
-    temperature: 0.8,
-    input: [
-      {
-        role: "system",
-        content: [
-          {
-            type: "input_text",
-            text: systemPrompt,
-          },
-        ],
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: userPrompt,
-          },
-        ],
-      },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: conversationResponseSchema,
-    },
-  } as ResponseCreateParamsWithFormat);
-
-  const content = extractTextFromResponse(res);
-  if (!content) {
-    throw new Error("GPT returned empty response.");
-  }
-
-  let raw: unknown;
   try {
-    raw = JSON.parse(content);
+    const res = await client.responses.create({
+      model: "gpt-5-chat-latest",
+      temperature: 0.8,
+      input: [
+        {
+          role: "system",
+          content: [
+            {
+              type: "input_text",
+              text: systemPrompt,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: userPrompt,
+            },
+          ],
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: conversationResponseSchema,
+      },
+    } as ResponseCreateParamsWithFormat);
+
+    const content = extractTextFromResponse(res);
+    if (!content) {
+      throw new Error("GPT returned empty response.");
+    }
+
+    let raw: unknown;
+    try {
+      raw = JSON.parse(content);
+    } catch (error) {
+      console.error("[callGptForConversation] JSON parse failed", { content });
+      throw error;
+    }
+    const sanitized = sanitizeGptConversationOutput(raw, {
+      threadId: params.thread.id,
+      participants: params.thread.participants,
+    });
+
+    const parsed = gptConversationOutputSchema.safeParse(sanitized);
+    if (!parsed.success) {
+      console.error("GPT出力が不正です:", parsed.error);
+      throw new Error("Invalid GPT output format.");
+    }
+
+    return parsed.data;
   } catch (error) {
-    console.error("[callGptForConversation] JSON parse failed", { content });
+    console.error("[callGptForConversation] Failed to create conversation", {
+      name: (error as any)?.name,
+      message: (error as any)?.message,
+    });
     throw error;
   }
-  const sanitized = sanitizeGptConversationOutput(raw, {
-    threadId: params.thread.id,
-    participants: params.thread.participants,
-  });
-
-  const parsed = gptConversationOutputSchema.safeParse(sanitized);
-  if (!parsed.success) {
-    console.error("GPT出力が不正です:", parsed.error);
-    throw new Error("Invalid GPT output format.");
-  }
-
-  return parsed.data;
 }
 
 function sanitizeGptConversationOutput(
