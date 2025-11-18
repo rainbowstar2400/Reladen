@@ -305,7 +305,12 @@ export async function persistConversation(params: {
     }
   }
 
-  upsertBeliefsFromNewKnowledge(evalResult.newBeliefs, gptOut.participants);
+  // Belief の書き込みは GPT 生成後の付加処理なので、失敗しても会話自体が失敗しないようにする。
+  try {
+    await upsertBeliefsFromNewKnowledge(evalResult.newBeliefs, gptOut.participants);
+  } catch (error) {
+    console.warn('[persistConversation] Failed to upsert beliefs from new knowledge.', error);
+  }
 
   // 4) relations / feelings を更新（簡易版）
   await updateRelationsAndFeelings({
