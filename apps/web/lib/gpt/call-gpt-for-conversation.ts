@@ -84,6 +84,7 @@ type ResponseCreateParamsWithFormat =
   ResponseCreateParamsNonStreaming & {
     text?: {
       format?: {
+        name: string;
         type: "json_schema";
         json_schema: typeof conversationResponseSchema;
       };
@@ -173,6 +174,7 @@ export async function callGptForConversation(
       ],
       text: {
         format: {
+          name: "conversation_output",
           type: "json_schema",
           json_schema: conversationResponseSchema,
         },
