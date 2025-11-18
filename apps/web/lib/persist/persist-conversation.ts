@@ -37,6 +37,18 @@ async function updateRelationsAndFeelings(params: {
   const [a, b] = params.participants;
   const now = new Date().toISOString();
 
+  const clampScore = (value: number) => {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.min(100, Math.round(value)));
+  };
+
+  // 好感度（favor）のスコアは -2〜+2 程度の小数なので、
+  // UI上の 0〜100 スケールに反映されるように係数を掛ける。
+  const favorToScore = (current: number, delta: number) => {
+    const SCALE = 5; // 1会話あたり最大 ±10 まで変化
+    return clampScore(current + delta * SCALE);
+  };
+
   // listAny は null を返す可能性がある
   const feelings = (await listAny("feelings")) as unknown as Feeling[] | null;
 
@@ -55,6 +67,9 @@ async function updateRelationsAndFeelings(params: {
   const curScoreAB = recAB?.score ?? 0;
   const curScoreBA = recBA?.score ?? 0;
 
+  const nextScoreAB = favorToScore(curScoreAB, params.deltas.aToB.favor);
+  const nextScoreBA = favorToScore(curScoreBA, params.deltas.bToA.favor);
+
   // a -> b
   await putAny("feelings", {
     id: idAB,
@@ -62,7 +77,7 @@ async function updateRelationsAndFeelings(params: {
     to_id: b,
     label: recAB?.label ?? "none",
     // 数値を積み上げる簡易実装。プロジェクト本番ロジックが別にあれば差し替えてください。
-    score: curScoreAB + params.deltas.aToB.favor,
+    score: nextScoreAB,
     updated_at: now,
     deleted: false,
   });
@@ -73,7 +88,7 @@ async function updateRelationsAndFeelings(params: {
     from_id: b,
     to_id: a,
     label: recBA?.label ?? "none",
-    score: curScoreBA + params.deltas.bToA.favor,
+    score: nextScoreBA,
     updated_at: now,
     deleted: false,
   });
