@@ -35,12 +35,7 @@ const TABLE_OWNER_COLUMNS: Partial<Record<Table, OwnerColumnConfig>> = {
   events: { type: "fixed", column: "owner_id" },
   feelings: { type: "fixed", column: "owner_id" },
   residents: { type: "fixed", column: "owner_id" },
-  // topic_threads だけスキーマが異なる可能性があるため候補を列挙し、
-  // 実際に存在するカラムを Supabase に問い合わせて判定する。
-  topic_threads: {
-    type: "candidates",
-    columns: ["user_id", "profile_id", "created_by", "owner", "owner_id"],
-  },
+  topic_threads: { type: "fixed", column: "owner_id" },
 };
 
 const ownerColumnCache = new Map<Table, string | null>();

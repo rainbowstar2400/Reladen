@@ -5,11 +5,12 @@ import 'server-only';
 import { sbServer } from '@/lib/supabase/server';
 import { getUserOrThrow } from '@/lib/supabase/get-user';
 import { withRetry } from '@/lib/utils/with-retry';
+import type { Database, Json } from '@/lib/supabase/types';
 
 export type UpsertBeliefInput = Array<{
   residentId: string;
-  worldFacts?: Record<string, unknown>;
-  personKnowledge?: Record<string, unknown>;
+  worldFacts?: Json;
+  personKnowledge?: Json;
 }>;
 
 /**
@@ -37,15 +38,18 @@ export async function upsertBeliefs(inputs: UpsertBeliefInput): Promise<{ ok: tr
     if (selErr) return { ok: false, reason: `select failed: ${selErr.message}` };
 
     // マージ（既存があれば deep merge でも良いが、まずは上書きで十分）
+    const worldFacts: Json = b.worldFacts ?? existing?.world_facts ?? ([] as Json);
+    const personKnowledge: Json = b.personKnowledge ?? existing?.person_knowledge ?? ({} as Json);
+
     const row = {
       id: existing?.id, // upsert で指定
       resident_id: b.residentId,
-      world_facts: b.worldFacts ?? existing?.world_facts ?? {},
-      person_knowledge: b.personKnowledge ?? existing?.person_knowledge ?? {},
+      world_facts: worldFacts,
+      person_knowledge: personKnowledge,
       updated_at: now,
       deleted: false,
       owner_id: user.id,
-    };
+    } satisfies Database['public']['Tables']['beliefs']['Insert'];
 
     const { error: upErr } = await withRetry(async () => {
       const res = await sb.from('beliefs').upsert(row).select().maybeSingle();

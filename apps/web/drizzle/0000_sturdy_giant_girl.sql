@@ -108,13 +108,14 @@ CREATE TABLE IF NOT EXISTS "residents" (
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "topic_threads" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"topic" text,
-	"participants" jsonb NOT NULL,
-	"status" text DEFAULT 'ongoing' NOT NULL,
-	"last_event_id" uuid,
-	"updated_at" timestamp with time zone NOT NULL,
-	"deleted" boolean DEFAULT false NOT NULL
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "topic" text,
+        "participants" jsonb NOT NULL,
+        "status" text DEFAULT 'ongoing' NOT NULL,
+        "last_event_id" uuid,
+        "updated_at" timestamp with time zone NOT NULL,
+        "deleted" boolean DEFAULT false NOT NULL,
+        "owner_id" uuid
 );
 --> statement-breakpoint
 DO $$ BEGIN

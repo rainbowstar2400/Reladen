@@ -73,7 +73,7 @@ export function useMarkNotificationRead() {
 
       // 2) クラウドへ反映（失敗してもUIはそのまま）
       try {
-        await remoteUpsertNotification(updated as any);
+        await remoteUpsertNotification(updated);
       } catch (e) {
         console.warn('[notifications] remote upsert failed:', (e as any)?.message);
       }

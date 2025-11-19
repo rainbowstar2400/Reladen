@@ -75,14 +75,11 @@ export type EventLogStrict = z.infer<typeof eventSchemaStrict>;
 
 // --- 会話スレッド・Belief・通知の型 ---
 
-export const topicThreadSchema = z.object({
-  id: z.string().uuid(),
+export const topicThreadSchema = baseEntitySchema.extend({
   topic: z.string().optional(),
   participants: z.tuple([z.string().uuid(), z.string().uuid()]),
   status: z.enum(['ongoing', 'paused', 'done']).default('ongoing'),
   lastEventId: z.string().uuid().optional(),
-  updated_at: z.string().datetime(),
-  deleted: z.boolean().default(false),
 });
 export type TopicThread = z.infer<typeof topicThreadSchema>;
 

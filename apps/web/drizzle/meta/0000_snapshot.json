@@ -47,6 +47,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -402,6 +408,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -665,6 +677,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {

@@ -1,6 +1,7 @@
 // apps/web/lib/db-cloud/supabase.ts
 'use client';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/types';
 
 const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -14,10 +15,10 @@ if (!url || !anon) {
  * 環境変数が揃っていない場合は null を返し、アプリをローカルモードで動作させます。
  */
 export const supabaseClient = (url && anon)
-  ? createClient(url, anon, {
+  ? createClient<Database>(url, anon, {
       auth: {
         persistSession: true,
         storageKey: `reladen-auth:${typeof window !== 'undefined' ? location.hostname : 'server'}`,
       },
-    }) as SupabaseClient
+    }) as SupabaseClient<Database>
   : null;
