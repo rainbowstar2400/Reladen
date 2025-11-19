@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { href: '/office', label: '管理室', icon: Building2 },
   { href: '/reports', label: '日報', icon: ClipboardList },
   { href: '/settings', label: '設定', icon: Cog },
-  { href: '/how-to-play', label: '遊び方', icon: HelpCircle },
+  { href: '/playguide', label: '遊び方', icon: HelpCircle },
   { href: '/specs', label: '仕様説明', icon: Info },
 ];
 
@@ -28,14 +28,14 @@ const SETTINGS_SUB = [
   { href: '/settings#about', label: 'ゲームについて' },
 ];
 
-const HOW_TO_PLAY_SUB = [
-  { href: '/how-to-play#1', label: 'Reladenとは？' },
-  { href: '/how-to-play#2', label: '画面構成' },
-  { href: '/how-to-play#3', label: '住人について' },
-  { href: '/how-to-play#4', label: 'ゲームの進み方' },
-  { href: '/how-to-play#5', label: 'あなたができること' },
-  { href: '/how-to-play#6', label: 'データの保存と表示' },
-  { href: '/how-to-play#7', label: 'よくある質問' },
+const PLAYGUIDE_SUB = [
+  { href: '/playguide#1', label: 'Reladenとは？' },
+  { href: '/playguide#2', label: '画面構成' },
+  { href: '/playguide#3', label: '住人について' },
+  { href: '/playguide#4', label: 'ゲームの進み方' },
+  { href: '/playguide#5', label: 'あなたができること' },
+  { href: '/playguide#6', label: 'データの保存と表示' },
+  { href: '/playguide#7', label: 'よくある質問' },
 ];
 
 const SPECS_SUB = [
@@ -114,7 +114,7 @@ export function Sidebar() {
               )}
               {item.href === '/playguide' && active && (
                 <div className="mt-1 space-y-1 pl-8">
-                  {HOW_TO_PLAY_SUB.map((sub) => {
+                  {PLAYGUIDE_SUB.map((sub) => {
                     const subActive = pathname === sub.href;
                     return (
                       <Button
