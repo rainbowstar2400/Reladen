@@ -31,7 +31,7 @@ const TABLES_REQUIRING_OWNER: Record<Table, boolean> = {
   events: true,
   feelings: true,
   residents: true,
-  topic_threads: false,
+  topic_threads: true,
   notifications: false,
   beliefs: false,
 };
