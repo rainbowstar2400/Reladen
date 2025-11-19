@@ -1,6 +1,6 @@
 import { MotionMain } from '@/components/layout/motion-main';
 
-export default function HowToPlayPage() {
+export default function PlayguidePage() {
     return (
         <MotionMain>
             <div className="space-y-6">
