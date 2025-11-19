@@ -39,9 +39,9 @@ const HOW_TO_PLAY_SUB = [
 ];
 
 const SPECS_SUB = [
-  { href: '/specs#1', label: 'システム概要' },
-  { href: '/specs#2', label: 'データフロー' },
-  { href: '/specs#3', label: 'プライバシーポリシー' },
+  { href: '/specs#1', label: '1章' },
+  { href: '/specs#2', label: '2章' },
+  { href: '/specs#3', label: '3章' },
 ];
 
 export function Sidebar() {
@@ -112,7 +112,7 @@ export function Sidebar() {
                   })}
                 </div>
               )}
-              {item.href === '/how-to-play' && active && (
+              {item.href === '/playguide' && active && (
                 <div className="mt-1 space-y-1 pl-8">
                   {HOW_TO_PLAY_SUB.map((sub) => {
                     const subActive = pathname === sub.href;
