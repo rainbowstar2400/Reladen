@@ -73,7 +73,7 @@ const conversationResponseSchema = {
             items: { type: "string" },
           },
         },
-        required: ["tags", "newKnowledge"],
+        required: ["tags", "newKnowledge", "signals", "qualityHints", "debug"],
       },
     },
     required: ["threadId", "participants", "topic", "lines", "meta"],
@@ -283,22 +283,25 @@ function sanitizeGptConversationOutput(
     ? (metaInput as any).signals.filter((signal: unknown): signal is "continue" | "close" | "park" =>
         signal === "continue" || signal === "close" || signal === "park",
       )
-    : undefined;
+    : [];
 
-  const qualityHints = isRecord((metaInput as any).qualityHints)
-    ? {
-        ...(metaInput.qualityHints?.turnBalance === "balanced" || metaInput.qualityHints?.turnBalance === "skewed"
-          ? { turnBalance: metaInput.qualityHints.turnBalance }
-          : {}),
-        ...(typeof metaInput.qualityHints?.tone === "string" && metaInput.qualityHints.tone.trim().length > 0
-          ? { tone: metaInput.qualityHints.tone.trim() }
-          : {}),
-      }
-    : undefined;
+  const qualityHintsInput = isRecord((metaInput as any).qualityHints)
+    ? ((metaInput as any).qualityHints as Record<string, unknown>)
+    : {};
+  const qualityHints = {
+    turnBalance:
+      qualityHintsInput?.turnBalance === "balanced" || qualityHintsInput?.turnBalance === "skewed"
+        ? (qualityHintsInput.turnBalance as "balanced" | "skewed")
+        : "balanced",
+    tone:
+      typeof qualityHintsInput?.tone === "string" && qualityHintsInput.tone.trim().length > 0
+        ? qualityHintsInput.tone.trim()
+        : "neutral",
+  };
 
   const debug = Array.isArray((metaInput as any).debug)
     ? (metaInput as any).debug.filter((item: unknown): item is string => typeof item === "string" && item.length > 0)
-    : undefined;
+    : [];
 
   return {
     threadId: ctx.threadId,
@@ -308,9 +311,9 @@ function sanitizeGptConversationOutput(
     meta: {
       tags,
       newKnowledge,
-      ...(signals && signals.length > 0 ? { signals } : {}),
-      ...(qualityHints && Object.keys(qualityHints).length > 0 ? { qualityHints } : {}),
-      ...(debug && debug.length > 0 ? { debug } : {}),
+      signals,
+      qualityHints,
+      debug,
     },
   } satisfies Partial<GptConversationOutput>;
 }
