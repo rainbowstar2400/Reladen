@@ -66,6 +66,7 @@ const conversationResponseSchema = {
               turnBalance: { enum: ["balanced", "skewed"] },
               tone: { type: "string" },
             },
+            required: ["turnBalance", "tone"],
           },
           debug: {
             type: "array",
