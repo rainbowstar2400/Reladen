@@ -15,7 +15,7 @@ type Props = {
 export default function ConversationSchedulerProvider(props: Props) {
   const {
     enabled = process.env.NEXT_PUBLIC_CONV_SCHEDULER !== "off",
-    baseIntervalMs = Number(process.env.NEXT_PUBLIC_CONV_SCHEDULER_INTERVAL ?? 90000),
+    baseIntervalMs = Number(process.env.NEXT_PUBLIC_CONV_SCHEDULER_INTERVAL ?? 900000),
     defaultParticipants = ["resident_A", "resident_B"],
     children,
   } = props;

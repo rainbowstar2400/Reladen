@@ -105,7 +105,7 @@ export type SchedulerOptions = {
 
 const DEFAULTS: Required<SchedulerOptions> = {
   enabled: true,
-  baseIntervalMs: 90_000, // 会話生成間隔：90秒
+  baseIntervalMs: 900_000, // 会話生成間隔：900秒
   defaultParticipants: ["resident_A", "resident_B"],
 };
 
