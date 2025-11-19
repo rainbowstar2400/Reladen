@@ -14,12 +14,12 @@ export const gptConversationMetaSchema = z.object({
     target: z.string().uuid(),
     key: z.string().min(1),
   })),
-  signals: z.array(z.enum(['continue', 'close', 'park'])).optional(),
+  signals: z.array(z.enum(['continue', 'close', 'park'])),
   qualityHints: z.object({
-    turnBalance: z.enum(['balanced', 'skewed']).optional(),
-    tone: z.string().optional(),
-  }).optional(),
-  debug: z.array(z.string()).optional(),
+    turnBalance: z.enum(['balanced', 'skewed']),
+    tone: z.string(),
+  }),
+  debug: z.array(z.string()),
 });
 
 // GPT出力本体
