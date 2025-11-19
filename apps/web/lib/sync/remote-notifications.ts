@@ -1,12 +1,21 @@
 // apps/web/lib/sync/remote-notifications.ts
 'use client';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseClient } from '@/lib/db-cloud/supabase';
 import type { Database } from '@/lib/supabase/types';
 import type { NotificationRecord } from '@repo/shared/types/conversation';
 
 type NotificationRow = Database['public']['Tables']['notifications']['Row'];
 type NotificationInsert = Database['public']['Tables']['notifications']['Insert'];
+
+async function requireOwnerId(client: SupabaseClient<Database>): Promise<string> {
+  const { data, error } = await client.auth.getUser();
+  if (error || !data?.user?.id) {
+    throw new Error('Failed to get auth user for notifications');
+  }
+  return data.user.id;
+}
 
 function toNotificationRecord(row: NotificationRow): NotificationRecord {
   return {
@@ -23,7 +32,7 @@ function toNotificationRecord(row: NotificationRow): NotificationRecord {
   };
 }
 
-function toNotificationInsert(record: NotificationRecord): NotificationInsert {
+function toNotificationInsert(record: NotificationRecord, ownerId: string): NotificationInsert {
   return {
     id: record.id,
     type: record.type,
@@ -35,6 +44,7 @@ function toNotificationInsert(record: NotificationRecord): NotificationInsert {
     status: record.status,
     priority: record.priority ?? 0,
     updated_at: record.updated_at,
+    owner_id: ownerId,
   };
 }
 
@@ -63,7 +73,8 @@ export async function remoteUpsertNotification(record: NotificationRecord) {
     // 初期化前は黙ってスキップ（次回同期で収束）
     return;
   }
-  const row = toNotificationInsert(record);
+  const ownerId = await requireOwnerId(sb);
+  const row = toNotificationInsert(record, ownerId);
   const { error } = await sb
     .from('notifications')
     .upsert(row, { onConflict: 'id' });

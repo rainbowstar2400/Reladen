@@ -161,6 +161,7 @@ export type Database = {
         Row: {
           id: string;
           linked_event_id: string;
+          owner_id: string | null;
           occurred_at: string;
           participants: [string, string] | null;
           priority: number;
@@ -173,6 +174,7 @@ export type Database = {
         Insert: {
           id?: string;
           linked_event_id: string;
+          owner_id?: string | null;
           occurred_at: string;
           participants?: [string, string] | null;
           priority?: number;
@@ -185,6 +187,7 @@ export type Database = {
         Update: {
           id?: string;
           linked_event_id?: string;
+          owner_id?: string | null;
           occurred_at?: string;
           participants?: [string, string] | null;
           priority?: number;
