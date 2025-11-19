@@ -171,6 +171,7 @@ export const topicThreads = pgTable('topic_threads', {
   lastEventId: uuid('last_event_id'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
   deleted: boolean('deleted').notNull().default(false),
+  ownerId: uuid('owner_id'),
 }, (t) => ({
   statusIdx: index('topic_threads_status_idx').on(t.status),
   updatedIdx: index('topic_threads_updated_idx').on(t.updatedAt),
