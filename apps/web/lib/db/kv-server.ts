@@ -27,14 +27,58 @@ type Table =
   | "feelings"
   | "residents";
 
-const TABLES_REQUIRING_OWNER: Record<Table, boolean> = {
-  events: true,
-  feelings: true,
-  residents: true,
-  topic_threads: true,
-  notifications: false,
-  beliefs: false,
+type OwnerColumnConfig =
+  | { type: "fixed"; column: string }
+  | { type: "candidates"; columns: string[] };
+
+const TABLE_OWNER_COLUMNS: Partial<Record<Table, OwnerColumnConfig>> = {
+  events: { type: "fixed", column: "owner_id" },
+  feelings: { type: "fixed", column: "owner_id" },
+  residents: { type: "fixed", column: "owner_id" },
+  // topic_threads だけスキーマが異なる可能性があるため候補を列挙し、
+  // 実際に存在するカラムを Supabase に問い合わせて判定する。
+  topic_threads: {
+    type: "candidates",
+    columns: ["user_id", "profile_id", "created_by", "owner", "owner_id"],
+  },
 };
+
+const ownerColumnCache = new Map<Table, string | null>();
+
+async function resolveOwnerColumn(
+  sb: ReturnType<typeof sbServer>,
+  table: Table,
+): Promise<string | null> {
+  if (ownerColumnCache.has(table)) {
+    return ownerColumnCache.get(table)!;
+  }
+
+  const config = TABLE_OWNER_COLUMNS[table];
+  if (!config) {
+    ownerColumnCache.set(table, null);
+    return null;
+  }
+
+  if (config.type === "fixed") {
+    ownerColumnCache.set(table, config.column);
+    return config.column;
+  }
+
+  for (const column of config.columns) {
+    const { error } = await sb.from(table).select(column).limit(1);
+    if (!error) {
+      ownerColumnCache.set(table, column);
+      return column;
+    }
+    const message = error?.message ?? "";
+    if (!/column .* does not exist/i.test(message)) {
+      throw error;
+    }
+  }
+
+  ownerColumnCache.set(table, null);
+  throw new Error(`Owner column not found for table ${table}.`);
+}
 
 async function ensureOwnerId(sb: ReturnType<typeof sbServer>): Promise<string> {
   const { data, error } = await sb.auth.getUser();
@@ -49,9 +93,12 @@ export async function putKV(table: Table, rec: any) {
   const sb = sbServer();
   let payload = rec;
 
-  if (TABLES_REQUIRING_OWNER[table]) {
-    const ownerId = rec?.owner_id ?? (await ensureOwnerId(sb));
-    payload = { ...rec, owner_id: ownerId };
+  const ownerColumn = await resolveOwnerColumn(sb, table);
+
+  if (ownerColumn) {
+    const currentOwner = rec?.[ownerColumn];
+    const ownerId = currentOwner ?? (await ensureOwnerId(sb));
+    payload = { ...rec, [ownerColumn]: ownerId };
   }
 
   const { error } = await sb.from(table).upsert(payload, { onConflict: "id" });
