@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { listConversationEventsByDate } from '@/lib/repos/conversation-repo';
-import { listLocal } from '@/lib/db-local';                           // ★追加
-import type { EventLogStrict } from '@repo/shared/types/conversation'; // ★追加
+import { listLocal } from '@/lib/db-local';
+import type { EventLogStrict } from '@repo/shared/types/conversation';
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度'
 type ChangeKindFilter = ChangeKind | ''

@@ -4,7 +4,6 @@
 
 import { revalidatePath } from 'next/cache';
 
-// ★ 修正点1: createServerClient ではなく、実際にエクスポートされている sbServer をインポート
 import { sbServer } from '@/lib/supabase/server'; 
 import { eq } from 'drizzle-orm'; 
 
@@ -17,7 +16,6 @@ import * as schema from '@/lib/drizzle/schema';
  * @returns {Promise<{success: boolean, message: string}>}
  */
 export async function deleteAccountAction() {
-  // ★ 修正点1: sbServer() を使用
   const supabase = sbServer(); 
   const { data: userData, error: userError } = await supabase.auth.getUser();
 
@@ -33,8 +31,6 @@ export async function deleteAccountAction() {
         // 【データ整合性のためのDELETE処理】
         // ownerIdを持つ全てのテーブルのレコードを削除します。
         
-        // ★ 修正点2 & 3: conversations/consults を削除し、user_id → ownerId に変更
-
         await tx.delete(schema.presets).where(eq(schema.presets.ownerId, userId));
         await tx.delete(schema.relations).where(eq(schema.relations.ownerId, userId));
         await tx.delete(schema.feelings).where(eq(schema.feelings.ownerId, userId));

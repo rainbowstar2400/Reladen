@@ -57,7 +57,7 @@ export default function SettingsPage() {
             </div>
           </CardContent></Card>
 
-          {/* ★ 変更箇所: 初期化（実装版）をアカウント削除に置き換え */}
+          {/* アカウント削除 */}
           <Card><CardContent className="flex items-center justify-between py-3">
             <div>
               <div className="font-medium">アカウント削除</div>

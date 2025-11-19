@@ -5,8 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listLocal, putLocal, getLocal } from '@/lib/db-local';
 import type { NotificationRecord, EventLogStrict } from '@repo/shared/types/conversation';
 import { remoteFetchEventById } from '@/lib/sync/remote-events';
-import { bulkUpsert } from '@/lib/db-local'; // ★ 追加（ローカルへ取り込み）
-import { remoteFetchRecentNotifications, remoteUpsertNotification } from '@/lib/sync/remote-notifications'; // ★ 追加
+import { bulkUpsert } from '@/lib/db-local';
+import { remoteFetchRecentNotifications, remoteUpsertNotification } from '@/lib/sync/remote-notifications';
 
 /**
 * 通知の並び順を共通化：

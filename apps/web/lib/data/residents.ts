@@ -10,15 +10,15 @@ import {
 } from '../../../../packages/shared/logic/schedule';
 
 const KEY = ['residents'];
-// ★ データをフェッチする関数にロジックを追加
+// データをフェッチする関数にロジックを追加
 async function fetchResidents() {
   const items = await listLocal<Resident>('residents');
   const activeItems = items.filter((item) => !item.deleted);
 
-  // ★ 更新が必要なスケジュールをDBに書き戻すためのリスト
+  // 更新が必要なスケジュールをDBに書き戻すためのリスト
   const updatePromises: Promise<any>[] = [];
 
-  // ★ 取得したデータをループし、スケジュールをチェック・更新
+  // 取得したデータをループし、スケジュールをチェック・更新
   const processedResidents = activeItems.map((res) => {
 
     // sleepProfile が未設定、または基準時刻がなければスキップ
@@ -29,11 +29,11 @@ async function fetchResidents() {
     // SleepProfile 型として解釈 (型エラーを回避するため)
     const currentProfile = res.sleepProfile as unknown as SleepProfile;
 
-    // ★ スケジュールロジックの呼び出し
+    // スケジュールロジックの呼び出し
     const { profile: updatedProfile, needsUpdate } =
       getOrGenerateTodaySchedule(currentProfile);
 
-    // ★ もし日付が古いなどで「更新が必要」と判断されたら
+    // もし日付が古いなどで「更新が必要」と判断されたら
     if (needsUpdate) {
       // console.log(`[Schedule] Resident ${res.id} のスケジュールを更新します`);
 
@@ -52,19 +52,19 @@ async function fetchResidents() {
     return res;
   });
 
-  // ★ 溜まったDB更新処理をすべて実行 (非同期・並列)
+  // 溜まったDB更新処理をすべて実行 (非同期・並列)
   if (updatePromises.length > 0) {
     Promise.all(updatePromises)
       .then(res => console.log(`[Schedule] ${res.length} 件のローカルスケジュールを更新しました`))
       .catch(err => console.error('[Schedule] ローカルDB更新に失敗:', err));
   }
 
-  // ★ UI (useQuery) には、最新のスケジュールが反映されたデータを返す
+  // UI (useQuery) には、最新のスケジュールが反映されたデータを返す
   return processedResidents;
 }
 
 export function useResidents() {
-  // ★ fetchResidents を使うように変更
+  // fetchResidents を使うように変更
   return useQuery({ queryKey: KEY, queryFn: fetchResidents });
 }
 
@@ -87,7 +87,7 @@ async function saveAllRelationData(
   relations: Record<string, TempRelationData>,
   ownerId: string | null | undefined
 ) {
-  // ★ 事前に既存データをすべて取得 (ループ内で listLocal すると遅いため)
+  // 事前に既存データをすべて取得 (ループ内で listLocal すると遅いため)
   const allRelations = await listLocal<Relation>('relations');
   const allFeelings = await listLocal<Feeling>('feelings');
   const allNicknames = await listLocal<Nickname>('nicknames');
@@ -179,19 +179,19 @@ async function saveAllRelationData(
     }
   }
 
-  // ★ すべてのDB書き込みを並列実行
+  // すべてのDB書き込みを並列実行
   await Promise.all(promises);
 }
 
 export function useUpsertResident() {
   const queryClient = useQueryClient();
   return useMutation({
-    // ★ 変更: 住民データと関係データを受け取る
+    // 住民データと関係データを受け取る
     mutationFn: async (input: { resident: Partial<Resident>, relations?: Record<string, TempRelationData> }) => {
       const { resident: residentInput, relations: relationsInput } = input;
       const id = residentInput.id ?? newId();
 
-      // ★ 既存のレコードを取得（updated_at などのため）
+      // 既存のレコードを取得（updated_at などのため）
       const existing = (await listLocal<Resident>('residents')).find(r => r.id === id);
 
       const recordData = {
@@ -206,7 +206,7 @@ export function useUpsertResident() {
       const record = await putLocal('residents', recordData);
       const currentId = record.id;
 
-      // ★ 追加: 関係データがあれば保存処理を呼び出す
+      // 関係データがあれば保存処理を呼び出す
       if (relationsInput && currentId) {
         await saveAllRelationData(currentId, relationsInput, record.owner_id);
       }
@@ -214,10 +214,10 @@ export function useUpsertResident() {
       return record;
     },
     onSuccess: (savedResident) => {
-      // ★ 変更: 住民キャッシュを無効化
+      //  住民キャッシュを無効化
       void queryClient.invalidateQueries({ queryKey: KEY });
 
-      // ★ 追加: 関連テーブルのキャッシュも無効化
+      // 関連テーブルのキャッシュも無効化
       void queryClient.invalidateQueries({ queryKey: ['relations'] });
       void queryClient.invalidateQueries({ queryKey: ['feelings'] });
       void queryClient.invalidateQueries({ queryKey: ['nicknames'] });

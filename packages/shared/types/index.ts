@@ -56,7 +56,6 @@ export const residentSchema = baseEntitySchema.extend({
     expressiveness: z.number().int().min(1).max(5).default(3), // 表現力
   }).partial().default({}),
 
-  // ★ 変更: string().uuid() に変更 (presets.id を参照)
   speechPreset: z.string().uuid().optional(),       // 話し方プリセット
 
   // プレイヤーへの信頼度（UI編集不可。後続ロジックで上げ下げ）
@@ -68,10 +67,8 @@ export const residentSchema = baseEntitySchema.extend({
 
   birthday: z.string().optional(), // "MM/DD" 形式
 
-  // ★ 変更: string().uuid() に変更 (presets.id を参照)
   occupation: z.string().uuid().optional(),
 
-  // ★ 変更: string().uuid() に変更 (presets.id を参照)
   firstPerson: z.string().uuid().optional(),
 
   interests: z.array(z.string()).max(20).optional(),
@@ -149,7 +146,7 @@ export type TempRelationData = {
   nicknameFrom: string; // 相手が自分を呼ぶ
 };
 
-// === ★ 5. （任意）リレーションを含む型定義 ★ ===
+// === 5. （任意）リレーションを含む型定義 ===
 // (※これは Drizzle `inferSelect` 版のものを Zod 版に書き換えたものです)
 export type ResidentWithRelations = Resident & {
   relations: Relation[];

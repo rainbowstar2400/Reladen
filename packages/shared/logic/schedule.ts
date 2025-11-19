@@ -1,6 +1,6 @@
 export type Situation = 'active' | 'preparing' | 'sleeping';
 
-// ★ 変更: SleepProfile の型定義 (DBスキーマと合わせる)
+// SleepProfile の型定義 (DBスキーマと合わせる)
 export type BaseSleepProfile = {
   baseBedtime: string;   // 'HH:mm' (基準就寝時刻)
   baseWakeTime: string;  // 'HH:mm' (基準起床時刻)
@@ -13,7 +13,7 @@ export type TodaySchedule = {
   wakeTime: string;   // 'HH:mm' (今日の起床時刻)
 };
 
-// ★ DBの `residents.sleepProfile` にはこの型が保存されます
+// DBの `residents.sleepProfile` にはこの型が保存されます
 export type SleepProfile = BaseSleepProfile & {
   todaySchedule?: TodaySchedule;
 };
@@ -37,7 +37,7 @@ function inRange(start: number, end: number, x: number) {
   return start <= end ? (x >= start && x < end) : (x >= start || x < end);
 }
 
-// --- ★ 新規: スケジュール抽選ロジック ---
+// --- スケジュール抽選ロジック ---
 
 /**
  * 分単位の時刻を 'HH:mm' 形式に変換する
@@ -72,7 +72,7 @@ function getTodayJST(): string {
 }
 
 /**
- * ★ 新規: 今日の就寝・起床時刻を抽選する関数
+ * 今日の就寝・起床時刻を抽選する関数
  */
 export function generateTodaySchedule(
   profile: BaseSleepProfile,
@@ -91,7 +91,6 @@ export function generateTodaySchedule(
 }
 
 /**
- * ★ 新規 (重要):
  * SleepProfile を受け取り、必要なら今日のスケジュールを生成・更新して返す
  * (データフック `useResidents` で呼び出す)
  * @returns { profile: SleepProfile, needsUpdate: boolean }
@@ -133,10 +132,9 @@ export function getOrGenerateTodaySchedule(
 }
 
 
-// --- ★ 変更: 状態計算ロジック ---
+// --- 状態計算ロジック ---
 
 /**
- * ★ 変更: calcSituation
  * * 渡される profile には、抽選済みの `todaySchedule` が含まれていることを期待する。
  */
 export function calcSituation(
@@ -173,8 +171,7 @@ export function calcSituation(
 export type ActivityTendency = 'morning' | 'normal' | 'night';
 
 /**
- * (移管) 傾向からデフォルトの「基準」睡眠プロファイル(BaseSleepProfile)を生成する
- * ★ キー名を `bedtime` -> `baseBedtime` に変更
+ * 傾向からデフォルトの「基準」睡眠プロファイル(BaseSleepProfile)を生成する
  */
 export function defaultSleepByTendency(t: ActivityTendency): BaseSleepProfile {
   switch (t) {

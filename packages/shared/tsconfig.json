@@ -17,6 +17,6 @@
   "exclude": [
     "dist",
     "node_modules",
-    "../../apps/**"   // ★ apps配下は拾わない
+    "../../apps/**"   // apps配下は拾わない
   ]
 }

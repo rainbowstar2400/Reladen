@@ -33,7 +33,7 @@ export const presets = pgTable('presets', {
 }));
 
 
-// ★ 2. residents テーブル (フィールドを移設)
+// 2. residents テーブル
 export const residents = pgTable('residents', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
@@ -141,7 +141,7 @@ export const feelingsRelations = createRelations(feelings, ({ one }) => ({
   fromResident: one(residents, {
     fields: [feelings.fromId],
     references: [residents.id],
-    relationName: 'feelings_from', // ★ relationName を明記
+    relationName: 'feelings_from', // relationName を明記
   }),
   toResident: one(residents, {
     fields: [feelings.toId],
@@ -154,7 +154,7 @@ export const nicknamesRelations = createRelations(nicknames, ({ one }) => ({
   fromResident: one(residents, {
     fields: [nicknames.fromId],
     references: [residents.id],
-    relationName: 'nicknames_from', // ★ relationName を明記
+    relationName: 'nicknames_from', // relationName を明記
   }),
   toResident: one(residents, {
     fields: [nicknames.toId],

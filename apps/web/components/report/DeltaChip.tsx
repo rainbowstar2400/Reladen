@@ -58,7 +58,7 @@ export default function DeltaChip(props: DeltaChipProps) {
   // --- 「好感度」用: 変化なしならレンダーしない ---
   if (variant === 'favor') {
     const sym = formatFavorSymbol(value as number);
-    if (!sym) return null; // ★ 表示しない
+    if (!sym) return null;
     return (
       <span
         className={`inline-flex items-center rounded-full px-2 py-[2px] leading-none select-none text-xs font-medium ${colorFavor(value as number)} ${className ?? ''}`}

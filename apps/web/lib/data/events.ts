@@ -34,7 +34,7 @@ export function useAddEvent() {
     mutationFn: async (input: Partial<EventLog>) => {
       const id = input.id ?? newId();
 
-      // ★ 厳密スキーマで検証（失敗なら throw）
+      // 厳密スキーマで検証（失敗なら throw）
       eventSchemaStrict.parse({
         id,
         kind: input.kind,

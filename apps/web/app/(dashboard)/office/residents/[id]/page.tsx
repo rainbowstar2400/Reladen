@@ -33,7 +33,7 @@ const TRAIT_LABELS: Record<keyof typeof DEFAULT_TRAITS, string> = {
   expressiveness: '表現力',
 };
 
-// ★ 表示用の簡易レーティングボックス
+// 表示用の簡易レーティングボックス
 const RatingBoxDisplay = ({ value }: { value: number }) => (
   <div className="flex space-x-1">
     {Array.from({ length: 5 }).map((_, index) => (
@@ -98,7 +98,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   const router = useRouter();
   const residentId = params.id;
   const { data: resident, isLoading } = useResident(residentId);
-  // ★ 全住人リストを取得
+  // 全住人リストを取得
   const { data: allResidents } = useResidents();
   const { data: relations } = useRelations();
   const { data: feelings } = useFeelings();
@@ -338,13 +338,11 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
                     // この住人 (residentId) から相手 (partnerId) への印象を取得
                     const impression = feelingMap.get(partnerId);
 
-                    // ★ (ここから) 日本語ラベル取得
+                    // 日本語ラベル取得
                     const relationType = relation.type ?? 'none';
                     const relationLabel = RELATION_LABELS[relationType] ?? relationType;
-
                     const impressionKey = impression ?? 'none';
                     const impressionLabel = FEELING_LABELS[impressionKey] ?? impressionKey;
-                    // ★ (ここまで) 日本語ラベル取得
 
                     return (
                       <div

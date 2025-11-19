@@ -4,7 +4,6 @@ import { calcSituation, type SleepProfile } from '../../../../packages/shared/lo
 export function selectConversationCandidates(now: Date, residents: Resident[]) {
   return residents.filter(r => {
 
-    // ★ 変更:
     // `useResidents` が 'todaySchedule' を含む `sleepProfile` を
     // 準備している前提で `calcSituation` を呼ぶ。
     // `r.sleepProfile` が未設定 (undefined) の場合、`calcSituation` は

@@ -118,11 +118,11 @@ async function updateThreadAfterEvent(params: {
   lastEventId: string;
   topic?: string;
   signal?: "continue" | "close" | "park";
-  status?: TopicThread["status"]; // ★ 変更： status も受け取れるように
+  status?: TopicThread["status"];
 }) {
   const now = new Date().toISOString();
 
-  let finalStatus: TopicThread["status"] = "ongoing"; // ★ デフォルト
+  let finalStatus: TopicThread["status"] = "ongoing";
 
   if (params.status) {
     // 1. status (評価側) があれば最優先

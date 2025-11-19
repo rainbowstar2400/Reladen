@@ -14,7 +14,7 @@ export default function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  // ★ 修正: `ready` に加えて `user` も取得
+  // `ready` に加えて `user` も取得
   const { ready, user } = useAuth();
 
   return (
@@ -23,7 +23,7 @@ export default function DashboardLayout({
       <div className="grid flex-1 grid-cols-1 md:grid-cols-[16rem_1fr]">
         <Sidebar />
 
-        {/* ★ 修正: 準備完了(ready) かつ ユーザーが存在する(user) の時だけ描画 */}
+        {/* 準備完了(ready) かつ ユーザーが存在する(user) の時だけ描画 */}
         {ready && user && <RealtimeSubscriber />}
 
         <MotionMain>{children}</MotionMain>

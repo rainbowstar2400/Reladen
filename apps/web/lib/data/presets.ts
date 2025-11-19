@@ -87,7 +87,7 @@ async function fetchPresetsWithDefaults(): Promise<Preset[]> {
 }
 
 /**
- * すべてのプリセットを取得する React Query フック (★ デフォルトとマージ)
+ * すべてのプリセットを取得する React Query フック (デフォルトとマージ)
 */
 export function usePresets() {
     return useQuery({

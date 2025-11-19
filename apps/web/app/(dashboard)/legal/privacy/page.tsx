@@ -60,7 +60,6 @@ export default function PrivacyPolicyPage() {
             <strong>クラウドストレージ（Supabase）</strong>
             <p>
               同期設定 をオンにした場合、
-              {/* ★修正反映箇所：第1条第3項 → 第1条第1項および第2項 */}
               <strong className="font-semibold text-primary">第1条第1項および第2項</strong>
               で収集した情報は、Supabase（プライバシーポリシー：
               <a href="https://supabase.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">
@@ -91,7 +90,6 @@ export default function PrivacyPolicyPage() {
               </li>
               <li>
                 会話生成機能（相談機能など）の提供のために、
-                {/* ★修正反映箇所：第1条第3項 → 第1条第2項 */}
                 <strong className="font-semibold text-primary">第1条第2項</strong>
                 に定める情報（住人情報、関係性、各種ログなど）を、OpenAI, L.L.C.（以下「OpenAI社」）の提供するAPIに送信します。
                 OpenAI社は、APIを通じて受信したデータを同社のモデル学習に利用しない方針を定めています。（詳細は同社のエンタープライズプライバシー 

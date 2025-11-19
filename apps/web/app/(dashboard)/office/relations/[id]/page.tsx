@@ -136,7 +136,6 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
 
     // A->B, B->A の情報を整理
     const { a_to_b, b_to_a } = useMemo(() => {
-        // ★ nicknames を
         if (!residentAId || !residentBId || !feelings || !nicknames) {
             const defaultData = {
                 impression: null,
@@ -149,7 +148,7 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
         const a_to_b_feeling = feelings.find(f => f.from_id === residentAId && f.to_id === residentBId);
         const b_to_a_feeling = feelings.find(f => f.from_id === residentBId && f.to_id === residentAId);
 
-        // ★ ニックネームを検索 (スキーマ定義に合わせて fromId, toId を使用)
+        // ニックネームを検索 (スキーマ定義に合わせて fromId, toId を使用)
         const a_to_b_nickname = nicknames.find(n => n.from_id === residentAId && n.to_id === residentBId);
         const b_to_a_nickname = nicknames.find(n => n.from_id === residentBId && n.to_id === residentAId);
 
@@ -157,12 +156,12 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
             a_to_b: {
                 impression: a_to_b_feeling?.label ?? null,
                 affinity: a_to_b_feeling?.score ?? 0, // (feelings の修正)
-                callName: a_to_b_nickname?.nickname ?? null, // ★ 修正
+                callName: a_to_b_nickname?.nickname ?? null,
             },
             b_to_a: {
                 impression: b_to_a_feeling?.label ?? null,
                 affinity: b_to_a_feeling?.score ?? 0, // (feelings の修正)
-                callName: b_to_a_nickname?.nickname ?? null, // ★ 修正
+                callName: b_to_a_nickname?.nickname ?? null,
             },
         };
     }, [residentAId, residentBId, feelings, nicknames]);

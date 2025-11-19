@@ -216,7 +216,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                         size="icon"
                         className="h-8 w-8"
                         onClick={handleCloseEdit}
-                        disabled={isMutating} // ★ 保存中はキャンセル不可
+                        disabled={isMutating} // 保存中はキャンセル不可
                         aria-label="キャンセル"
                       >
                         <X className="h-4 w-4" />
@@ -229,11 +229,11 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                         disabled={
                           !editLabel ||
                           (category === 'speech' && !editDescription) ||
-                          isMutating // ★ 保存中は連打不可
+                          isMutating // 保存中は連打不可
                         }
                         aria-label="保存"
                       >
-                        {isMutating ? ( // ★ upsertPreset.isPending を見る
+                        {isMutating ? ( // upsertPreset.isPending を見る
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Check className="h-4 w-4" />
@@ -243,7 +243,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                   </div>
 
                 ) : (
-                  // === ★ 通常時の表示 ===
+                  // === 通常時の表示 ===
                   <>
                     <div className="flex items-center justify-between">
                       <span className="font-semibold">{item.label}</span>
@@ -255,7 +255,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                           size="icon"
                           className="h-8 w-8 shrink-0"
                           onClick={() => handleOpenEdit(item)}
-                          disabled={uiDisabled} // ★ 統合した disabled を使用
+                          disabled={uiDisabled} // 統合した disabled を使用
                           aria-label="編集"
                         >
                           <Pencil className="h-4 w-4" />
