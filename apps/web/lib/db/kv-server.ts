@@ -35,6 +35,7 @@ const TABLE_OWNER_COLUMNS: Partial<Record<Table, OwnerColumnConfig>> = {
   events: { type: "fixed", column: "owner_id" },
   feelings: { type: "fixed", column: "owner_id" },
   residents: { type: "fixed", column: "owner_id" },
+  notifications: { type: "fixed", column: "owner_id" },
   topic_threads: { type: "fixed", column: "owner_id" },
 };
 

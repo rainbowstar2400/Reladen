@@ -1,6 +1,16 @@
 'use client';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseClient as sb } from '@/lib/db-cloud/supabase';
+import type { Database } from '@/lib/supabase/types';
 import type { EventLogStrict, NotificationRecord } from '@repo/shared/types/conversation';
+
+async function requireOwnerId(client: SupabaseClient<Database>): Promise<string> {
+  const { data, error } = await client.auth.getUser();
+  if (error || !data?.user?.id) {
+    throw new Error('Failed to get auth user for notifications');
+  }
+  return data.user.id;
+}
 
 /** イベントを Supabase に upsert する */
 export async function remoteUpsertEvent(ev: EventLogStrict) {
@@ -24,6 +34,7 @@ export async function remoteUpsertNotification(n: NotificationRecord & { deleted
     console.warn('Supabase クライアントが無効なため、通知同期をスキップしました。');
     return;
   }
+  const ownerId = await requireOwnerId(sb);
   const { error } = await sb.from('notifications').upsert({
     id: n.id,
     type: n.type,
@@ -36,6 +47,7 @@ export async function remoteUpsertNotification(n: NotificationRecord & { deleted
     thread_id: (n as any).threadId ?? null,
     participants: (n as any).participants ?? null,
     snippet: (n as any).snippet ?? null,
+    owner_id: ownerId,
   }).select().single();
   if (error) throw error;
 }

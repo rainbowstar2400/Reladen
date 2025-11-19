@@ -200,6 +200,7 @@ export const notifications = pgTable('notifications', {
   status: text('status').notNull().default('unread'), // 'unread' | 'read' | 'archived'
   priority: integer('priority').notNull().default(0),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  ownerId: uuid('owner_id'),
 }, (t) => ({
   statusIdx: index('notifications_status_idx').on(t.status),
   occurredIdx: index('notifications_occurred_idx').on(t.occurredAt),
