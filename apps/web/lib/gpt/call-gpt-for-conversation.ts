@@ -86,7 +86,8 @@ type ResponseCreateParamsWithFormat =
       format?: {
         name: string;
         type: "json_schema";
-        json_schema: typeof conversationResponseSchema;
+        schema: typeof conversationResponseSchema.schema;
+        strict?: boolean;
       };
     };
   };
@@ -174,9 +175,10 @@ export async function callGptForConversation(
       ],
       text: {
         format: {
-          name: "conversation_output",
+          name: conversationResponseSchema.name,
           type: "json_schema",
-          json_schema: conversationResponseSchema,
+          schema: conversationResponseSchema.schema,
+          strict: conversationResponseSchema.strict,
         },
       },
     } as ResponseCreateParamsWithFormat);
