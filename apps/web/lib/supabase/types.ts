@@ -16,6 +16,7 @@ export type Database = {
           id: string;
           person_knowledge: Json;
           resident_id: string;
+          owner_id: string | null;
           updated_at: string;
           world_facts: Json;
         };
@@ -23,6 +24,7 @@ export type Database = {
           deleted?: boolean;
           id?: string;
           person_knowledge?: Json;
+          owner_id?: string | null;
           resident_id: string;
           updated_at: string;
           world_facts?: Json;
@@ -31,6 +33,7 @@ export type Database = {
           deleted?: boolean;
           id?: string;
           person_knowledge?: Json;
+          owner_id?: string | null;
           resident_id?: string;
           updated_at?: string;
           world_facts?: Json;
