@@ -133,12 +133,12 @@ export default function ReportsPage() {
               s === 'none' ? '→' :
                 s === 'like' ? '好き' :
                   s === 'like?' ? '好きかも' :
-                    s === 'curious' ? '気になる' :
-                      s === 'awkward' ? '気まずい' :
-                        s === 'dislike' ? '嫌い' : s;
+                s === 'curious' ? '気になる' :
+                  s === 'awkward' ? '気まずい' :
+                    s === 'dislike' ? '嫌い' : s;
             if (a && b) {
-              if (aToB.impression != null) chips.push({ kind: '印象', label: ` ${displayA}→${displayB}：「${toLabel(String(aToB.impression))}」` });
-              if (bToA.impression != null) chips.push({ kind: '印象', label: ` ${displayB}→${displayA}：「${toLabel(String(bToA.impression))}」` });
+              if (aToB.impression != null) chips.push({ kind: '印象', label: ` ${displayA}→${displayB}：${toLabel(String(aToB.impression))}` });
+              if (bToA.impression != null) chips.push({ kind: '印象', label: ` ${displayB}→${displayA}：${toLabel(String(bToA.impression))}` });
             }
           }
 
@@ -147,7 +147,13 @@ export default function ReportsPage() {
             ? replaceResidentIds((ev as any).payload.systemLine, residentNameMap)
             : undefined;
 
+          const participantsText =
+            systemLine && displayA && displayB
+              ? `${displayA} と ${displayB} が話している。`
+              : undefined;
+
           const text =
+            participantsText ??
             systemLine ??
             (ev as any)?.payload?.title ??
             (ev.kind === 'consult'
