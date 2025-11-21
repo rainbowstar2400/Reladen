@@ -63,15 +63,14 @@ export default function LogDetailPanel({ open, data }: { open: boolean; data: Lo
           <div className="space-y-3 p-4">
             {data.lines.map((line, index) => (
               <div key={index} className="flex items-start gap-2">
-                <div className="w-6 shrink-0 text-sm text-muted-foreground">{line.speaker}</div>
+                <div className="w-20 shrink-0 text-right text-sm text-muted-foreground">{line.speaker}</div>
                 <div className="relative max-w-[420px]">
-                  <div className="rounded-lg border px-3 py-1.5">{line.text}</div>
-                  <div className="absolute -left-2 top-3 h-0 w-0 border-y-8 border-y-transparent border-r-8 border-r-border" />
-                  <div className="absolute -left-[7px] top-[13px] h-0 w-0 border-y-[7px] border-y-transparent border-r-[7px] border-r-background" />
+                  <div className="rounded-lg bg-muted px-3 py-1.5">{line.text}</div>
+                  <div className="absolute -left-2 top-3 h-0 w-0 border-y-8 border-y-transparent border-r-8 border-r-muted" />
                 </div>
               </div>
             ))}
-            <div className="mt-6 space-y-2 text-sm text-muted-foreground">
+            <div className="mt-6 space-y-3 text-base leading-relaxed text-muted-foreground">
               {data.system.map((line, index) => (
                 <p key={index}>{line}</p>
               ))}
