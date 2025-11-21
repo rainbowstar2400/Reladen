@@ -98,46 +98,51 @@ export default function NotificationsPanel() {
           <li className="px-4 py-6 text-sm text-gray-500">現在お知らせはありません。</li>
         )}
 
-        {notifications.map((n) => (
-          <li key={n.id} className="px-4 py-3 hover:bg-gray-50 transition">
-            <button
-              onClick={() => openNotification(n)}
-              className="w-full flex items-start gap-3 text-left"
-              aria-label={n.snippet ?? 'お知らせを開く'}
-            >
-              {/* 未読ドット（お知らせ単位） */}
-              <span
-                className={`mt-1 h-2 w-2 rounded-full ${n.status === 'unread' ? 'bg-blue-600' : 'bg-gray-300'
-                  }`}
-              />
+        {notifications.map((n) => {
+          const participantIds = Array.isArray(n.participants) ? n.participants : [];
+          const hasTwoParticipants = participantIds.length === 2;
+          const participantNames = participantIds.map(
+            (id) => residentNameMap[id] ?? id,
+          );
 
-              <span className="flex-1">
-                <div className="text-sm">
-                  {n.type === 'conversation' ? '会話が発生しました' : 'お知らせ'}
-                </div>
+          const title =
+            n.type === 'conversation'
+              ? hasTwoParticipants
+                ? `${participantNames[0]}と${participantNames[1]}が話しています…`
+                : '会話が発生しました'
+              : 'お知らせ';
 
-                {n.snippet && (
-                  <div className="text-xs text-gray-500 line-clamp-1">
-                    {replaceResidentIds(n.snippet, residentNameMap)}
-                  </div>
-                )}
+          return (
+            <li key={n.id} className="px-4 py-3 hover:bg-gray-50 transition">
+              <button
+                onClick={() => openNotification(n)}
+                className="w-full flex items-start gap-3 text-left"
+                aria-label={n.snippet ?? 'お知らせを開く'}
+              >
+                {/* 未読ドット（お知らせ単位） */}
+                <span
+                  className={`mt-1 h-2 w-2 rounded-full ${n.status === 'unread' ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                />
 
-                {/* 日時は事前フォーマットを使用 */}
-                <div className="text-[11px] text-gray-400 mt-0.5">
-                  {formattedDates[n.id] ?? ''}
-                </div>
+                <span className="flex-1">
+                  <div className="text-sm">{title}</div>
 
-                {/* 参加者があれば軽く補助情報 */}
-                {Array.isArray(n.participants) && n.participants.length === 2 && (
+                  {n.type !== 'conversation' && n.snippet && (
+                    <div className="text-xs text-gray-500 line-clamp-1">
+                      {replaceResidentIds(n.snippet, residentNameMap)}
+                    </div>
+                  )}
+
+                  {/* 日時は事前フォーマットを使用 */}
                   <div className="text-[11px] text-gray-400 mt-0.5">
-                    {residentNameMap[n.participants[0]] ?? n.participants[0]} ↔{' '}
-                    {residentNameMap[n.participants[1]] ?? n.participants[1]}
+                    {formattedDates[n.id] ?? ''}
                   </div>
-                )}
-              </span>
-            </button>
-          </li>
-        ))}
+                </span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
