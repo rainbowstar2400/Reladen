@@ -18,6 +18,7 @@ import {
     toJstDateKey,
     ConversationPayloadStrict
 } from '@/lib/repos/conversation-repo'; //
+import { FEELING_LABELS, RELATION_LABELS } from '@/lib/constants/labels';
 
 const AffinityBar = ({ value }: { value: number }) => {
     // 0-100 の範囲外の値を丸める
@@ -51,26 +52,6 @@ const AffinityBar = ({ value }: { value: number }) => {
             })}
         </div>
     );
-};
-
-// 日本語ラベルの定義
-// (packages/shared/types/base.ts の定義に基づく)
-const RELATION_LABELS: Record<Relation['type'], string> = {
-    none: 'なし',
-    friend: '友達',
-    best_friend: '親友',
-    lover: '恋人',
-    family: '家族',
-};
-
-const FEELING_LABELS: Record<Feeling['label'], string> = {
-    none: 'なし',
-    dislike: '苦手',
-    curious: '気になる',
-    maybe_like: '好きかも',
-    like: '好き',
-    love: '大好き',
-    awkward: '気まずい',
 };
 
 // 左右対比の表示列コンポーネント

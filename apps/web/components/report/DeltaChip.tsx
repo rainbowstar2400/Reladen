@@ -1,9 +1,10 @@
 'use client';
 
 import * as React from 'react';
+import { FEELING_LABELS } from '@/lib/constants/labels';
 
 type FavorDelta = number;
-type ImpressionLabel = 'dislike' | 'awkward' | 'none' | 'curious' | 'like?' | 'like' | string;
+type ImpressionLabel = keyof typeof FEELING_LABELS | string;
 type Variant = 'favor' | 'impression';
 
 export type DeltaChipProps = {
@@ -23,15 +24,11 @@ function formatFavorSymbol(n: number): string | null {
 
 /** 印象ラベル → 表示名 */
 function labelImpression(s: ImpressionLabel): string {
-  switch (s) {
-    case 'dislike': return '嫌い';
-    case 'awkward': return '気まずい';
-    case 'none':    return 'なし';
-    case 'curious': return '気になる';
-    case 'like?':   return '好きかも';
-    case 'like':    return '好き';
-    default:        return String(s || '→');
+  if (s in FEELING_LABELS) {
+    return FEELING_LABELS[s as keyof typeof FEELING_LABELS];
   }
+
+  return String(s || '→');
 }
 
 /** 色定義 */
@@ -46,7 +43,7 @@ function colorImpression(s: ImpressionLabel): string {
     case 'awkward': return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
     case 'none':    return 'bg-gray-50 text-gray-600 ring-1 ring-gray-200';
     case 'curious': return 'bg-sky-50 text-sky-700 ring-1 ring-sky-200';
-    case 'like?':   return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
+    case 'maybe_like': return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
     case 'like':    return 'bg-green-50 text-green-700 ring-1 ring-green-200';
     default:        return 'bg-gray-50 text-gray-600 ring-1 ring-gray-200';
   }

@@ -15,24 +15,9 @@ import { useMemo } from 'react';
 import Link from 'next/link'; // Linkを追加
 import { SleepProfile } from '../../../../../../../packages/shared/logic/schedule'; // 型をインポート
 import { Feeling, Relation } from '@/types';
+import { DEFAULT_TRAITS, FEELING_LABELS, GENDER_LABELS, RELATION_LABELS, TRAIT_LABELS } from '@/lib/constants/labels';
 
 // --- (ここから) traits の日本語ラベルと表示用コンポーネント ---
-const DEFAULT_TRAITS = {
-  sociability: 3,    // 社交性
-  empathy: 3,        // 気配り
-  stubbornness: 3,   // 頑固さ
-  activity: 3,       // 行動力
-  expressiveness: 3, // 表現力
-} as const;
-
-const TRAIT_LABELS: Record<keyof typeof DEFAULT_TRAITS, string> = {
-  sociability: '社交性',
-  empathy: '気配り',
-  stubbornness: '頑固さ',
-  activity: '行動力',
-  expressiveness: '表現力',
-};
-
 // 表示用の簡易レーティングボックス
 const RatingBoxDisplay = ({ value }: { value: number }) => (
   <div className="flex space-x-1">
@@ -75,24 +60,6 @@ const ProfileRow = ({ label, value, isBlock = false }: { label: string; value: R
   );
 };
 // --- (ここまで) 表示用のヘルパーコンポーネント (ProfileRow) ---
-
-const RELATION_LABELS: Record<Relation['type'], string> = {
-  none: '（なし）',
-  friend: '友達',
-  best_friend: '親友',
-  lover: '恋人',
-  family: '家族',
-};
-
-const FEELING_LABELS: Record<Feeling['label'], string> = {
-  none: '（なし）',
-  dislike: '苦手',
-  curious: '気になる',
-  maybe_like: '好きかも',
-  like: '好き',
-  love: '大好き',
-  awkward: '気まずい',
-};
 
 export default function ResidentDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
@@ -151,15 +118,6 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   // traits にデフォルト値をマージ (DBに traits が null の場合に対応)
   const traits = { ...DEFAULT_TRAITS, ...(resident.traits as any) };
   // --- (ここまで) プリセットIDからラベルを取得 ---
-
-  // --- (ここから) 性別ラベルの定義 ---
-  const GENDER_LABELS: Record<string, string> = {
-    male: '男性',
-    female: '女性',
-    nonbinary: 'なし',
-    other: 'その他',
-  };
-  // --- (ここまで) 性別ラベルの定義 ---
 
 
   return (
