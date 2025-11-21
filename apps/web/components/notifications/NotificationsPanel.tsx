@@ -10,13 +10,50 @@ import {
 } from '@/lib/data/notifications';
 import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 import type { NotificationRecord } from '@repo/shared/types/conversation';
+import { Button } from '@/components/ui/button';
 
 export default function NotificationsPanel() {
   const { data: notifications = [], isLoading } = useNotifications();
   const markRead = useMarkNotificationRead();
   const router = useRouter();
   const [formattedDates, setFormattedDates] = React.useState<Record<string, string>>({});
+  const [page, setPage] = React.useState(1);
   const residentNameMap = useResidentNameMap();
+
+  const filteredNotifications = React.useMemo(() => {
+    const now = Date.now();
+
+    return notifications.filter((n) => {
+      const occurredAt = new Date(n.occurredAt).getTime();
+      const diffHours = (now - occurredAt) / (1000 * 60 * 60);
+
+      if (n.status === 'read') {
+        return diffHours < 5;
+      }
+
+      if (n.status === 'unread') {
+        return diffHours < 10;
+      }
+
+      return true;
+    });
+  }, [notifications]);
+
+  const totalPages = React.useMemo(
+    () => Math.max(1, Math.ceil(filteredNotifications.length / 5)),
+    [filteredNotifications.length],
+  );
+
+  React.useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const paginatedNotifications = React.useMemo(() => {
+    const start = (page - 1) * 5;
+    return filteredNotifications.slice(start, start + 5);
+  }, [filteredNotifications, page]);
 
   React.useEffect(() => {
     const map: Record<string, string> = {};
@@ -94,11 +131,11 @@ export default function NotificationsPanel() {
           <li className="px-4 py-3 text-sm text-gray-500">お知らせを読み込み中…</li>
         )}
 
-        {notifications.length === 0 && !isLoading && (
+        {filteredNotifications.length === 0 && !isLoading && (
           <li className="px-4 py-6 text-sm text-gray-500">現在お知らせはありません。</li>
         )}
 
-        {notifications.map((n) => {
+        {paginatedNotifications.map((n) => {
           const participantIds = Array.isArray(n.participants) ? n.participants : [];
           const hasTwoParticipants = participantIds.length === 2;
           const participantNames = participantIds.map(
@@ -144,6 +181,25 @@ export default function NotificationsPanel() {
           );
         })}
       </ul>
+      <div className="px-4 py-3 flex items-center justify-center gap-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+          disabled={page <= 1}
+        >
+          {'< 前へ'}
+        </Button>
+        <div className="text-sm text-gray-600">{page} / {totalPages}</div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+          disabled={page >= totalPages}
+        >
+          {'次へ >'}
+        </Button>
+      </div>
     </div>
   );
 }
