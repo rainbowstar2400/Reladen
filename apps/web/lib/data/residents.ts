@@ -83,7 +83,7 @@ export function useResidentNameMap() {
 
 /**
  * 任意のテキスト内に含まれる住人ID（UUID）を、日本語名に置き換える簡易ヘルパー。
- * - 元の文字列を壊さず、対応するIDだけを replaceAll で差し替える。
+ * - 元の文字列を壊さず、対応するIDだけをまとめて差し替える。
  * - 住人名がまだ取得できていない場合は、元のIDをそのまま返す。
  */
 export function replaceResidentIds(
@@ -93,7 +93,8 @@ export function replaceResidentIds(
   let result = text;
   for (const [id, name] of Object.entries(residentNameMap)) {
     if (!id || !name) continue;
-    result = result.replaceAll(id, name);
+    // replaceAll が利用できない環境でも動作するように split/join で置換する
+    result = result.split(id).join(name);
   }
   return result;
 }
