@@ -70,7 +70,7 @@ export default function DeltaChip(props: DeltaChipProps) {
   }
 
   // --- 「印象」用（常に表示） ---
-  const label = labelImpression(value as ImpressionLabel).replace(/[「」]/g, '');
+  const label = labelImpression(value as ImpressionLabel).replace(/[「」『』]/g, '');
   const palette = colorImpression(value as ImpressionLabel);
 
   return (

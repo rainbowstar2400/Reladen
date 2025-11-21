@@ -5,7 +5,7 @@ import { listConversationEventsByDate } from '@/lib/repos/conversation-repo';
 import type { ConversationDayGroup } from '@/lib/repos/conversation-repo';
 import { useRouter } from 'next/navigation';
 import DeltaChip from './DeltaChip';
-import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
+import { useResidentNameMap } from '@/lib/data/residents';
 
 /**
  * 日報パネル（会話まとめ）
@@ -89,11 +89,6 @@ export default function ReportPanel() {
                                             <DeltaChip variant="favor" value={it.deltas.bToA.favor} size="sm" />
                                             <DeltaChip variant="impression" value={it.deltas.bToA.impression} size="sm" />
                                         </div>
-                                        {it.systemLine && (
-                                            <div className="text-xs text-gray-400 mt-0.5">
-                                                {replaceResidentIds(it.systemLine, residentNameMap)}
-                                            </div>
-                                        )}
                                     </li>
                                 );
                             })}
