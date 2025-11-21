@@ -71,6 +71,10 @@ export default function LogDetailPanel({ open, data }: { open: boolean; data: Lo
                     <div className="rounded-2xl rounded-tl-sm bg-muted px-4 py-2 text-sm leading-relaxed">
                       {line.text}
                     </div>
+                    <div
+                      className="absolute left-[-6px] top-3 h-0 w-0 border-y-[6px] border-r-[8px] border-y-transparent border-r-muted"
+                      aria-hidden="true"
+                    />
                   </div>
                 </Fragment>
               ))}
