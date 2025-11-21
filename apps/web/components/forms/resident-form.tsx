@@ -32,6 +32,7 @@ import { useFormDirty } from '@/components/providers/FormDirtyProvider';
 import { useLeaveConfirm } from '@/lib/hooks/useLeaveConfirm';
 import { usePresetsByCategory, useUpsertPreset } from '@/lib/data/presets';
 import { Loader2 } from 'lucide-react';
+import { DEFAULT_TRAITS, RELATION_LABELS, TRAIT_LABELS } from '@/lib/constants/labels';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
 const MBTI_TYPES = [
@@ -40,15 +41,6 @@ const MBTI_TYPES = [
   'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
   'ISTP', 'ISFP', 'ESTP', 'ESFP',
 ] as const;
-
-// traits の初期値（未設定でも落ちないように）
-const DEFAULT_TRAITS = {
-  sociability: 3,    // 社交性
-  empathy: 3,        // 気配り
-  stubbornness: 3,   // 頑固さ
-  activity: 3,       // 行動力
-  expressiveness: 3, // 表現力
-} as const;
 
 // 追加: 0時〜23時の選択肢を生成
 const HOURS_OPTIONS = Array.from({ length: 24 }, (_, i) => {
@@ -301,14 +293,6 @@ export function ResidentForm({
 
   // ブラウザ操作 (リロード/戻る) の監視フックを呼び出す
   useLeaveConfirm();
-
-  const RELATION_TYPE_JP: Record<RelationType, string> = {
-    none: 'なし',
-    friend: '友達',
-    best_friend: '親友',
-    lover: '恋人',
-    family: '家族',
-  };
 
   // 他の住人リストを取得 (自分を除く)
   const { data: allResidents } = useResidents();
@@ -1172,13 +1156,9 @@ export function ResidentForm({
             <p id="age-help" className="text-xs text-muted-foreground mt-1">
               数値が高いほどその性格が強い（よく表れる）ことを示します。
             </p>
-            {([
-              { key: 'sociability', label: '社交性' },
-              { key: 'empathy', label: '気配り' },
-              { key: 'stubbornness', label: '頑固さ' },
-              { key: 'activity', label: '行動力' },
-              { key: 'expressiveness', label: '表現力' },
-            ] as const).map(({ key, label }) => (
+            {(
+              Object.entries(TRAIT_LABELS) as [keyof typeof TRAIT_LABELS, string][]
+            ).map(([key, label]) => (
               <FormField
                 key={key}
                 control={form.control}
@@ -1328,10 +1308,9 @@ export function ResidentForm({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {/* 予め定義した RELATION_TYPE_JP を使用 */}
                           {relationTypeEnum.enumValues.map((type) => (
                             <SelectItem key={type} value={type}>
-                              {RELATION_TYPE_JP[type] ?? type}
+                              {RELATION_LABELS[type] ?? type}
                             </SelectItem>
                           ))}
                         </SelectContent>
