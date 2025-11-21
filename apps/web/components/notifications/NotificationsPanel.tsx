@@ -8,7 +8,7 @@ import {
   useMarkNotificationRead,
   fetchEventById,
 } from '@/lib/data/notifications';
-import { useResidentNameMap } from '@/lib/data/residents';
+import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 import type { NotificationRecord } from '@repo/shared/types/conversation';
 
 export default function NotificationsPanel() {
@@ -117,7 +117,9 @@ export default function NotificationsPanel() {
                 </div>
 
                 {n.snippet && (
-                  <div className="text-xs text-gray-500 line-clamp-1">{n.snippet}</div>
+                  <div className="text-xs text-gray-500 line-clamp-1">
+                    {replaceResidentIds(n.snippet, residentNameMap)}
+                  </div>
                 )}
 
                 {/* 日時は事前フォーマットを使用 */}

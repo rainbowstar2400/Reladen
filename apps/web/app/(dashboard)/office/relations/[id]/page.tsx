@@ -1,7 +1,7 @@
 'use client';
 
 import { useRelation } from '@/lib/data/relations';
-import { useResident } from '@/lib/data/residents';
+import { replaceResidentIds, useResident } from '@/lib/data/residents';
 import { useFeelings } from '@/lib/data/feelings';
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -207,6 +207,11 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
     const nameA = residentA.name ?? '住人A';
     const nameB = residentB.name ?? '住人B';
 
+    const residentNameMap: Record<string, string> = {
+        [residentA.id]: nameA,
+        [residentB.id]: nameB,
+    };
+
     // 関係タイプを日本語に変換 (デフォルトは 'none' 扱い)
     const relationType = relation.type ?? 'none';
     const relationLabel = RELATION_LABELS[relationType] ?? '（未設定）';
@@ -283,7 +288,9 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
                                             {dateLabel} {timeLabel}
                                         </p>
                                         <p className="text-muted-foreground truncate">
-                                            {payload.systemLine ?? (payload.lines[0]?.text ?? '会話')}
+                                            {payload.systemLine
+                                                ? replaceResidentIds(payload.systemLine, residentNameMap)
+                                                : (payload.lines[0]?.text ?? '会話')}
                                         </p>
                                     </li>
                                 );

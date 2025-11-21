@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { listLocal } from '@/lib/db-local';
 import type { EventLogStrict } from '@repo/shared/types/conversation';
-import { useResidentNameMap } from '@/lib/data/residents';
+import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度'
 type ChangeKindFilter = ChangeKind | ''
@@ -124,10 +124,10 @@ export default function ReportsPage() {
             const favorAB = Number(aToB.favor ?? 0);
             const favorBA = Number(bToA.favor ?? 0);
             if (a && b) {
-              if (favorAB > 0) chips.push({ kind: '好感度', label: ` ${a}→${b}：↑` });
-              if (favorAB < 0) chips.push({ kind: '好感度', label: ` ${a}→${b}：↓` });
-              if (favorBA > 0) chips.push({ kind: '好感度', label: ` ${b}→${a}：↑` });
-              if (favorBA < 0) chips.push({ kind: '好感度', label: ` ${b}→${a}：↓` });
+              if (favorAB > 0) chips.push({ kind: '好感度', label: ` ${displayA}→${displayB}：↑` });
+              if (favorAB < 0) chips.push({ kind: '好感度', label: ` ${displayA}→${displayB}：↓` });
+              if (favorBA > 0) chips.push({ kind: '好感度', label: ` ${displayB}→${displayA}：↑` });
+              if (favorBA < 0) chips.push({ kind: '好感度', label: ` ${displayB}→${displayA}：↓` });
             }
             const toLabel = (s: string) =>
               s === 'none' ? '→' :
@@ -137,14 +137,18 @@ export default function ReportsPage() {
                       s === 'awkward' ? '気まずい' :
                         s === 'dislike' ? '嫌い' : s;
             if (a && b) {
-              if (aToB.impression != null) chips.push({ kind: '印象', label: ` ${a}→${b}：「${toLabel(String(aToB.impression))}」` });
-              if (bToA.impression != null) chips.push({ kind: '印象', label: ` ${b}→${a}：「${toLabel(String(bToA.impression))}」` });
+              if (aToB.impression != null) chips.push({ kind: '印象', label: ` ${displayA}→${displayB}：「${toLabel(String(aToB.impression))}」` });
+              if (bToA.impression != null) chips.push({ kind: '印象', label: ` ${displayB}→${displayA}：「${toLabel(String(bToA.impression))}」` });
             }
           }
 
           // 表示テキスト（会話/相談でフォールバック）
+          const systemLine = typeof (ev as any)?.payload?.systemLine === 'string'
+            ? replaceResidentIds((ev as any).payload.systemLine, residentNameMap)
+            : undefined;
+
           const text =
-            (ev as any)?.payload?.systemLine ??
+            systemLine ??
             (ev as any)?.payload?.title ??
             (ev.kind === 'consult'
               ? `${displayA ?? ''} から相談を受けた。`.trim()

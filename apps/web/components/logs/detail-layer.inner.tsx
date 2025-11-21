@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import LogDetailPanel, { LogDetail } from '@/components/logs/log-detail-panel';
 import { fetchEventById } from '@/lib/data/notifications';
 import type { EventLogStrict } from '@repo/shared/types/conversation';
-import { useResidentNameMap } from '@/lib/data/residents';
+import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 
 /** 会話ペイロード（Union回避用の厳密型） */
 type ConversationPayloadStrict = {
@@ -92,7 +92,8 @@ export default function DetailLayerInner() {
         speaker: residentNameMap[ln.speaker] ?? ln.speaker,
         text: ln.text,
       }));
-      const system: string[] = p.systemLine ? [p.systemLine] : [];
+      const systemLine = p.systemLine ? replaceResidentIds(p.systemLine, residentNameMap) : '';
+      const system: string[] = systemLine ? [systemLine] : [];
 
       const next: LogDetail = {
         id: (ev as any).id,
