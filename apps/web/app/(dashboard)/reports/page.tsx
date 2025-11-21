@@ -185,7 +185,7 @@ export default function ReportsPage() {
   // ---- フィルタ＆ソート ----
   const filtered = useMemo(() => {
     const items = ALL
-      .filter(it => (date ? it.at.startsWith(date) : true))
+      .filter(it => (!date || it.at.startsWith(date)))
       .filter(it => (charA ? (it.a === charA || it.b === charA) : true))
       .filter(it => (charB ? (it.a === charB || it.b === charB) : true))
       .filter(it => (kind === '' ? true : it.chips?.some(chip => chip.kind === kind)))
@@ -208,10 +208,6 @@ export default function ReportsPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const start = (page - 1) * pageSize
   const pageItems = filtered.slice(start, start + pageSize)
-
-  const hasDate = date !== ''
-  const d = hasDate ? new Date(`${date}T00:00:00+09:00`) : null
-  const { y, m, d: dd, wd } = hasDate && d ? fmtDate(d) : { y: '', m: '', d: '', wd: '' }
 
   // convItems から登場キャラを動的に算出
   const allCharacters = useMemo(() => {
@@ -260,67 +256,75 @@ export default function ReportsPage() {
 
       <div className="relative">
         <div className="space-y-6">
-          {/* 日付見出し */}
-          <div>
-            <h2 className="text-2xl font-semibold">
-              {hasDate ? (
-                <>
-                  {y}/{m}/{dd} <span className="text-muted-foreground text-lg">{wd}</span>
-                </>
-              ) : (
-                '全期間'
-              )}
-            </h2>
-            <div className="mt-2 h-px w-full bg-border" />
-          </div>
-
           {/* リスト（カードは同じ高さ。チップが無い行も高さ確保） */}
           <div className="space-y-4">
             {pageItems.length === 0 && !loading && (
               <p className="py-16 text-center text-sm text-muted-foreground">この条件に一致する記録はありません。</p>
             )}
 
-            {pageItems.map(it => (
-              <button
-                key={it.id}
-                type="button"
-                className="w-full text-left"
-                onClick={() => {
-                  if (it.category === 'consult') {
-                    openConsult(it.id)  // ?consult=<id> で相談モーダル
-                  } else if (it.category === 'conversation') {
-                    openLog(it.id)      // ?log=<id> で会話モーダル（既存）
-                  } else {
-                    // other：今は何もしない / 将来の拡張（例：systemイベント詳細など）
-                  }
-                }}
-              >
-                <div className="flex items-start justify-between rounded-2xl border px-4 py-3 hover:bg-muted/50">
-                  <div className="space-y-2">
-                    <p>{it.text}</p>
-                    <div className="min-h-6 flex flex-wrap gap-2">
-                      {it.chips?.map((c, idx) => (
-                        <Badge
-                          key={idx}
-                          variant="outline"
-                          className={
-                            CHIP_CLASS[c.kind] +
-                            ' text-[11px] font-medium transition-colors ' +
-                            (kind && c.kind === kind ? 'ring-1 ring-current' : '')
-                          }
-                        >
-                          {c.kind}
-                          {c.label}
-                        </Badge>
-                      ))}
+            {pageItems.map((it, index) => {
+              const { y, m, d, wd } = fmtDate(new Date(it.at))
+              const prev = index > 0 ? pageItems[index - 1] : null
+              const prevDate = prev ? fmtDate(new Date(prev.at)) : null
+              const showHeading =
+                index === 0 ||
+                !prevDate ||
+                prevDate.y !== y ||
+                prevDate.m !== m ||
+                prevDate.d !== d
+
+              return (
+                <React.Fragment key={it.id}>
+                  {showHeading && (
+                    <div className="mt-6 first:mt-0">
+                      <h2 className="text-2xl font-semibold">
+                        {y}/{m}/{d} <span className="text-muted-foreground text-lg">{wd}</span>
+                      </h2>
+                      <div className="mt-2 h-px w-full bg-border" />
                     </div>
-                  </div>
-                  <div className="ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
-                    {fmtTime(it.at)}
-                  </div>
-                </div>
-              </button>
-            ))}
+                  )}
+
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => {
+                      if (it.category === 'consult') {
+                        openConsult(it.id)  // ?consult=<id> で相談モーダル
+                      } else if (it.category === 'conversation') {
+                        openLog(it.id)      // ?log=<id> で会話モーダル（既存）
+                      } else {
+                        // other：今は何もしない / 将来の拡張（例：systemイベント詳細など）
+                      }
+                    }}
+                  >
+                    <div className="flex items-start justify-between rounded-2xl border px-4 py-3 hover:bg-muted/50">
+                      <div className="space-y-2">
+                        <p>{it.text}</p>
+                        <div className="min-h-6 flex flex-wrap gap-2">
+                          {it.chips?.map((c, idx) => (
+                            <Badge
+                              key={idx}
+                              variant="outline"
+                              className={
+                                CHIP_CLASS[c.kind] +
+                                ' text-[11px] font-medium transition-colors ' +
+                                (kind && c.kind === kind ? 'ring-1 ring-current' : '')
+                              }
+                            >
+                              {c.kind}
+                              {c.label}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="ml-4 shrink-0 tabular-nums text-sm text-muted-foreground">
+                        {fmtTime(it.at)}
+                      </div>
+                    </div>
+                  </button>
+                </React.Fragment>
+              )
+            })}
 
           </div>
 
