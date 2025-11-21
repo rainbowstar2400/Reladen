@@ -74,7 +74,7 @@ export default function ReportPanel() {
                                     >
                                         <div>
                                             <span className="font-medium text-gray-800">
-                                                {participantA} ↔ {participantB}
+                                                {participantA}と{participantB}が話しています
                                             </span>
                                             <span className="ml-2 text-gray-500 text-xs">
                                                 {it.timeLabel}
