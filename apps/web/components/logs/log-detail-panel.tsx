@@ -1,5 +1,5 @@
 'use client'
-import { useEffect } from 'react'
+import { Fragment, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -60,16 +60,21 @@ export default function LogDetailPanel({ open, data }: { open: boolean; data: Lo
             </div>
           </div>
 
-          <div className="space-y-3 p-4">
-            {data.lines.map((line, index) => (
-              <div key={index} className="flex items-start gap-2">
-                <div className="shrink-0 py-2 text-sm font-medium text-foreground">{line.speaker}</div>
-                <div className="relative max-w-[420px]">
-                  <div className="rounded-lg bg-muted px-3 py-2">{line.text}</div>
-                  <div className="absolute -left-2 top-3 h-0 w-0 border-y-8 border-y-transparent border-r-8 border-r-muted" />
-                </div>
-              </div>
-            ))}
+          <div className="p-4">
+            <div className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-4 items-start p-4 pb-20">
+              {data.lines.map((line, index) => (
+                <Fragment key={index}>
+                  <div className="text-sm font-medium text-foreground text-center py-2 whitespace-nowrap">
+                    {line.speaker}
+                  </div>
+                  <div className="relative max-w-[400px]">
+                    <div className="rounded-2xl rounded-tl-sm bg-muted px-4 py-2 text-sm leading-relaxed">
+                      {line.text}
+                    </div>
+                  </div>
+                </Fragment>
+              ))}
+            </div>
             <div className="mt-6 space-y-3 text-base leading-relaxed text-foreground">
               {data.system.map((line, index) => (
                 <p key={index}>{line}</p>
