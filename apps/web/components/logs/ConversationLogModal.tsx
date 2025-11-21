@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { loadConversationEventById } from '@/lib/repos/conversation-repo';
 import { X } from 'lucide-react';
-import { useResidentNameMap } from '@/lib/data/residents';
+import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 
 type Props = {
   open: boolean;
@@ -87,7 +87,7 @@ export default function ConversationLogModal(props: Props) {
 
           {data?.payload?.systemLine && (
             <div className="mt-3 text-xs text-muted-foreground border-t pt-3">
-              {data.payload.systemLine}
+              {replaceResidentIds(data.payload.systemLine, residentNameMap)}
             </div>
           )}
         </div>
