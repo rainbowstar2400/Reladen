@@ -5,6 +5,7 @@ import { listConversationEventsByDate } from '@/lib/repos/conversation-repo';
 import type { ConversationDayGroup } from '@/lib/repos/conversation-repo';
 import { useRouter } from 'next/navigation';
 import DeltaChip from './DeltaChip';
+import { useResidentNameMap } from '@/lib/data/residents';
 
 /**
  * 日報パネル（会話まとめ）
@@ -13,6 +14,7 @@ export default function ReportPanel() {
     const [groups, setGroups] = React.useState<ConversationDayGroup[]>([]);
     const [loading, setLoading] = React.useState(true);
     const router = useRouter();
+    const residentNameMap = useResidentNameMap();
 
     React.useEffect(() => {
         (async () => {
@@ -60,36 +62,41 @@ export default function ReportPanel() {
                             {g.dateLabel}（{g.weekday}）
                         </h3>
                         <ul className="space-y-1">
-                            {g.items.map((it) => (
-                                <li
-                                    key={it.id}
-                                    className="text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-1 hover:bg-gray-50 p-2 rounded-lg cursor-pointer transition"
-                                    onClick={() => handleOpenLog(it.id)}
-                                >
-                                    <div>
-                                        <span className="font-medium text-gray-800">
-                                            {it.participants[0]} ↔ {it.participants[1]}
-                                        </span>
-                                        <span className="ml-2 text-gray-500 text-xs">
-                                            {it.timeLabel}
-                                        </span>
-                                    </div>
-                                    <div className="flex flex-wrap gap-2">
-                                        <span className="text-[11px] text-gray-400 mr-1">A→B</span>
-                                        <DeltaChip variant="favor" value={it.deltas.aToB.favor} size="sm" />
-                                        <DeltaChip variant="impression" value={it.deltas.aToB.impression} size="sm" />
-                                        <span className="text-[11px] text-gray-400 mx-2">/</span>
-                                        <span className="text-[11px] text-gray-400 mr-1">B→A</span>
-                                        <DeltaChip variant="favor" value={it.deltas.bToA.favor} size="sm" />
-                                        <DeltaChip variant="impression" value={it.deltas.bToA.impression} size="sm" />
-                                    </div>
-                                    {it.systemLine && (
-                                        <div className="text-xs text-gray-400 mt-0.5">
-                                            {it.systemLine}
+                            {g.items.map((it) => {
+                                const participantA = residentNameMap[it.participants[0]] ?? it.participants[0];
+                                const participantB = residentNameMap[it.participants[1]] ?? it.participants[1];
+
+                                return (
+                                    <li
+                                        key={it.id}
+                                        className="text-sm flex flex-col md:flex-row md:items-center md:justify-between gap-1 hover:bg-gray-50 p-2 rounded-lg cursor-pointer transition"
+                                        onClick={() => handleOpenLog(it.id)}
+                                    >
+                                        <div>
+                                            <span className="font-medium text-gray-800">
+                                                {participantA} ↔ {participantB}
+                                            </span>
+                                            <span className="ml-2 text-gray-500 text-xs">
+                                                {it.timeLabel}
+                                            </span>
                                         </div>
-                                    )}
-                                </li>
-                            ))}
+                                        <div className="flex flex-wrap gap-2">
+                                            <span className="text-[11px] text-gray-400 mr-1">A→B</span>
+                                            <DeltaChip variant="favor" value={it.deltas.aToB.favor} size="sm" />
+                                            <DeltaChip variant="impression" value={it.deltas.aToB.impression} size="sm" />
+                                            <span className="text-[11px] text-gray-400 mx-2">/</span>
+                                            <span className="text-[11px] text-gray-400 mr-1">B→A</span>
+                                            <DeltaChip variant="favor" value={it.deltas.bToA.favor} size="sm" />
+                                            <DeltaChip variant="impression" value={it.deltas.bToA.impression} size="sm" />
+                                        </div>
+                                        {it.systemLine && (
+                                            <div className="text-xs text-gray-400 mt-0.5">
+                                                {it.systemLine}
+                                            </div>
+                                        )}
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </section>
                 ))}

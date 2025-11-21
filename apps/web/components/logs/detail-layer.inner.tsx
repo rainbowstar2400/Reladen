@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import LogDetailPanel, { LogDetail } from '@/components/logs/log-detail-panel';
 import { fetchEventById } from '@/lib/data/notifications';
 import type { EventLogStrict } from '@repo/shared/types/conversation';
+import { useResidentNameMap } from '@/lib/data/residents';
 
 /** 会話ペイロード（Union回避用の厳密型） */
 type ConversationPayloadStrict = {
@@ -54,6 +55,7 @@ export default function DetailLayerInner() {
   const sp = useSearchParams();
   const logId = sp.get('log');
   const [data, setData] = React.useState<LogDetail | null>(null);
+  const residentNameMap = useResidentNameMap();
 
   React.useEffect(() => {
     let alive = true;
@@ -81,8 +83,15 @@ export default function DetailLayerInner() {
       const p = ev.payload;
       const { date, weekday, time } = formatDateParts((ev as any).updated_at); // local entity 互換
 
-      const title = p.topic ?? `${p.participants[0]} と ${p.participants[1]} の会話`;
-      const lines: LogDetail['lines'] = p.lines.map((ln) => ({ speaker: ln.speaker, text: ln.text }));
+      const participantNames: [string, string] = [
+        residentNameMap[p.participants[0]] ?? p.participants[0],
+        residentNameMap[p.participants[1]] ?? p.participants[1],
+      ];
+      const title = p.topic ?? `${participantNames[0]} と ${participantNames[1]} の会話`;
+      const lines: LogDetail['lines'] = p.lines.map((ln) => ({
+        speaker: residentNameMap[ln.speaker] ?? ln.speaker,
+        text: ln.text,
+      }));
       const system: string[] = p.systemLine ? [p.systemLine] : [];
 
       const next: LogDetail = {
@@ -100,7 +109,7 @@ export default function DetailLayerInner() {
     return () => {
       alive = false;
     };
-  }, [logId]);
+  }, [logId, residentNameMap]);
 
   return <LogDetailPanel open={!!logId} data={data} />;
 }

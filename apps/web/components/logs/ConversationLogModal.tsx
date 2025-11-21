@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { loadConversationEventById } from '@/lib/repos/conversation-repo';
 import { X } from 'lucide-react';
+import { useResidentNameMap } from '@/lib/data/residents';
 
 type Props = {
   open: boolean;
@@ -19,6 +20,7 @@ export default function ConversationLogModal(props: Props) {
     queryFn: () => (eventId ? loadConversationEventById(eventId) : Promise.resolve(null)),
     enabled: open && !!eventId,
   });
+  const residentNameMap = useResidentNameMap();
 
   const [playedIndex, setPlayedIndex] = useState(0);
 
@@ -42,8 +44,13 @@ export default function ConversationLogModal(props: Props) {
 
   const visibleLines = useMemo(() => {
     const lines: Array<{ speaker: string; text: string }> = data?.payload?.lines ?? [];
-    return lines.slice(0, playedIndex);
-  }, [data, playedIndex]);
+    return lines
+      .slice(0, playedIndex)
+      .map((line) => ({
+        speaker: residentNameMap[line.speaker] ?? line.speaker,
+        text: line.text,
+      }));
+  }, [data, playedIndex, residentNameMap]);
 
   if (!open) return null;
 
