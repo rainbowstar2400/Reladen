@@ -113,10 +113,10 @@ export default function NotificationsPanel() {
               : 'お知らせ';
 
           return (
-            <li key={n.id} className="px-4 py-3 hover:bg-gray-50 transition">
+            <li key={n.id} className="px-4 py-2 hover:bg-gray-50 transition">
               <button
                 onClick={() => openNotification(n)}
-                className="w-full flex items-start gap-3 text-left"
+                className="w-full flex items-center gap-3 text-left"
                 aria-label={n.snippet ?? 'お知らせを開く'}
               >
                 {/* 未読ドット（お知らせ単位） */}
@@ -125,7 +125,7 @@ export default function NotificationsPanel() {
                     }`}
                 />
 
-                <span className="flex-1">
+                <span className="flex-1 min-w-0">
                   <div className="text-sm">{title}</div>
 
                   {n.type !== 'conversation' && n.snippet && (
@@ -133,12 +133,12 @@ export default function NotificationsPanel() {
                       {replaceResidentIds(n.snippet, residentNameMap)}
                     </div>
                   )}
-
-                  {/* 日時は事前フォーマットを使用 */}
-                  <div className="text-[11px] text-gray-400 mt-0.5">
-                    {formattedDates[n.id] ?? ''}
-                  </div>
                 </span>
+
+                {/* 日時は事前フォーマットを使用 */}
+                <div className="text-[11px] text-gray-400 ml-auto whitespace-nowrap pl-2">
+                  {formattedDates[n.id] ?? ''}
+                </div>
               </button>
             </li>
           );
