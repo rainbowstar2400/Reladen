@@ -5,9 +5,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { listConversationEventsByDate } from '@/lib/repos/conversation-repo';
 import { listLocal } from '@/lib/db-local';
 import type { EventLogStrict } from '@repo/shared/types/conversation';
+import { useResidentNameMap } from '@/lib/data/residents';
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度'
 type ChangeKindFilter = ChangeKind | ''
@@ -57,6 +57,7 @@ function useOpenConsult() {
 export default function ReportsPage() {
   const router = useRouter()
   const openConsult = useOpenConsult()
+  const residentNameMap = useResidentNameMap();
 
   function openLog(id: string) {
     const params = new URLSearchParams(
@@ -111,6 +112,9 @@ export default function ReportsPage() {
           const a = participants[0] ?? undefined;
           const b = participants[1] ?? undefined;
 
+          const displayA = a ? (residentNameMap[a] ?? a) : '';
+          const displayB = b ? (residentNameMap[b] ?? b) : '';
+
           // chips（あれば）を抽出：favor / impression を前実装に寄せて簡易生成
           const chips: ReportItem['chips'] = [];
           const deltas = (ev as any)?.payload?.deltas ?? (ev as any)?.deltas;
@@ -143,8 +147,8 @@ export default function ReportsPage() {
             (ev as any)?.payload?.systemLine ??
             (ev as any)?.payload?.title ??
             (ev.kind === 'consult'
-              ? `${a ?? ''} から相談を受けた。`.trim()
-              : (a && b) ? `${a} と ${b} が会話した。` : '出来事が記録されました。');
+              ? `${displayA ?? ''} から相談を受けた。`.trim()
+              : (displayA && displayB) ? `${displayA} と ${displayB} が会話した。` : '出来事が記録されました。');
 
           const category: ReportItem['category'] =
             ev.kind === 'consult' ? 'consult'
@@ -169,7 +173,7 @@ export default function ReportsPage() {
       }
     })();
     return () => { alive = false };
-  }, [date]);
+  }, [date, residentNameMap]);
 
   const ALL: ReportItem[] = useMemo(() => convItems, [convItems]);
 
@@ -226,11 +230,11 @@ export default function ReportsPage() {
             <span className="text-sm text-muted-foreground">キャラクター：</span>
             <select value={charA} onChange={e => setCharA(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-background">
               <option value="">—</option>
-              {allCharacters.map(c => <option key={c} value={c}>{c}</option>)}
+              {allCharacters.map(c => <option key={c} value={c}>{residentNameMap[c] ?? c}</option>)}
             </select>
             <select value={charB} onChange={e => setCharB(e.target.value)} className="rounded-md border px-2 py-1 text-sm bg-background">
               <option value="">—</option>
-              {allCharacters.map(c => <option key={c} value={c}>{c}</option>)}
+              {allCharacters.map(c => <option key={c} value={c}>{residentNameMap[c] ?? c}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2">

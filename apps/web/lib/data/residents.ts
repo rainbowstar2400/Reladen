@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Resident, Relation, Feeling, Nickname, TempRelationData } from '@/types';
 import { listLocal, putLocal, markDeleted } from '@/lib/db-local';
@@ -66,6 +67,18 @@ async function fetchResidents() {
 export function useResidents() {
   // fetchResidents を使うように変更
   return useQuery({ queryKey: KEY, queryFn: fetchResidents });
+}
+
+export function useResidentNameMap() {
+  const { data: residents } = useResidents();
+
+  return React.useMemo(() => {
+    const map: Record<string, string> = {};
+    residents?.forEach((resident) => {
+      map[resident.id] = resident.name;
+    });
+    return map;
+  }, [residents]);
 }
 
 export function useResident(id?: string) {

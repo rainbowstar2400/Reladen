@@ -8,6 +8,7 @@ import {
   useMarkNotificationRead,
   fetchEventById,
 } from '@/lib/data/notifications';
+import { useResidentNameMap } from '@/lib/data/residents';
 import type { NotificationRecord } from '@repo/shared/types/conversation';
 
 export default function NotificationsPanel() {
@@ -15,6 +16,7 @@ export default function NotificationsPanel() {
   const markRead = useMarkNotificationRead();
   const router = useRouter();
   const [formattedDates, setFormattedDates] = React.useState<Record<string, string>>({});
+  const residentNameMap = useResidentNameMap();
 
   React.useEffect(() => {
     const map: Record<string, string> = {};
@@ -126,7 +128,8 @@ export default function NotificationsPanel() {
                 {/* 参加者があれば軽く補助情報 */}
                 {Array.isArray(n.participants) && n.participants.length === 2 && (
                   <div className="text-[11px] text-gray-400 mt-0.5">
-                    {n.participants[0]} ↔ {n.participants[1]}
+                    {residentNameMap[n.participants[0]] ?? n.participants[0]} ↔{' '}
+                    {residentNameMap[n.participants[1]] ?? n.participants[1]}
                   </div>
                 )}
               </span>
