@@ -68,17 +68,12 @@ export default function ReportsPage() {
   }
 
   // ---- フィルタ状態（即時反映） ----
-  const today = useMemo(() => {
-    const d = new Date()
-    const { y, m, d: dd } = fmtDate(d)
-    return `${y}-${m}-${dd}` // input[type=date]
-  }, [])
-  const [date, setDate] = useState(today)
+  const [date, setDate] = useState('')
   const [charA, setCharA] = useState<string>('') // 任意
   const [charB, setCharB] = useState<string>('') // 任意
   const [kind, setKind] = useState<ChangeKindFilter>('')
   const resetFilters = () => {
-    setDate(today)
+    setDate('')
     setCharA('')
     setCharB('')
     setKind('')
@@ -190,7 +185,7 @@ export default function ReportsPage() {
   // ---- フィルタ＆ソート ----
   const filtered = useMemo(() => {
     const items = ALL
-      .filter(it => it.at.startsWith(date))
+      .filter(it => (date ? it.at.startsWith(date) : true))
       .filter(it => (charA ? (it.a === charA || it.b === charA) : true))
       .filter(it => (charB ? (it.a === charB || it.b === charB) : true))
       .filter(it => (kind === '' ? true : it.chips?.some(chip => chip.kind === kind)))
@@ -214,8 +209,9 @@ export default function ReportsPage() {
   const start = (page - 1) * pageSize
   const pageItems = filtered.slice(start, start + pageSize)
 
-  const d = new Date(`${date}T00:00:00+09:00`)
-  const { y, m, d: dd, wd } = fmtDate(d)
+  const hasDate = date !== ''
+  const d = hasDate ? new Date(`${date}T00:00:00+09:00`) : null
+  const { y, m, d: dd, wd } = hasDate && d ? fmtDate(d) : { y: '', m: '', d: '', wd: '' }
 
   // convItems から登場キャラを動的に算出
   const allCharacters = useMemo(() => {
@@ -266,7 +262,15 @@ export default function ReportsPage() {
         <div className="space-y-6">
           {/* 日付見出し */}
           <div>
-            <h2 className="text-2xl font-semibold">{y}/{m}/{dd} <span className="text-muted-foreground text-lg">{wd}</span></h2>
+            <h2 className="text-2xl font-semibold">
+              {hasDate ? (
+                <>
+                  {y}/{m}/{dd} <span className="text-muted-foreground text-lg">{wd}</span>
+                </>
+              ) : (
+                '全期間'
+              )}
+            </h2>
             <div className="mt-2 h-px w-full bg-border" />
           </div>
 
