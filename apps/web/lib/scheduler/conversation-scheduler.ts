@@ -3,7 +3,6 @@
 // 住人同士の会話を “自動発火” させるクライアント側スケジューラ。
 // - マルチタブ重複を localStorage ロックで抑止（TTL 付き）
 // - ジッター付きインターバルで startConversation() を定期実行
-// - 深夜など静穏時間帯はスキップ可能
 // ------------------------------------------------------------
 
 import { listLocal } from "@/lib/db-local";
@@ -215,11 +214,13 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
 
   const tick = async () => {
     try {
+      /* 非アクティブでもタイマーは回す仕様に変更
       // タブ切替などで重複させない
       if (document.hidden) {
         scheduleNext();
         return;
       }
+      */
       // 他タブが担当中ならスキップ
       if (!tryAcquireLock()) {
         scheduleNext();
