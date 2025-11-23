@@ -67,7 +67,7 @@ const SIGNAL_WEIGHTS: Record<'continue' | 'close' | 'park', number> = {
 };
 
 const FAVOR_CLIP = { min: -2, max: 2 } as const;
-const IMPRESSION_ORDER: Impression[] = ['dislike', 'awkward', 'none', 'curious', 'like?', 'like'];
+const IMPRESSION_ORDER: Impression[] = ['dislike', 'dislike?', 'none', 'curious', 'like?', 'like'];
 
 function nextImpression1step(current: Impression, deltaSign: number): Impression {
   if (deltaSign === 0) return current;
@@ -153,8 +153,11 @@ export function evaluateConversation(input: EvalInput): EvaluationResult {
   b2aFavor = clipFavor(b2aFavor);
   const prevA2B: Impression = input.currentImpression?.aToB ?? 'none';
   const prevB2A: Impression = input.currentImpression?.bToA ?? 'none';
-  const nextA2B: Impression = nextImpression1step(prevA2B, Math.sign(a2bFavor));
-  const nextB2A: Impression = nextImpression1step(prevB2A, Math.sign(b2aFavor));
+  // 変化量が +1 以上で上昇、-1 以下で下降、その他は据え置き
+  const deltaSignA2B = a2bFavor >= 1 ? 1 : a2bFavor <= -1 ? -1 : 0;
+  const deltaSignB2A = b2aFavor >= 1 ? 1 : b2aFavor <= -1 ? -1 : 0;
+  const nextA2B: Impression = nextImpression1step(prevA2B, deltaSignA2B);
+  const nextB2A: Impression = nextImpression1step(prevB2A, deltaSignB2A);
 
   // 7) SYSTEM 行（UI用サマリ）
   const bits: string[] = [];

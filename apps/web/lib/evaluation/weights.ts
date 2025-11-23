@@ -1,4 +1,4 @@
-// apps/web/lib/evaluation/weights.ts
+﻿// apps/web/lib/evaluation/weights.ts
 // ------------------------------------------------------------------
 // 会話評価の重み表（外部JSON）を読み込み、メモリにキャッシュする。
 // サーバ側：起動時に public/config/conversation-weights.json を同期読込。
@@ -11,7 +11,7 @@ export type Impression =
   | 'like?'
   | 'like'
   | 'dislike'
-  | 'awkward';
+  | 'dislike?';
 
 export type WeightsConfig = {
   tags: Record<string, number>;
@@ -42,7 +42,7 @@ const DefaultWeights: WeightsConfig = {
   },
   signals: { continue: 0.1, close: 0.2, park: 0 },
   favorClip: { min: -2, max: 2 },
-  impressionOrder: ['dislike', 'awkward', 'none', 'curious', 'like?', 'like']
+  impressionOrder: ['dislike', 'dislike?', 'none', 'curious', 'like?', 'like']
 };
 
 // ===== 共有ユーティリティ =====================================================

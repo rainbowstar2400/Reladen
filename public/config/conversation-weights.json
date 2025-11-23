@@ -22,5 +22,5 @@
     "park": 0
   },
   "favorClip": { "min": -2, "max": 2 },
-  "impressionOrder": ["dislike", "awkward", "none", "curious", "like?", "like"]
+  "impressionOrder": ["dislike", "dislike?", "none", "curious", "like?", "like"]
 }

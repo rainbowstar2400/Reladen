@@ -10,6 +10,7 @@ import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 function translateImpressionLabel(label: string) {
   const dictionary: Record<string, string> = {
     dislike: '苦手',
+    'dislike?': '嫌いかも',
     awkward: '気まずい',
     none: 'なし',
     curious: '気になる',

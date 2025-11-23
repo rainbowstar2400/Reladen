@@ -1,4 +1,4 @@
-// apps/web/lib/persist/persist-conversation.ts
+﻿// apps/web/lib/persist/persist-conversation.ts
 import { putKV as putAny, listKV as listAny } from "@/lib/db/kv-server";
 import { newId } from "@/lib/newId";
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
@@ -37,6 +37,22 @@ async function updateRelationsAndFeelings(params: {
   const [a, b] = params.participants;
   const now = new Date().toISOString();
 
+  const impressionToFeelingLabel = (
+    impression: EvaluationResult["deltas"]["aToB"]["impression"],
+    fallback: Feeling["label"],
+  ): Feeling["label"] => {
+    const map: Record<string, Feeling["label"]> = {
+      dislike: "dislike",
+      "dislike?": "dislike", // feelings には無いので丸める
+      awkward: "dislike",    // 後方互換として dislike に丸める
+      none: "none",
+      curious: "curious",
+      "like?": "maybe_like",
+      like: "like",
+    };
+    return map[String(impression)] ?? fallback ?? "none";
+  };
+
   const clampScore = (value: number) => {
     if (!Number.isFinite(value)) return 0;
     return Math.max(0, Math.min(100, Math.round(value)));
@@ -45,8 +61,7 @@ async function updateRelationsAndFeelings(params: {
   // 好感度（favor）のスコアは -2〜+2 程度の小数なので、
   // UI上の 0〜100 スケールに反映されるように係数を掛ける。
   const favorToScore = (current: number, delta: number) => {
-    const SCALE = 5; // 1会話あたり最大 ±10 まで変化
-    return clampScore(current + delta * SCALE);
+    return clampScore(current + Math.round(delta));
   };
 
   // listAny は null を返す可能性がある
@@ -67,6 +82,15 @@ async function updateRelationsAndFeelings(params: {
   const curScoreAB = recAB?.score ?? 0;
   const curScoreBA = recBA?.score ?? 0;
 
+  const nextLabelAB = impressionToFeelingLabel(
+    params.deltas.aToB.impression,
+    recAB?.label ?? "none",
+  );
+  const nextLabelBA = impressionToFeelingLabel(
+    params.deltas.bToA.impression,
+    recBA?.label ?? "none",
+  );
+
   const nextScoreAB = favorToScore(curScoreAB, params.deltas.aToB.favor);
   const nextScoreBA = favorToScore(curScoreBA, params.deltas.bToA.favor);
 
@@ -75,7 +99,7 @@ async function updateRelationsAndFeelings(params: {
     id: idAB,
     from_id: a,
     to_id: b,
-    label: recAB?.label ?? "none",
+    label: nextLabelAB,
     // 数値を積み上げる簡易実装。プロジェクト本番ロジックが別にあれば差し替えてください。
     score: nextScoreAB,
     updated_at: now,
@@ -87,14 +111,13 @@ async function updateRelationsAndFeelings(params: {
     id: idBA,
     from_id: b,
     to_id: a,
-    label: recBA?.label ?? "none",
+    label: nextLabelBA,
     score: nextScoreBA,
     updated_at: now,
     deleted: false,
   });
 
-  // 印象ラベル（impression）は +1 / -1 の段差を別途管理している想定。
-  // ラベルの正規ロジックが決まっていれば、ここで適用してください。
+  // 印象ラベルも feelings.label に反映（unknown は既存/none にフォールバック）。
 }
 
 /**
