@@ -6,3 +6,4 @@ node_modules
 .env.sentry-build-plugin
 /apps/web/.next/
 /apps/desktop/src-tauri/target/
+AGEMT.md
