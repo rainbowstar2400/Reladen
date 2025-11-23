@@ -21,21 +21,22 @@ import {
 import { FEELING_LABELS, RELATION_LABELS } from '@/lib/constants/labels';
 
 const AffinityBar = ({ value }: { value: number }) => {
-    // 0-100 の範囲外の値を丸める
-    const clampedValue = Math.max(0, Math.min(100, value));
+    // -100 〜 100 の範囲外の値を丸める
+    const clampedValue = Math.max(-100, Math.min(100, value));
+    const filledRange = clampedValue + 100; // 0〜200 の幅
+    const halfRange = filledRange / 2; // 中央から広がる幅
+    const fillStart = -halfRange;
+    const fillEnd = halfRange;
 
     return (
         <div className="flex space-x-0.5">
-            {Array.from({ length: 10 }).map((_, index) => {
-                const segmentStartValue = index * 10;
-                const segmentEndValue = (index + 1) * 10;
-                let widthPercent = 0;
-                if (clampedValue >= segmentEndValue) {
-                    widthPercent = 100;
-                } else if (clampedValue > segmentStartValue) {
-                    const valueInRange = clampedValue - segmentStartValue;
-                    widthPercent = (valueInRange / 10) * 100;
-                }
+            {Array.from({ length: 20 }).map((_, index) => {
+                const segmentStartValue = -100 + index * 10;
+                const segmentEndValue = segmentStartValue + 10;
+                const overlapStart = Math.max(segmentStartValue, fillStart);
+                const overlapEnd = Math.min(segmentEndValue, fillEnd);
+                const overlapWidth = Math.max(0, overlapEnd - overlapStart);
+                const widthPercent = (overlapWidth / 10) * 100;
 
                 return (
                     <div
@@ -58,7 +59,7 @@ const AffinityBar = ({ value }: { value: number }) => {
 const InfoColumn = ({
     title,
     impression,
-    affinity, // 0-100 の数値
+    affinity, // -100 〜 100 の数値
     callName,
 }: {
     title: string;
