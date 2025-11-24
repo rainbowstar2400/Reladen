@@ -1,5 +1,5 @@
 DO $$ BEGIN
- CREATE TYPE "public"."feeling_label" AS ENUM('none', 'dislike', 'curious', 'maybe_like', 'like', 'love', 'awkward');
+CREATE TYPE "public"."feeling_label" AS ENUM('none', 'dislike', 'maybe_dislike', 'curious', 'maybe_like', 'like', 'love', 'awkward');
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;

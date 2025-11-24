@@ -2,6 +2,20 @@
 import { z } from 'zod';
 import { baseEntitySchema, BaseEntity } from './base';
 
+// 印象（base）と special（気まずさ等）の分離
+export const impressionBaseEnum = z.enum(['dislike', 'maybe_dislike', 'none', 'curious', 'maybe_like', 'like']);
+export type ImpressionBase = z.infer<typeof impressionBaseEnum>;
+
+export const impressionSpecialEnum = z.enum(['awkward']);
+export type ImpressionSpecial = z.infer<typeof impressionSpecialEnum>;
+
+export const impressionStateSchema = z.object({
+  base: impressionBaseEnum,
+  special: impressionSpecialEnum.nullable().optional(),
+  baseBeforeSpecial: impressionBaseEnum.nullable().optional(),
+});
+export type ImpressionState = z.infer<typeof impressionStateSchema>;
+
 export const conversationLineSchema = z.object({
   speaker: z.string().uuid(),
   text: z.string().min(1),
@@ -27,8 +41,18 @@ export const conversationEventPayloadSchema = z.object({
   lines: z.array(conversationLineSchema).min(1),
   meta: conversationMetaSchema,
   deltas: z.object({
-    aToB: z.object({ favor: z.number(), impression: z.number() }),
-    bToA: z.object({ favor: z.number(), impression: z.number() }),
+    // impression は互換のため number/string 両方を許容しつつ、
+    // 新設の impressionState で base/special を運ぶ
+    aToB: z.object({
+      favor: z.number(),
+      impression: z.union([impressionBaseEnum, z.number()]),
+      impressionState: impressionStateSchema.optional(),
+    }),
+    bToA: z.object({
+      favor: z.number(),
+      impression: z.union([impressionBaseEnum, z.number()]),
+      impressionState: impressionStateSchema.optional(),
+    }),
   }),
   systemLine: z.string().min(1),
 });

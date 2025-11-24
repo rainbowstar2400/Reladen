@@ -10,11 +10,11 @@ import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 function translateImpressionLabel(label: string) {
   const dictionary: Record<string, string> = {
     dislike: '苦手',
-    'dislike?': '嫌いかも',
+    maybe_dislike: '嫌いかも',
     awkward: '気まずい',
     none: 'なし',
     curious: '気になる',
-    'like?': '少し好き',
+    maybe_like: '好きかも',
     like: '好き',
   };
 
@@ -45,7 +45,7 @@ function parseSystemLine(rawLine: string, nameMap: Record<string, string>): stri
 
     const impressionMatch = segment.match(/^(.*?)→(.*?)\s*印象:\s*([^→]+)→(.+)$/);
     if (impressionMatch) {
-      const [, from, to, , next] = impressionMatch;
+      const [, from, to, next] = impressionMatch;
       const translated = translateImpressionLabel(next.trim());
       messages.push(`${from}から${to}への印象が「${translated}」に変化しました。`);
       return;
@@ -57,7 +57,7 @@ function parseSystemLine(rawLine: string, nameMap: Record<string, string>): stri
   return messages;
 }
 
-/** 会話ペイロード（Union回避用の厳密型） */
+/** 会話ペイロード（Union回避用の厳密な型） */
 type ConversationPayloadStrict = {
   threadId: string;
   participants: [string, string];
@@ -69,8 +69,8 @@ type ConversationPayloadStrict = {
     qualityHints?: Record<string, unknown>;
   };
   deltas: {
-    aToB: { favor: number; impression: number };
-    bToA: { favor: number; impression: number };
+    aToB: { favor: number; impression: any; impressionState?: { base: string; special: string | null } };
+    bToA: { favor: number; impression: any; impressionState?: { base: string; special: string | null } };
   };
   systemLine: string;
   topic?: string;
@@ -142,7 +142,25 @@ export default function DetailLayerInner() {
         speaker: residentNameMap[ln.speaker] ?? ln.speaker,
         text: ln.text,
       }));
-      const system = parseSystemLine(p.systemLine, residentNameMap);
+
+      // systemLine があれば優先。無ければ payload の impressionState を fallback に使う
+      const system = p.systemLine ? parseSystemLine(p.systemLine, residentNameMap) : [];
+
+      const fallbackMessages: string[] = [];
+      const deltas = (p as any)?.deltas ?? {};
+      const pickImpression = (entry: any) => {
+        const st = entry?.impressionState;
+        if (st?.special === 'awkward') return 'awkward';
+        if (st?.base) return String(st.base);
+        if (entry?.impression != null) return String(entry.impression);
+        return null;
+      };
+      const impAB = pickImpression(deltas.aToB ?? {});
+      const impBA = pickImpression(deltas.bToA ?? {});
+      if (impAB) fallbackMessages.push(`${participantNames[0]}から${participantNames[1]}への印象: ${translateImpressionLabel(impAB)}`);
+      if (impBA) fallbackMessages.push(`${participantNames[1]}から${participantNames[0]}への印象: ${translateImpressionLabel(impBA)}`);
+
+      const systemMessages = system.length ? system : fallbackMessages;
 
       const next: LogDetail = {
         id: (ev as any).id,
@@ -151,7 +169,7 @@ export default function DetailLayerInner() {
         weekday,
         time,
         lines,
-        system,
+        system: systemMessages,
       };
       setData(next);
     })();

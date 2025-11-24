@@ -85,7 +85,7 @@ export const relationSchema = baseEntitySchema.extend({
 export const feelingSchema = baseEntitySchema.extend({
   from_id: z.string().uuid(),
   to_id: z.string().uuid(),
-  label: z.enum(['none', 'dislike', 'curious', 'maybe_like', 'like', 'love', 'awkward']),
+  label: z.enum(['none', 'dislike', 'maybe_dislike', 'curious', 'maybe_like', 'like', 'love', 'awkward']),
   score: z.number().int().default(0),
 });
 

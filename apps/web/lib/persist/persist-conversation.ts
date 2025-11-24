@@ -12,24 +12,6 @@ import type { Feeling } from "@/types";
 import { beliefRowToRecord, recordToBeliefRow } from "@/lib/conversation/belief-mapper";
 
 
-/**
- * SYSTEM行を人間可読で組み立て（UIでそのまま表示可能）
- */
-function makeSystemLine(out: GptConversationOutput, r: EvaluationResult): string {
-  const [a, b] = out.participants;
-  const fmt = (x: number) => (x > 0 ? `+${x}` : `${x}`);
-
-  // 削除: const impArrow = (x: number) => (x > 0 ? "↑" : x < 0 ? "↓" : "→");
-
-  // 修正: impArrow() によるラップを外し、impression の値 (string) を直接使用
-  return `SYSTEM: ${a}→${b} 好感度 ${fmt(r.deltas.aToB.favor)} / 印象 ${r.deltas.aToB.impression} | ${b}→${a} 好感度 ${fmt(r.deltas.bToA.favor)} / 印象 ${r.deltas.bToA.impression}`;
-}
-
-/**
- * relations / feelings を簡易更新
- * - ここではシンプルに “イベント毎の差分を積み上げる” 方針。
- * - 実プロジェクトの正規ロジックが別にあれば差し替えてOK。
- */
 async function updateRelationsAndFeelings(params: {
   participants: [string, string];
   deltas: EvaluationResult["deltas"];
@@ -38,16 +20,17 @@ async function updateRelationsAndFeelings(params: {
   const now = new Date().toISOString();
 
   const impressionToFeelingLabel = (
-    impression: EvaluationResult["deltas"]["aToB"]["impression"],
+    state: EvaluationResult["deltas"]["aToB"]["impressionState"],
     fallback: Feeling["label"],
   ): Feeling["label"] => {
+    const impression = state.special === 'awkward' ? 'awkward' : state.base;
     const map: Record<string, Feeling["label"]> = {
       dislike: "dislike",
-      "dislike?": "dislike", // feelings には無いので丸める
-      awkward: "dislike",    // 後方互換として dislike に丸める
+      maybe_dislike: "maybe_dislike",
+      awkward: "awkward",
       none: "none",
       curious: "curious",
-      "like?": "maybe_like",
+      maybe_like: "maybe_like",
       like: "like",
     };
     return map[String(impression)] ?? fallback ?? "none";
@@ -83,11 +66,11 @@ async function updateRelationsAndFeelings(params: {
   const curScoreBA = recBA?.score ?? 0;
 
   const nextLabelAB = impressionToFeelingLabel(
-    params.deltas.aToB.impression,
+    params.deltas.aToB.impressionState,
     recAB?.label ?? "none",
   );
   const nextLabelBA = impressionToFeelingLabel(
-    params.deltas.bToA.impression,
+    params.deltas.bToA.impressionState,
     recBA?.label ?? "none",
   );
 

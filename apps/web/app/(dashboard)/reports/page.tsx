@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import React, { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
@@ -110,9 +110,28 @@ export default function ReportsPage() {
           const displayA = a ? (residentNameMap[a] ?? a) : '';
           const displayB = b ? (residentNameMap[b] ?? b) : '';
 
-          // chips（あれば）を抽出：favor / impression を前実装に寄せて簡易生成
+          // chips（あれば）を抽出：favor / impression を簡易生成（special優先）
           const chips: ReportItem['chips'] = [];
           const deltas = (ev as any)?.payload?.deltas ?? (ev as any)?.deltas;
+          const toLabel = (s: string) => {
+            switch (s) {
+              case 'none': return 'なし';
+              case 'like': return '好き';
+              case 'like?': return '好きかも';
+              case 'curious': return '気になる';
+              case 'awkward': return '気まずい';
+              case 'dislike': return '嫌い';
+              case 'dislike?': return '嫌いかも';
+              default: return s;
+            }
+          };
+          const pickImpression = (entry: any) => {
+            const st = entry?.impressionState;
+            if (st?.special === 'awkward') return 'awkward';
+            if (st?.base) return String(st.base);
+            if (entry?.impression != null) return String(entry.impression);
+            return null;
+          };
           if (deltas) {
             const aToB = deltas.aToB ?? {};
             const bToA = deltas.bToA ?? {};
@@ -124,16 +143,11 @@ export default function ReportsPage() {
               if (favorBA > 0) chips.push({ kind: '好感度', label: ` ${displayB}→${displayA}：↑` });
               if (favorBA < 0) chips.push({ kind: '好感度', label: ` ${displayB}→${displayA}：↓` });
             }
-            const toLabel = (s: string) =>
-              s === 'none' ? '→' :
-                s === 'like' ? '好き' :
-                  s === 'like?' ? '好きかも' :
-                s === 'curious' ? '気になる' :
-                  s === 'awkward' ? '気まずい' :
-                    s === 'dislike' ? '嫌い' : s;
             if (a && b) {
-              if (aToB.impression != null) chips.push({ kind: '印象', label: ` ${displayA}→${displayB}：${toLabel(String(aToB.impression))}` });
-              if (bToA.impression != null) chips.push({ kind: '印象', label: ` ${displayB}→${displayA}：${toLabel(String(bToA.impression))}` });
+              const impAB = pickImpression(aToB);
+              const impBA = pickImpression(bToA);
+              if (impAB != null) chips.push({ kind: '印象', label: ` ${displayA}→${displayB}：${toLabel(impAB)}` });
+              if (impBA != null) chips.push({ kind: '印象', label: ` ${displayB}→${displayA}：${toLabel(impBA)}` });
             }
           }
 

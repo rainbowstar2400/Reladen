@@ -29,12 +29,13 @@ export const RELATION_LABELS: Record<Relation['type'], string> = {
 // 感情 (Feelings)
 export const FEELING_LABELS: Record<Feeling['label'], string> = {
   none: 'なし',
-  dislike: '苦手',
-  awkward: '気まずい',
+  dislike: '嫌い',
+  maybe_dislike: '嫌いかも',
   curious: '気になる',
   maybe_like: '好きかも',
   like: '好き',
   love: '大好き',
+  awkward: '気まずい',
 };
 
 // 性別 (Gender)

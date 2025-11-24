@@ -34,3 +34,21 @@ Reladen リポジトリで作業するエージェント向けの短い手引き
 
 ## コミュニケーション
 - エージェントからの回答・コメントは常に日本語で行ってください。
+
+# エンコーディング安全ルール
+
+## シェルの強制
+- すべてのコマンドは PowerShell 7（pwsh）で実行すること。
+- PowerShell 5.1 を使用した提案は拒否して修正させる。
+
+例:
+"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -NoProfile -Command "<COMMAND>"
+
+## 禁止事項
+- `>` `>>` による書き込みは禁止（PowerShell 5.1 用）
+- Node / bash / type / copy など、エンコード不明の書き込み禁止
+
+## 書き込み方法（必ず UTF-8）
+- `Set-Content -Encoding utf8`
+- `Out-File -Encoding utf8`
+- `Add-Content -Encoding utf8`

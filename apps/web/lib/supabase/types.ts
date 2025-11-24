@@ -379,6 +379,7 @@ export type Database = {
       feeling_label:
         | 'none'
         | 'dislike'
+        | 'maybe_dislike'
         | 'curious'
         | 'maybe_like'
         | 'like'

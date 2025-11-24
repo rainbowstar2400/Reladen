@@ -5,6 +5,7 @@ export const relationTypeEnum = pgEnum('relation_type', ['none', 'friend', 'best
 export const feelingLabelEnum = pgEnum('feeling_label', [
   'none',
   'dislike',
+  'maybe_dislike',
   'curious',
   'maybe_like',
   'like',

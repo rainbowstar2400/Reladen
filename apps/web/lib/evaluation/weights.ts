@@ -5,20 +5,27 @@
 // クライアント側：フォールバックとして既定のデフォルトを返す。
 // ------------------------------------------------------------------
 
-export type Impression =
+// base 用の印象ラベル（special は別途フラグで扱う想定）
+export type ImpressionBase =
   | 'none'
   | 'curious'
-  | 'like?'
+  | 'maybe_like'
   | 'like'
   | 'dislike'
-  | 'dislike?';
+  | 'maybe_dislike';
+
+// special は現状 "awkward" のみを想定（今後拡張可）
+export type ImpressionSpecial = 'awkward' | null;
+
+// 互換のため既存名 Impression を base と同義で残す
+export type Impression = ImpressionBase;
 
 export type WeightsConfig = {
   tags: Record<string, number>;
   qualityHints: Record<string, number>;
   signals: Record<'continue' | 'close' | 'park', number>;
   favorClip: { min: number; max: number };
-  impressionOrder: Impression[];
+  impressionOrder: ImpressionBase[];
 };
 
 // ===== デフォルト（JSONが壊れても動く安全網） ================================
@@ -42,7 +49,7 @@ const DefaultWeights: WeightsConfig = {
   },
   signals: { continue: 0.1, close: 0.2, park: 0 },
   favorClip: { min: -2, max: 2 },
-  impressionOrder: ['dislike', 'dislike?', 'none', 'curious', 'like?', 'like']
+  impressionOrder: ['dislike', 'maybe_dislike', 'none', 'curious', 'maybe_like', 'like']
 };
 
 // ===== 共有ユーティリティ =====================================================
