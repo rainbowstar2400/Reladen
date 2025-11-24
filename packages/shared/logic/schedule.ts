@@ -66,9 +66,11 @@ function randomizeTime(baseHm: string, rangeMinutes: number): string {
  * JST基準の 'YYYY-MM-DD' 文字列を取得
  * (サーバーとクライアントのタイムゾーン差異を吸収するため JST で計算)
  */
+const SCHEDULE_DECISION_HOUR_JST = 12; // スケジュールを確定させる基準時刻 (JST)
 function getTodayJST(): string {
-  const now = new Date(Date.now() + (9 * 60 * 60 * 1000)); // JST (UTC+9)
-  return now.toISOString().split('T')[0];
+  const jstNow = Date.now() + (9 * 60 * 60 * 1000);
+  const adjusted = jstNow - (SCHEDULE_DECISION_HOUR_JST * 60 * 60 * 1000);
+  return new Date(adjusted).toISOString().split('T')[0];
 }
 
 /**
