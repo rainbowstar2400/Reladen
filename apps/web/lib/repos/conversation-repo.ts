@@ -16,6 +16,13 @@ import type {
   NotificationRecord,
 } from '@repo/shared/types/conversation';
 
+type ImpressionDelta = {
+  favor: number;
+  impression: string | number | null;
+  impressionState?: { base: string; special: string | null; baseBeforeSpecial?: string | null };
+};
+type ImpressionChangeFlags = { aToB: boolean; bToA: boolean };
+
 /** Union 回避のため、会話イベント用の厳密な型を自前定義 */
 export type ConversationPayloadStrict = {
   threadId: string;
@@ -28,8 +35,8 @@ export type ConversationPayloadStrict = {
     qualityHints?: { [k: string]: unknown };
   };
   deltas: {
-    aToB: { favor: number; impression: string; impressionState?: { base: string; special: string | null } };
-    bToA: { favor: number; impression: string; impressionState?: { base: string; special: string | null } };
+    aToB: ImpressionDelta;
+    bToA: ImpressionDelta;
   };
   systemLine: string;
   topic?: string;
@@ -44,6 +51,55 @@ export function isConversationPayload(p: unknown): p is ConversationPayloadStric
     && Array.isArray(g.lines);
 }
 
+function deriveImpressionLabel(entry: ImpressionDelta | null | undefined): string | null {
+  if (!entry) return null;
+  const st = entry.impressionState;
+  if (st?.special === 'awkward') return 'awkward';
+  if (st?.base) return String(st.base);
+  if (entry.impression === null || entry.impression === undefined) return null;
+  if (typeof entry.impression === 'string' || typeof entry.impression === 'number') return String(entry.impression);
+  return null;
+}
+
+export function detectImpressionLabelChanges(events: Array<EventLogStrict>): Map<string, ImpressionChangeFlags> {
+  const sorted = [...events]
+    .filter((e) => e?.kind === 'conversation' && isConversationPayload(e?.payload))
+    .sort((a, b) => {
+      const ta = Date.parse((a as any).updated_at ?? '');
+      const tb = Date.parse((b as any).updated_at ?? '');
+      return (Number.isFinite(ta) ? ta : 0) - (Number.isFinite(tb) ? tb : 0);
+    });
+
+  const lastLabel = new Map<string, string>();
+  const changes = new Map<string, ImpressionChangeFlags>();
+
+  for (const ev of sorted) {
+    const p = ev.payload as ConversationPayloadStrict;
+    const id = (ev as any).id as string | undefined;
+    if (!id || !Array.isArray(p.participants) || p.participants.length < 2) continue;
+
+    const [a, b] = p.participants;
+    const labelA2B = deriveImpressionLabel(p.deltas?.aToB);
+    const labelB2A = deriveImpressionLabel(p.deltas?.bToA);
+
+    const keyA2B = `${a}->${b}`;
+    const keyB2A = `${b}->${a}`;
+
+    const prevA2B = lastLabel.get(keyA2B);
+    const prevB2A = lastLabel.get(keyB2A);
+
+    const changedA2B = labelA2B != null ? (prevA2B == null ? true : prevA2B !== labelA2B) : false;
+    const changedB2A = labelB2A != null ? (prevB2A == null ? true : prevB2A !== labelB2A) : false;
+
+    if (labelA2B != null) lastLabel.set(keyA2B, labelA2B);
+    if (labelB2A != null) lastLabel.set(keyB2A, labelB2A);
+
+    changes.set(id, { aToB: changedA2B, bToA: changedB2A });
+  }
+
+  return changes;
+}
+
 /**
  * 会話イベントを JST の「日付」単位でグルーピングして返す。
  * @param opts from/to: ISO 文字列（JST 日付キーの後段フィルタにも使える）。limitDays: 直近 N 日に絞る簡易オプション。
@@ -56,8 +112,11 @@ export async function listConversationEventsByDate(opts?: {
   const all = (await listLocal('events')) as Array<EventLogStrict>;
 
   // 1) 会話イベントのみ
-  let convs = all
+  const convsAll = all
     .filter((e) => e?.kind === 'conversation' && isConversationPayload(e?.payload));
+
+  const impressionChangeMap = detectImpressionLabelChanges(convsAll);
+  let convs = convsAll;
 
   // 2) 期間フィルタ（updated_at ベース / ISO）
   const fromTs = opts?.from ? Date.parse(opts.from) : undefined;
@@ -91,6 +150,9 @@ export async function listConversationEventsByDate(opts?: {
   for (const ev of convs) {
     const iso = (ev as any).updated_at as string; // persist 側で必ず入る想定
     const p = ev.payload as ConversationPayloadStrict;
+    const changeFlags = impressionChangeMap.get((ev as any).id);
+    const deltaA2B = p.deltas?.aToB ?? { favor: 0, impression: null };
+    const deltaB2A = p.deltas?.bToA ?? { favor: 0, impression: null };
 
     const { dateKey, dateLabel, weekday, timeLabel } = toJstDateKey(iso);
 
@@ -102,7 +164,11 @@ export async function listConversationEventsByDate(opts?: {
       timeLabel,
       systemLine: p.systemLine,
       topic: p.topic,
-      deltas: p.deltas, // impression は string に型修正済み
+      deltas: {
+        aToB: { ...deltaA2B, impression: changeFlags?.aToB === false ? null : deltaA2B.impression },
+        bToA: { ...deltaB2A, impression: changeFlags?.bToA === false ? null : deltaB2A.impression },
+      }, // impression は string に型修正済み
+      impressionChanged: changeFlags,
     };
 
     if (!byDate.has(dateKey)) {
@@ -252,9 +318,10 @@ export type ConversationListItem = {
   systemLine?: string;    // "SYSTEM: ..."（存在すれば）
   topic?: string;         // ある場合のみ
   deltas: {
-    aToB: { favor: number; impression: string };
-    bToA: { favor: number; impression: string };
+    aToB: ImpressionDelta;
+    bToA: ImpressionDelta;
   };
+  impressionChanged?: ImpressionChangeFlags;
 };
 
 export type ConversationDayGroup = {

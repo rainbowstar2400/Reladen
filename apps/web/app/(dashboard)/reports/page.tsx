@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import React, { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { listLocal } from '@/lib/db-local';
 import type { EventLogStrict } from '@repo/shared/types/conversation';
 import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
+import { detectImpressionLabelChanges } from '@/lib/repos/conversation-repo';
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度'
 type ChangeKindFilter = ChangeKind | ''
@@ -90,6 +91,7 @@ export default function ReportsPage() {
 
         // 対象は conversation / consult のみ
         const targets = all.filter(ev => ev && (ev.kind === 'conversation' || ev.kind === 'consult'));
+        const impressionChangeMap = detectImpressionLabelChanges(targets as EventLogStrict[]);
 
         // ReportItem へ整形（payload のshape差に耐える防御的マッピング）
         const items: ReportItem[] = targets.map((ev) => {
@@ -113,6 +115,7 @@ export default function ReportsPage() {
           // chips（あれば）を抽出：favor / impression を簡易生成（special優先）
           const chips: ReportItem['chips'] = [];
           const deltas = (ev as any)?.payload?.deltas ?? (ev as any)?.deltas;
+          const change = impressionChangeMap.get(ev.id);
           const toLabel = (s: string) => {
             switch (s) {
               case 'none': return 'なし';
@@ -144,8 +147,8 @@ export default function ReportsPage() {
               if (favorBA < 0) chips.push({ kind: '好感度', label: ` ${displayB}→${displayA}：↓` });
             }
             if (a && b) {
-              const impAB = pickImpression(aToB);
-              const impBA = pickImpression(bToA);
+              const impAB = change?.aToB === false ? null : pickImpression(aToB);
+              const impBA = change?.bToA === false ? null : pickImpression(bToA);
               if (impAB != null) chips.push({ kind: '印象', label: ` ${displayA}→${displayB}：${toLabel(impAB)}` });
               if (impBA != null) chips.push({ kind: '印象', label: ` ${displayB}→${displayA}：${toLabel(impBA)}` });
             }

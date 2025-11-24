@@ -4,7 +4,7 @@ import * as React from 'react';
 import { FEELING_LABELS } from '@/lib/constants/labels';
 
 type FavorDelta = number;
-type ImpressionLabel = keyof typeof FEELING_LABELS | string;
+type ImpressionLabel = keyof typeof FEELING_LABELS | string | null | undefined;
 type Variant = 'favor' | 'impression';
 
 export type DeltaChipProps = {
@@ -24,6 +24,7 @@ function formatFavorSymbol(n: number): string | null {
 
 /** 印象ラベル → 表示名 */
 function labelImpression(s: ImpressionLabel): string {
+  if (s == null) return '';
   if (s in FEELING_LABELS) {
     return FEELING_LABELS[s as keyof typeof FEELING_LABELS];
   }
@@ -67,8 +68,10 @@ export default function DeltaChip(props: DeltaChipProps) {
   }
 
   // --- 「印象」用（常に表示） ---
-  const label = labelImpression(value as ImpressionLabel).replace(/[「」『』]/g, '');
-  const palette = colorImpression(value as ImpressionLabel);
+  const impressionValue = value as ImpressionLabel;
+  if (impressionValue == null) return null;
+  const label = labelImpression(impressionValue).replace(/[「」『』]/g, '');
+  const palette = colorImpression(impressionValue);
 
   return (
     <span
