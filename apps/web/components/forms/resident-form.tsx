@@ -1061,14 +1061,16 @@ export function ResidentForm({
             {/* プリセット選択中（かつ手動ではない）場合、「特徴の表示」を表示 */}
             {!isSpeechManual && (
               <FormItem>
-                <FormLabel className="text-sm text-muted-foreground">特徴</FormLabel>
+                <FormLabel className="text-sm text-muted-foreground">説明</FormLabel>
                 <FormControl>
-                  <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
-                    {form.watch('speechPresetDescription') || '（プリセットを選択すると特徴が表示されます）'}
-                  </p>
-                  <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground mt-2">
-                    {form.watch('speechPresetExample') || '（例文が設定されていません）'}
-                  </p>
+                  <div className="space-y-2">
+                    <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
+                      {form.watch('speechPresetDescription') || '（プリセットを選択すると説明が表示されます）'}
+                    </p>
+                    <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
+                      {form.watch('speechPresetExample') || '（例文が設定されていません）'}
+                    </p>
+                  </div>
                 </FormControl>
               </FormItem>
             )}
