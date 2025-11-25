@@ -11,7 +11,9 @@ export type PresetCategory = PresetCategoryType;
 // デフォルトプリセットを定義
 const now = new Date().toISOString();
 
-export const DEFAULT_PRESETS: Preset[] = [
+type DefaultPresetInput = Omit<Preset, 'example'> & { example?: string | null };
+
+const DEFAULT_PRESETS_BASE: ReadonlyArray<DefaultPresetInput> = [
     // Speech
     { id: 'fdc5f580-a7c6-dbb1-28f6-64ad237831aa', category: 'speech', label: '優しい敬語', description: '丁寧で穏やかな話し方：「〜です」「〜ます」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
     { id: '33ff24b3-0861-6bc0-7aa0-4ac350fe5c51', category: 'speech', label: '冷たい敬語', description: '距離感のある敬語：「ご自由にどうぞ」「そうですか」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
@@ -35,6 +37,12 @@ export const DEFAULT_PRESETS: Preset[] = [
     { id: '8c05e37e-5dd3-03a2-0b7f-d5c4c95f6126', category: 'first_person', label: '俺', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
     { id: '4562156a-3610-1318-3a66-d8098c1d6686', category: 'first_person', label: '自分', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
 ];
+
+export const DEFAULT_PRESETS: Preset[] = DEFAULT_PRESETS_BASE.map((preset) => ({
+    ...preset,
+    example: preset.example ?? null,
+    isManaged: preset.isManaged ?? false,
+}));
 
 
 const KEY = ['presets'];
@@ -70,15 +78,19 @@ async function fetchPresetsWithDefaults(): Promise<Preset[]> {
             // デフォルトと同じラベル -> ID, isManaged, owner_id などをローカルのもので上書き
             finalMap.set(item.label, {
                 ...existingDefault,
-                id: item.id,
-                isManaged: item.isManaged,
-                owner_id: item.owner_id, // owner_id を上書き
-                updated_at: item.updated_at,
-                deleted: item.deleted,
+                ...item,
+                isManaged: item.isManaged ?? existingDefault.isManaged ?? false,
+                description: item.description ?? existingDefault.description ?? null,
+                example: item.example ?? existingDefault.example ?? null,
             });
         } else {
             // ユーザーが追加したカスタムプリセット
-            finalMap.set(item.label, item);
+            finalMap.set(item.label, {
+                ...item,
+                isManaged: item.isManaged ?? false,
+                description: item.description ?? null,
+                example: item.example ?? null,
+            });
         }
     }
 
@@ -135,6 +147,7 @@ export function useUpsertPreset() {
                     input.category = input.category ?? existing.category;
                     input.label = input.label ?? existing.label;
                     input.description = input.description ?? existing.description;
+                    input.example = input.example ?? existing.example;
                 }
             } else if (input.id && !skipGetLocal) {
                 // (Switch操作では呼ばれなくなる)
@@ -146,17 +159,15 @@ export function useUpsertPreset() {
             }
 
             const record: Preset = {
-                // デフォルト値
-                description: null,
-                isManaged: false,
-                // 既存の値 (デフォルト or ローカル)
-                ...(existing ?? {}),
                 // 入力値 (isManaged, label, description など)
                 ...input,
                 // 必須項目を確定
                 id,
                 category: input.category,
                 label: input.label,
+                isManaged: input.isManaged ?? existing?.isManaged ?? false,
+                description: input.description ?? existing?.description ?? null,
+                example: input.example ?? existing?.example ?? null,
                 updated_at: new Date().toISOString(),
                 deleted: false,
                 owner_id: existing?.owner_id === 'SYSTEM' ? null : (existing?.owner_id ?? null), // SYSTEM ID は引き継がない
@@ -192,3 +203,5 @@ export function useDeletePreset() {
         },
     });
 }
+
+

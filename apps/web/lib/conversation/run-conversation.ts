@@ -72,6 +72,17 @@ async function loadResidentProfiles(
   const uniqueIds = Array.from(new Set(participantIds));
   if (uniqueIds.length === 0) return {};
 
+  const presetRows = (await listAny("presets")) as unknown as Array<Record<string, unknown>> | null;
+  const presetMap = new Map<string, Record<string, unknown>>();
+  if (Array.isArray(presetRows)) {
+    for (const raw of presetRows) {
+      const id = typeof raw?.id === "string" ? raw.id : undefined;
+      const isDeleted = Boolean((raw as any)?.deleted);
+      if (!id || isDeleted) continue;
+      presetMap.set(id, raw);
+    }
+  }
+
   const rows = (await listAny("residents")) as unknown as Array<Record<string, unknown>> | null;
   const dict: Record<string, ConversationResidentProfile> = {};
   if (!Array.isArray(rows)) return dict;
@@ -86,6 +97,12 @@ async function loadResidentProfiles(
       : Number.isFinite(Number((raw as any)?.age))
         ? Number((raw as any).age)
         : null;
+    const speechPresetRaw = (raw as any)?.speech_preset;
+    const speechPresetId = typeof speechPresetRaw === "string" ? speechPresetRaw : null;
+    const presetExample = speechPresetId ? presetMap.get(speechPresetId) : undefined;
+    const speechExample = typeof presetExample?.example === "string" || presetExample?.example === null
+      ? (presetExample as any).example ?? null
+      : null;
 
     dict[id] = {
       id,
@@ -94,7 +111,8 @@ async function loadResidentProfiles(
       gender: (raw as any)?.gender ?? null,
       age: ageValue,
       occupation: (raw as any)?.occupation ?? null,
-      speechPreset: (raw as any)?.speech_preset ?? null,
+      speechPreset: speechPresetId,
+      speechExample,
       firstPerson: (raw as any)?.first_person ?? null,
       traits: (raw as any)?.traits ?? null,
       interests: (raw as any)?.interests ?? null,

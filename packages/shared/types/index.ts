@@ -104,6 +104,7 @@ export const presetSchema = baseEntitySchema.extend({
   category: presetCategoryEnum,
   label: z.string().min(1),
   description: z.string().nullable().optional(),
+  example: z.string().nullable().optional(),
   isManaged: z.boolean().default(false),
 });
 

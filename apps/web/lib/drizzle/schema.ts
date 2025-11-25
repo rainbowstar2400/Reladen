@@ -24,6 +24,7 @@ export const presets = pgTable('presets', {
   category: presetCategoryEnum('category').notNull(),
   label: text('label').notNull(),
   description: text('description'),
+  example: text('example'),
   isManaged: boolean('is_managed').notNull().default(false),
   ownerId: uuid('owner_id'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

@@ -205,6 +205,11 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
                                 {speechPreset.description}
                               </p>
                             )}
+                            {speechPreset.example && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                例文: {speechPreset.example}
+                              </p>
+                            )}
                           </div>
                         ) : null
                       }

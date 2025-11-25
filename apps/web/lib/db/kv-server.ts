@@ -25,7 +25,8 @@ type Table =
   | "notifications"
   | "beliefs"
   | "feelings"
-  | "residents";
+  | "residents"
+  | "presets";
 
 type OwnerColumnConfig =
   | { type: "fixed"; column: string }
@@ -37,6 +38,7 @@ const TABLE_OWNER_COLUMNS: Partial<Record<Table, OwnerColumnConfig>> = {
   residents: { type: "fixed", column: "owner_id" },
   notifications: { type: "fixed", column: "owner_id" },
   topic_threads: { type: "fixed", column: "owner_id" },
+  presets: { type: "fixed", column: "owner_id" },
 };
 
 const ownerColumnCache = new Map<Table, string | null>();

@@ -66,7 +66,7 @@ const EVENTS_ALLOWED = new Set([
 
 // presets の許可カラム
 const PRESETS_ALLOWED = new Set([
-  'id', 'category', 'label', 'description', 
+  'id', 'category', 'label', 'description', 'example',
   'is_managed', 'owner_id', 'updated_at', 'deleted'
 ]);
 

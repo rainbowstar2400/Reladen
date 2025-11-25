@@ -74,6 +74,7 @@ const residentFormSchema = z.object({
   occupation: z.string().optional().nullable(),
   firstPerson: z.string({ required_error: '一人称を選択してください' }).min(1, '一人称を選択してください'),
   speechPresetDescription: z.string().optional().nullable(),
+  speechPresetExample: z.string().optional().nullable(),
 
   // --- プリセット管理フラグ ---
   isSpeechPresetManaged: z.boolean().default(false),
@@ -166,12 +167,14 @@ export function ResidentForm({
     label: string | undefined | null,
     category: PresetCategory,
     isManaged: boolean,
-    description?: string | undefined | null
+    extras?: { description?: string | null; example?: string | null }
   ): Promise<string | undefined> => {
     if (!label || label.trim().length === 0) {
       return undefined;
     }
     const trimmedLabel = label.trim();
+    const speechDescription = extras?.description ?? null;
+    const speechExample = extras?.example ?? null;
 
     const allCategoryPresets = allPresets.filter((p: Preset) => p.category === category);
     const existing = allCategoryPresets.find((p: Preset) => p.label === trimmedLabel);
@@ -184,8 +187,12 @@ export function ResidentForm({
         updatePayload.isManaged = true;
         needsUpdate = true;
       }
-      if (category === 'speech' && description !== existing.description) {
-        updatePayload.description = description;
+      if (category === 'speech' && speechDescription !== existing.description) {
+        updatePayload.description = speechDescription;
+        needsUpdate = true;
+      }
+      if (category === 'speech' && speechExample !== existing.example) {
+        updatePayload.example = speechExample;
         needsUpdate = true;
       }
 
@@ -201,7 +208,8 @@ export function ResidentForm({
       label: trimmedLabel,
       category,
       isManaged,
-      description: category === 'speech' ? description : undefined,
+      description: category === 'speech' ? speechDescription : undefined,
+      example: category === 'speech' ? speechExample : undefined,
     };
     console.log(`Preset ${trimmedLabel} を新規作成 (isManaged: ${isManaged})`, newPreset);
     // (フックから取得した upsertPreset を参照)
@@ -261,6 +269,7 @@ export function ResidentForm({
 
         speechPreset: defaultSpeechPreset?.label ?? undefined,
         speechPresetDescription: defaultSpeechPreset?.description ?? null,
+        speechPresetExample: defaultSpeechPreset?.example ?? null,
         occupation: defaultOccPreset?.label ?? null,
         firstPerson: defaultFpPreset?.label ?? undefined,
 
@@ -447,7 +456,10 @@ export function ResidentForm({
         values.speechPreset,
         'speech',
         values.isSpeechPresetManaged,
-        values.speechPresetDescription
+        {
+          description: values.speechPresetDescription,
+          example: values.speechPresetExample,
+        }
       ),
       findOrCreatePreset(values.occupation, 'occupation', values.isOccupationManaged),
       findOrCreatePreset(values.firstPerson, 'first_person', values.isFirstPersonManaged),
@@ -537,6 +549,7 @@ export function ResidentForm({
       // DBデータ(savedPreset)からラベルをセット
       speechPreset: savedSpeechPreset?.label ?? (values.speechPreset ?? null),
       speechPresetDescription: savedSpeechPreset?.description ?? (values.speechPresetDescription ?? null),
+      speechPresetExample: savedSpeechPreset?.example ?? (values.speechPresetExample ?? null),
       occupation: savedOccPreset?.label ?? (values.occupation ?? null),
       firstPerson: savedFpPreset?.label ?? (values.firstPerson ?? null),
 
@@ -933,11 +946,13 @@ export function ResidentForm({
                       if (value === MANUAL_INPUT_KEY) {
                         field.onChange('');
                         form.setValue('speechPresetDescription', '');
+                        form.setValue('speechPresetExample', '');
                       } else {
                         field.onChange(value);
                         // managedPresets.speech を使用
                         const preset = managedPresets.speech.find(p => p.label === value);
                         form.setValue('speechPresetDescription', preset?.description ?? '');
+                        form.setValue('speechPresetExample', preset?.example ?? '');
                       }
                     }}
                     value={isSpeechManual ? MANUAL_INPUT_KEY : field.value ?? ''}
@@ -1003,6 +1018,24 @@ export function ResidentForm({
                 />
                 <FormField
                   control={form.control}
+                  name="speechPresetExample"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm text-muted-foreground">例文</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="「{firstPerson}はそう思います。」という言葉を、どのように言いますか？"
+                          {...field}
+                          value={field.value ?? ''}
+                          rows={2}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name="isSpeechPresetManaged"
                   render={({ field }) => (
                     <FormItem className="flex flex-row items-center justify-end space-x-2">
@@ -1028,6 +1061,9 @@ export function ResidentForm({
                 <FormControl>
                   <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
                     {form.watch('speechPresetDescription') || '（プリセットを選択すると特徴が表示されます）'}
+                  </p>
+                  <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground mt-2">
+                    {form.watch('speechPresetExample') || '（例文が設定されていません）'}
                   </p>
                 </FormControl>
               </FormItem>

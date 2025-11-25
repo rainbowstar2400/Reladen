@@ -204,6 +204,7 @@ export type Database = {
           category: Database['public']['Enums']['preset_category'];
           deleted: boolean;
           description: string | null;
+          example: string | null;
           id: string;
           is_managed: boolean;
           label: string;
@@ -214,6 +215,7 @@ export type Database = {
           category: Database['public']['Enums']['preset_category'];
           deleted?: boolean;
           description?: string | null;
+          example?: string | null;
           id?: string;
           is_managed?: boolean;
           label: string;
@@ -224,6 +226,7 @@ export type Database = {
           category?: Database['public']['Enums']['preset_category'];
           deleted?: boolean;
           description?: string | null;
+          example?: string | null;
           id?: string;
           is_managed?: boolean;
           label?: string;

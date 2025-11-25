@@ -24,12 +24,13 @@ import {
   type PresetCategory,
 } from '@/lib/data/presets';
 
-const CATEGORY_DETAILS: Record<PresetCategory, { title: string; desc: string; labelHelp: string; descHelp?: string }> = {
+const CATEGORY_DETAILS: Record<PresetCategory, { title: string; desc: string; labelHelp: string; descHelp?: string; exampleHelp?: string }> = {
   speech: {
     title: '話し方プリセット',
     desc: '住人の会話における「話し方」を管理します。',
     labelHelp: '例: 優しい敬語',
     descHelp: '例: 丁寧で穏やかな話し方：「〜です」「〜ます」など',
+    exampleHelp: '「${firstPerson}はそう思います。」という言葉を、どのように言いますか？',
   },
   occupation: {
     title: '職業プリセット',
@@ -57,10 +58,12 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
 
   const [newLabel, setNewLabel] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [newExample, setNewExample] = useState('');
 
   const [editingItem, setEditingItem] = useState<Preset | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editExample, setEditExample] = useState('');
 
   const handleAdd = () => {
     if (!newLabel || (category === 'speech' && !newDescription)) return;
@@ -74,6 +77,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
         onSuccess: () => {
           setNewLabel('');
           setNewDescription('');
+          setNewExample('');
         }
       });
     } else if (!existing) {
@@ -82,12 +86,14 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
         category,
         label: newLabel,
         description: category === 'speech' ? newDescription : undefined,
+        example: category === 'speech' ? (newExample || null) : undefined,
         isManaged: true, // このフォームから追加するものは isManaged: true
       };
       upsertPreset.mutate(newItem, {
         onSuccess: () => {
           setNewLabel('');
           setNewDescription('');
+          setNewExample('');
         }
       });
     }
@@ -113,6 +119,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
     setEditingItem(item);
     setEditLabel(item.label);
     setEditDescription(item.description ?? '');
+    setEditExample(item.example ?? '');
   };
 
   // 編集キャンセル処理 (モーダルの時と同じ)
@@ -120,6 +127,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
     setEditingItem(null);
     setEditLabel('');
     setEditDescription('');
+    setEditExample('');
   };
 
   // 編集保存処理 (モーダルの時と同じ)
@@ -135,6 +143,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
       id: editingItem.id,
       label: editLabel,
       description: category === 'speech' ? editDescription : undefined,
+      example: category === 'speech' ? (editExample || null) : undefined,
       category: editingItem.category,
     }, {
       onSuccess: () => {
@@ -195,17 +204,30 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                     </div>
 
                     {category === 'speech' && (
-                      <div className="space-y-1">
-                        <Label htmlFor={`edit-desc-${item.id}`}>説明</Label>
-                        <Textarea
-                          id={`edit-desc-${item.id}`}
-                          value={editDescription}
-                          onChange={(e) => setEditDescription(e.target.value)}
-                          placeholder={details.descHelp}
-                          rows={2}
-                          disabled={isMutating}
-                        />
-                      </div>
+                      <>
+                        <div className="space-y-1">
+                          <Label htmlFor={`edit-desc-${item.id}`}>説明</Label>
+                          <Textarea
+                            id={`edit-desc-${item.id}`}
+                            value={editDescription}
+                            onChange={(e) => setEditDescription(e.target.value)}
+                            placeholder={details.descHelp}
+                            rows={2}
+                            disabled={isMutating}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor={`edit-example-${item.id}`}>例文</Label>
+                          <Textarea
+                            id={`edit-example-${item.id}`}
+                            value={editExample}
+                            onChange={(e) => setEditExample(e.target.value)}
+                            placeholder={details.exampleHelp}
+                            rows={2}
+                            disabled={isMutating}
+                          />
+                        </div>
+                      </>
                     )}
 
                     {/* 保存・キャンセルボタン */}
@@ -279,6 +301,11 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                         {item.description}
                       </p>
                     )}
+                    {item.example && (
+                      <p className="pl-1 text-xs text-gray-600 dark:text-gray-400">
+                        例文: {item.example}
+                      </p>
+                    )}
                   </>
                 )}
               </div>
@@ -297,13 +324,22 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
           />
 
           {category === 'speech' && (
-            <Textarea
-              placeholder={details.descHelp}
-              value={newDescription}
-              onChange={(e) => setNewDescription(e.target.value)}
-              rows={2}
-              disabled={uiDisabled}
-            />
+            <div className="space-y-2">
+              <Textarea
+                placeholder={details.descHelp}
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                rows={2}
+                disabled={uiDisabled}
+              />
+              <Textarea
+                placeholder={details.exampleHelp}
+                value={newExample}
+                onChange={(e) => setNewExample(e.target.value)}
+                rows={2}
+                disabled={uiDisabled}
+              />
+            </div>
           )}
 
           <Button

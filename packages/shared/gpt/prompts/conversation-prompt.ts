@@ -9,6 +9,7 @@ export type ConversationResidentProfile = {
   age?: number | null;
   occupation?: string | null;
   speechPreset?: string | null;
+  speechExample?: string | null;
   firstPerson?: string | null;
   traits?: unknown;
   interests?: unknown;

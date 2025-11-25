@@ -8,7 +8,7 @@
 import { listLocal } from "@/lib/db-local";
 import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
 import { selectConversationCandidates } from "@/lib/conversation/candidates";
-import type { Resident } from "@/types";
+import type { Resident, Preset } from "@/types";
 import type { ConversationResidentProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 
 type StartConversationPayload = {
@@ -71,9 +71,11 @@ function buildContextForParticipants(
   participantIds: [string, string],
   residents: Resident[],
   beliefs: BeliefRecord[],
+  presets: Preset[],
 ): NonNullable<StartConversationPayload["context"]> {
   const residentMap = new Map(residents.map((r) => [r.id, r]));
   const beliefMap = new Map(beliefs.map((b) => [b.residentId, b]));
+  const presetMap = new Map(presets.filter((p) => !p.deleted).map((p) => [p.id, p]));
 
   const context: NonNullable<StartConversationPayload["context"]> = {};
 
@@ -81,7 +83,13 @@ function buildContextForParticipants(
     const res = residentMap.get(id);
     if (res) {
       context.residents = context.residents ?? {};
-      context.residents[id] = toConversationProfile(res);
+      const speechExample = res.speechPreset
+        ? presetMap.get(res.speechPreset)?.example ?? null
+        : null;
+      context.residents[id] = {
+        ...toConversationProfile(res),
+        speechExample,
+      };
     }
     const belief = beliefMap.get(id);
     if (belief) {
@@ -233,6 +241,8 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
       // 先に活動中の住人を選定
       const allResidents = (await listLocal("residents")) as Resident[];
       const allBeliefs = (await listLocal("beliefs")) as BeliefRecord[];
+      const allPresets = (await listLocal("presets")) as Preset[];
+      const activePresets = allPresets.filter((p) => !p.deleted);
       const now = new Date();
       const awakeCandidates = selectConversationCandidates(now, allResidents);
       const awakeIds = new Set(awakeCandidates.map((r) => r.id));
@@ -274,7 +284,12 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
       }
 
       // 会話開始
-      const context = buildContextForParticipants(target.participants, allResidents, allBeliefs);
+      const context = buildContextForParticipants(
+        target.participants,
+        allResidents,
+        allBeliefs,
+        activePresets,
+      );
 
       await callConversationApi({
         threadId: target.threadId, // 既存スレッドがあれば継続
