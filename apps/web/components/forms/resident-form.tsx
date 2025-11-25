@@ -647,7 +647,7 @@ export function ResidentForm({
                   <FormItem className="space-y-2">
                     <FormLabel className="block">年齢</FormLabel>
                     <FormControl>
-                      <>
+                      <div className="space-y-1">
                         <Input
                           list="age-options"
                           placeholder="例：20"
@@ -667,7 +667,7 @@ export function ResidentForm({
                             <option key={n} value={n} />
                           ))}
                         </datalist>
-                      </>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
