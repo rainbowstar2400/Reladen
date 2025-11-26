@@ -30,7 +30,7 @@ const CATEGORY_DETAILS: Record<PresetCategory, { title: string; desc: string; la
     desc: '住人の会話における「話し方」を管理します。',
     labelHelp: '例: 優しい敬語',
     descHelp: '例: 丁寧で穏やかな話し方：「〜です」「〜ます」など',
-    exampleHelp: '例: 「今日はいい感じだね。」のように書いてください',
+    exampleHelp: '例: 　今日はいい感じだね。　のように書いてください',
   },
   occupation: {
     title: '職業プリセット',
@@ -332,7 +332,9 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                 rows={2}
                 disabled={uiDisabled}
               />
-              <p>「今日はいい感じ」ということを、どのように言いますか？</p>
+              <p id="age-help" className="text-xs text-muted-foreground mt-1">
+                「今日はいい感じ」ということを、どのように言いますか？」
+              </p>
               <Textarea
                 placeholder={details.exampleHelp}
                 value={newExample}
