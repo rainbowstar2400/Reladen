@@ -1024,9 +1024,8 @@ export function ResidentForm({
                   name="speechPresetExample"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm text-muted-foreground">例文</FormLabel>
+                      <FormLabel className="text-sm text-muted-foreground">「今日はいい感じ」ということを、どのように言いますか？」</FormLabel>
                       <FormControl>
-                        <p>「今日はいい感じ」ということを、どのように言いますか？」</p>
                         <Textarea
                           placeholder={speechExamplePlaceholder}
                           {...field}
