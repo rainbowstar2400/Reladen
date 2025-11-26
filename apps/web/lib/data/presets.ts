@@ -15,15 +15,15 @@ type DefaultPresetInput = Omit<Preset, 'example'> & { example?: string | null };
 
 const DEFAULT_PRESETS_BASE: ReadonlyArray<DefaultPresetInput> = [
     // Speech
-    { id: 'fdc5f580-a7c6-dbb1-28f6-64ad237831aa', category: 'speech', label: '優しい敬語', description: '丁寧で穏やかな話し方：「〜です」「〜ます」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: '33ff24b3-0861-6bc0-7aa0-4ac350fe5c51', category: 'speech', label: '冷たい敬語', description: '距離感のある敬語：「ご自由にどうぞ」「そうですか」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: 'a24b66df-0f96-e060-26ee-6e153dd14754', category: 'speech', label: 'タメ口', description: 'フレンドリーな砕けた口調：「〜だよ」「〜じゃん」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: '7d4ffa4f-e0cb-19d2-85f1-27ff467cef0a', category: 'speech', label: 'ギャル語', description: '砕けた陽気な話し方：「マジで？」「〜じゃね？」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: 'd4498811-d12f-a38a-7eec-474dc908b26f', category: 'speech', label: 'お嬢様風', description: '上品で古風な敬語：「〜ですわ」「〜ですこと」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: '5d603d72-66c7-90d8-9259-5c804e412bdc', category: 'speech', label: '関西弁', description: '柔らかい関西口調：「〜やで」「ほんま？」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: 'b3ff700f-489a-f3b3-c491-f115c00536b4', category: 'speech', label: '子供っぽい', description: '幼い印象の話し方：「〜だね！」「やったぁ」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: 'd58d88d7-abb1-90bc-d6d3-0d1723c67349', category: 'speech', label: '無口', description: '短く省略がち：「……別に」「うん」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
-    { id: 'be34dad9-d3ef-8026-c127-4efe2c143f77', category: 'speech', label: 'ご婦人風', description: '華やかな柔らかい口調：「〜かしら」「あらやだ」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
+    { id: 'fdc5f580-a7c6-dbb1-28f6-64ad237831aa', category: 'speech', label: '優しい敬語', description: '丁寧で穏やかな話し方：「〜です」「〜ます」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じですね。' },
+    { id: '33ff24b3-0861-6bc0-7aa0-4ac350fe5c51', category: 'speech', label: '冷たい敬語', description: '距離感のある敬語：「ご自由にどうぞ」「そうですか」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日、いい感じですね。' },
+    { id: 'a24b66df-0f96-e060-26ee-6e153dd14754', category: 'speech', label: 'タメ口', description: 'フレンドリーな砕けた口調：「〜だよ」「〜じゃん」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日いい感じじゃん。' },
+    { id: '7d4ffa4f-e0cb-19d2-85f1-27ff467cef0a', category: 'speech', label: 'ギャル語', description: '砕けた陽気な話し方：「マジで？」「〜じゃね？」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日、いい感じじゃね？' },
+    { id: 'd4498811-d12f-a38a-7eec-474dc908b26f', category: 'speech', label: 'お嬢様風', description: '上品で古風な敬語：「〜ですわ」「〜ですこと」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じですわね。' },
+    { id: '5d603d72-66c7-90d8-9259-5c804e412bdc', category: 'speech', label: '関西弁', description: '柔らかい関西口調：「〜やで」「ほんま？」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日いい感じやね。' },
+    { id: 'b3ff700f-489a-f3b3-c491-f115c00536b4', category: 'speech', label: '子供っぽい', description: '幼い印象の話し方：「〜だね！」「やったぁ」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じだね！' },
+    { id: 'd58d88d7-abb1-90bc-d6d3-0d1723c67349', category: 'speech', label: '無口', description: '短く省略がち：「……別に」「うん」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日、いい感じ。' },
+    { id: 'be34dad9-d3ef-8026-c127-4efe2c143f77', category: 'speech', label: 'ご婦人風', description: '華やかな柔らかい口調：「〜かしら」「あらやだ」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じね。' },
 
     // Occupation
     { id: '24e3646f-fba5-86c9-cda0-963ce1766158', category: 'occupation', label: '高校生', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },

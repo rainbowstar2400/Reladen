@@ -590,8 +590,7 @@ export function ResidentForm({
   const watchFirstPerson = form.watch('firstPerson');
   const watchName = form.watch('name');
   const speechExamplePlaceholder = useMemo(() => {
-    const fp = (watchFirstPerson ?? '').trim();
-    return `例: 「${fp}はそう思います。」のように書いてください`;
+    return `例: 「今日はいい感じだね。」のように書いてください`;
   }, [watchFirstPerson]);
 
   // マネージドプリセットのリストを MOCK -> DBフック (managedPresets) に変更
@@ -1027,6 +1026,7 @@ export function ResidentForm({
                     <FormItem>
                       <FormLabel className="text-sm text-muted-foreground">例文</FormLabel>
                       <FormControl>
+                        <p>「今日はいい感じ」ということを、どのように言いますか？」</p>
                         <Textarea
                           placeholder={speechExamplePlaceholder}
                           {...field}
