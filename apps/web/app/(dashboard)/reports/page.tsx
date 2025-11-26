@@ -1,14 +1,15 @@
 'use client'
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { listLocal } from '@/lib/db-local';
+import { bulkUpsert, listLocal } from '@/lib/db-local';
 import type { EventLogStrict } from '@repo/shared/types/conversation';
 import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 import { detectImpressionLabelChanges } from '@/lib/repos/conversation-repo';
+import { remoteFetchRecentEvents } from '@/lib/sync/remote-events';
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度'
 type ChangeKindFilter = ChangeKind | ''
@@ -79,124 +80,142 @@ export default function ReportsPage() {
     setCharB('')
     setKind('')
   }
-  // ---- 実データ（会話）をロード → ReportItem[] に変換 ----
+
   // ---- 実データ（会話＋相談）を events からロード → ReportItem[] に変換 ----
+  // ---- data load -> ReportItem[] ----
+  // ---- events を読み込み ReportItem[] へ変換 ----
   const [convItems, setConvItems] = useState<ReportItem[]>([]);
+
+  const buildReportItems = useCallback((events: EventLogStrict[]): ReportItem[] => {
+    const targets = events.filter(ev => ev && (ev.kind === 'conversation' || ev.kind === 'consult')); const impressionChangeMap = detectImpressionLabelChanges(targets as EventLogStrict[]);
+
+    return targets.map((ev) => {
+      const occurred =
+        (ev as any)?.payload?.occurredAt ??
+        (ev as any)?.occurredAt ??
+        ev.updated_at ??
+        (ev as any)?.created_at ??
+        new Date().toISOString();
+
+      const participants = Array.isArray((ev as any)?.payload?.participants)
+        ? (ev as any).payload.participants
+        : [];
+
+      const a = participants[0] ?? undefined;
+      const b = participants[1] ?? undefined;
+
+      const displayA = a ? (residentNameMap[a] ?? a) : '';
+      const displayB = b ? (residentNameMap[b] ?? b) : '';
+
+      // chips（あれば）を抽出：favor / impression を簡易生成（special優先）
+      const chips: ReportItem['chips'] = [];
+      const deltas = (ev as any)?.payload?.deltas ?? (ev as any)?.deltas;
+      const change = impressionChangeMap.get(ev.id);
+      const toLabel = (s: string) => {
+        switch (s) {
+          case 'none': return 'なし';
+          case 'like': return '好き';
+          case 'like?': return '好きかも';
+          case 'curious': return '気になる';
+          case 'awkward': return '気まずい';
+          case 'dislike': return '嫌い';
+          case 'dislike?': return '嫌いかも';
+          default: return s;
+        }
+      };
+      const pickImpression = (entry: any) => {
+        const st = entry?.impressionState;
+        if (st?.special === 'awkward') return 'awkward';
+        if (st?.base) return String(st.base);
+        if (entry?.impression != null) return String(entry.impression);
+        return null;
+      };
+      if (deltas) {
+        const aToB = deltas.aToB ?? {};
+        const bToA = deltas.bToA ?? {};
+        const favorAB = Number(aToB.favor ?? 0);
+        const favorBA = Number(bToA.favor ?? 0);
+        if (a && b) {
+          if (favorAB > 0) chips.push({ kind: '好感度', label: ` ${displayA}→${displayB}：↑` });
+          if (favorAB < 0) chips.push({ kind: '好感度', label: ` ${displayA}→${displayB}：↓` });
+          if (favorBA > 0) chips.push({ kind: '好感度', label: ` ${displayB}→${displayA}：↑` });
+          if (favorBA < 0) chips.push({ kind: '好感度', label: ` ${displayB}→${displayA}：↓` });
+        }
+        if (a && b) {
+          const impAB = change?.aToB === false ? null : pickImpression(aToB);
+          const impBA = change?.bToA === false ? null : pickImpression(bToA);
+          if (impAB != null) chips.push({ kind: '印象', label: ` ${displayA}→${displayB}：${toLabel(impAB)}` });
+          if (impBA != null) chips.push({ kind: '印象', label: ` ${displayB}→${displayA}：${toLabel(impBA)}` });
+        }
+      }
+
+      // 表示テキスト（会話/相談でフォールバック）
+      const systemLine = typeof (ev as any)?.payload?.systemLine === 'string'
+        ? replaceResidentIds((ev as any).payload.systemLine, residentNameMap)
+        : undefined;
+
+      const participantsText =
+        systemLine && displayA && displayB
+          ? `${displayA} と ${displayB} が話している。`
+          : undefined;
+
+      const text =
+        participantsText ??
+        systemLine ??
+        (ev as any)?.payload?.title ??
+        (ev.kind === 'consult'
+          ? `${displayA ?? ''} から相談を受けた。`.trim()
+          : (displayA && displayB) ? `${displayA} と ${displayB} が会話した。` : '出来事が記録されました。');
+
+      const category: ReportItem['category'] =
+        ev.kind === 'consult' ? 'consult'
+          : ev.kind === 'conversation' ? 'conversation'
+            : 'other';
+
+      return {
+        id: ev.id,
+        at: occurred,
+        text,
+        category,
+        chips,
+        a, b,
+      };
+    });
+  }, [residentNameMap]);
+
   useEffect(() => {
     let alive = true;
+
+    const loadLocal = async () => {
+      const all = (await listLocal('events')) as unknown as EventLogStrict[];
+      if (alive) setConvItems(buildReportItems(all));
+    };
+
+    const fetchRemoteAndMerge = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      try {
+        const remote = await remoteFetchRecentEvents(200);
+        if (!remote.length) return;
+        await bulkUpsert('events', remote as any);
+        if (!alive) return;
+        const merged = (await listLocal('events')) as unknown as EventLogStrict[];
+        if (alive) setConvItems(buildReportItems(merged));
+      } catch (e) {
+        console.warn('reports: remote fetch skipped', e);
+      }
+    };
+
     (async () => {
       try {
-        // すべての events を取得（EventLogStrict 形）
-        const all = (await listLocal('events')) as unknown as EventLogStrict[];
-
-        // 対象は conversation / consult のみ
-        const targets = all.filter(ev => ev && (ev.kind === 'conversation' || ev.kind === 'consult'));
-        const impressionChangeMap = detectImpressionLabelChanges(targets as EventLogStrict[]);
-
-        // ReportItem へ整形（payload のshape差に耐える防御的マッピング）
-        const items: ReportItem[] = targets.map((ev) => {
-          const occurred =
-            (ev as any)?.payload?.occurredAt ??
-            (ev as any)?.occurredAt ??
-            ev.updated_at ??
-            (ev as any)?.created_at ??
-            new Date().toISOString();
-
-          const participants = Array.isArray((ev as any)?.payload?.participants)
-            ? (ev as any).payload.participants
-            : [];
-
-          const a = participants[0] ?? undefined;
-          const b = participants[1] ?? undefined;
-
-          const displayA = a ? (residentNameMap[a] ?? a) : '';
-          const displayB = b ? (residentNameMap[b] ?? b) : '';
-
-          // chips（あれば）を抽出：favor / impression を簡易生成（special優先）
-          const chips: ReportItem['chips'] = [];
-          const deltas = (ev as any)?.payload?.deltas ?? (ev as any)?.deltas;
-          const change = impressionChangeMap.get(ev.id);
-          const toLabel = (s: string) => {
-            switch (s) {
-              case 'none': return 'なし';
-              case 'like': return '好き';
-              case 'like?': return '好きかも';
-              case 'curious': return '気になる';
-              case 'awkward': return '気まずい';
-              case 'dislike': return '嫌い';
-              case 'dislike?': return '嫌いかも';
-              default: return s;
-            }
-          };
-          const pickImpression = (entry: any) => {
-            const st = entry?.impressionState;
-            if (st?.special === 'awkward') return 'awkward';
-            if (st?.base) return String(st.base);
-            if (entry?.impression != null) return String(entry.impression);
-            return null;
-          };
-          if (deltas) {
-            const aToB = deltas.aToB ?? {};
-            const bToA = deltas.bToA ?? {};
-            const favorAB = Number(aToB.favor ?? 0);
-            const favorBA = Number(bToA.favor ?? 0);
-            if (a && b) {
-              if (favorAB > 0) chips.push({ kind: '好感度', label: ` ${displayA}→${displayB}：↑` });
-              if (favorAB < 0) chips.push({ kind: '好感度', label: ` ${displayA}→${displayB}：↓` });
-              if (favorBA > 0) chips.push({ kind: '好感度', label: ` ${displayB}→${displayA}：↑` });
-              if (favorBA < 0) chips.push({ kind: '好感度', label: ` ${displayB}→${displayA}：↓` });
-            }
-            if (a && b) {
-              const impAB = change?.aToB === false ? null : pickImpression(aToB);
-              const impBA = change?.bToA === false ? null : pickImpression(bToA);
-              if (impAB != null) chips.push({ kind: '印象', label: ` ${displayA}→${displayB}：${toLabel(impAB)}` });
-              if (impBA != null) chips.push({ kind: '印象', label: ` ${displayB}→${displayA}：${toLabel(impBA)}` });
-            }
-          }
-
-          // 表示テキスト（会話/相談でフォールバック）
-          const systemLine = typeof (ev as any)?.payload?.systemLine === 'string'
-            ? replaceResidentIds((ev as any).payload.systemLine, residentNameMap)
-            : undefined;
-
-          const participantsText =
-            systemLine && displayA && displayB
-              ? `${displayA} と ${displayB} が話している。`
-              : undefined;
-
-          const text =
-            participantsText ??
-            systemLine ??
-            (ev as any)?.payload?.title ??
-            (ev.kind === 'consult'
-              ? `${displayA ?? ''} から相談を受けた。`.trim()
-              : (displayA && displayB) ? `${displayA} と ${displayB} が会話した。` : '出来事が記録されました。');
-
-          const category: ReportItem['category'] =
-            ev.kind === 'consult' ? 'consult'
-              : ev.kind === 'conversation' ? 'conversation'
-                : 'other';
-
-          return {
-            id: ev.id,
-            at: occurred,
-            text,
-            category,
-            chips,
-            a, b,
-          };
-        });
-
-        // ここでは全件保持（後段で date / フィルタで絞り込み）
-        if (alive) setConvItems(items);
+        await loadLocal();
       } catch (e) {
         console.error('reports: load events failed', e);
         if (alive) setConvItems([]);
       }
+      await fetchRemoteAndMerge();
     })();
     return () => { alive = false };
-  }, [date, residentNameMap]);
-
+  }, [buildReportItems]);
   const ALL: ReportItem[] = useMemo(() => convItems, [convItems]);
 
   // ---- フィルタ＆ソート ----

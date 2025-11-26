@@ -12,10 +12,10 @@ async function requireOwnerId(client: SupabaseClient<Database>): Promise<string>
   return data.user.id;
 }
 
-/** イベントを Supabase に upsert する */
+/** イベントを Supabase へ upsert する */
 export async function remoteUpsertEvent(ev: EventLogStrict) {
   if (!sb) {
-    console.warn('Supabase クライアントが無効なため、イベント同期をスキップしました。');
+    console.warn('Supabase クライアントが見つからないため、イベント同期をスキップしました。');
     return;
   }
   const { error } = await sb.from('events').upsert({
@@ -28,10 +28,10 @@ export async function remoteUpsertEvent(ev: EventLogStrict) {
   if (error) throw error;
 }
 
-/** 通知を Supabase に upsert する */
+/** 通知を Supabase へ upsert する */
 export async function remoteUpsertNotification(n: NotificationRecord & { deleted: boolean }) {
   if (!sb) {
-    console.warn('Supabase クライアントが無効なため、通知同期をスキップしました。');
+    console.warn('Supabase クライアントが見つからないため、通知同期をスキップしました。');
     return;
   }
   const ownerId = await requireOwnerId(sb);
@@ -58,6 +58,29 @@ export async function remoteFetchEventById(id: string) {
   const { data, error } = await sb.from('events').select('*').eq('id', id).single();
   if (error) return null;
   return data as { id: string; kind: string; payload: unknown; updated_at: string; deleted: boolean };
+}
+
+/** 最新のイベントを Supabase から取得 */
+export async function remoteFetchRecentEvents(limit = 200): Promise<EventLogStrict[]> {
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from('events')
+    .select('id, kind, payload, updated_at, deleted')
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.warn('remoteFetchRecentEvents failed:', error.message ?? error);
+    return [];
+  }
+
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    kind: row.kind,
+    payload: row.payload,
+    updated_at: row.updated_at,
+    deleted: row.deleted ?? false,
+  }));
 }
 
 /** 最新の通知を Supabase から取得 */
