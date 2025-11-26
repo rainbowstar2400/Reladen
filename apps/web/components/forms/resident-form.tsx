@@ -1019,12 +1019,15 @@ export function ResidentForm({
                     </FormItem>
                   )}
                 />
+                <p id="age-help" className="text-xs text-muted-foreground mt-1">
+                  「今日はいい感じ」ということを、どのように言いますか？」
+                </p>
                 <FormField
                   control={form.control}
                   name="speechPresetExample"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm text-muted-foreground">「今日はいい感じ」ということを、どのように言いますか？」</FormLabel>
+                      <FormLabel className="text-sm text-muted-foreground">例文</FormLabel>
                       <FormControl>
                         <Textarea
                           placeholder={speechExamplePlaceholder}
