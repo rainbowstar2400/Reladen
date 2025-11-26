@@ -15,6 +15,7 @@ const residentProfileSchema = z.object({
   age: z.number().int().optional().nullable(),
   occupation: z.string().optional().nullable(),
   speechPreset: z.string().optional().nullable(),
+  speechPresetDescription: z.string().optional().nullable(),
   speechExample: z.string().optional().nullable(),
   firstPerson: z.string().optional().nullable(),
   traits: z.unknown().optional().nullable(),

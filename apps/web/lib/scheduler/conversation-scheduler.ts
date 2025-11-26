@@ -61,6 +61,7 @@ function toConversationProfile(resident: Resident): ConversationResidentProfile 
     age: typeof resident.age === "number" ? resident.age : null,
     occupation: resident.occupation ?? null,
     speechPreset: resident.speechPreset ?? null,
+    speechPresetDescription: null,
     firstPerson: resident.firstPerson ?? null,
     traits: resident.traits ?? null,
     interests: resident.interests ?? null,
@@ -83,12 +84,15 @@ function buildContextForParticipants(
     const res = residentMap.get(id);
     if (res) {
       context.residents = context.residents ?? {};
-      const speechExample = res.speechPreset
-        ? presetMap.get(res.speechPreset)?.example ?? null
-        : null;
+      const speechPreset = res.speechPreset ? presetMap.get(res.speechPreset) : null;
+      const firstPersonPreset = res.firstPerson ? presetMap.get(res.firstPerson) : null;
+      const speechExample = speechPreset?.example ?? null;
       context.residents[id] = {
         ...toConversationProfile(res),
-        speechExample,
+        speechPreset: speechPreset?.label ?? null,
+        speechPresetDescription: speechPreset?.description ?? null,
+        speechExample: typeof speechExample === "string" || speechExample === null ? speechExample : null,
+        firstPerson: firstPersonPreset?.label ?? null,
       };
     }
     const belief = beliefMap.get(id);

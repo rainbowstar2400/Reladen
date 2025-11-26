@@ -99,10 +99,13 @@ async function loadResidentProfiles(
         : null;
     const speechPresetRaw = (raw as any)?.speech_preset;
     const speechPresetId = typeof speechPresetRaw === "string" ? speechPresetRaw : null;
-    const presetExample = speechPresetId ? presetMap.get(speechPresetId) : undefined;
-    const speechExample = typeof presetExample?.example === "string" || presetExample?.example === null
-      ? (presetExample as any).example ?? null
+    const speechPreset = speechPresetId ? presetMap.get(speechPresetId) : undefined;
+    const speechExample = typeof speechPreset?.example === "string" || speechPreset?.example === null
+      ? (speechPreset as any).example ?? null
       : null;
+    const firstPersonRaw = (raw as any)?.first_person;
+    const firstPersonId = typeof firstPersonRaw === "string" ? firstPersonRaw : null;
+    const firstPersonPreset = firstPersonId ? presetMap.get(firstPersonId) : undefined;
 
     dict[id] = {
       id,
@@ -111,9 +114,10 @@ async function loadResidentProfiles(
       gender: (raw as any)?.gender ?? null,
       age: ageValue,
       occupation: (raw as any)?.occupation ?? null,
-      speechPreset: speechPresetId,
+      speechPreset: (speechPreset as any)?.label ?? null,
+      speechPresetDescription: (speechPreset as any)?.description ?? null,
       speechExample,
-      firstPerson: (raw as any)?.first_person ?? null,
+      firstPerson: (firstPersonPreset as any)?.label ?? null,
       traits: (raw as any)?.traits ?? null,
       interests: (raw as any)?.interests ?? null,
     };
