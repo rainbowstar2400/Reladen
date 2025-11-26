@@ -115,7 +115,7 @@ export default function NotificationsPanel() {
     }
   }
 
-  const unread = notifications.filter((n) => n.status === 'unread').length;
+  const unread = filteredNotifications.filter((n) => n.status === 'unread').length;
 
   return (
     <div className="rounded-2xl border bg-white">
