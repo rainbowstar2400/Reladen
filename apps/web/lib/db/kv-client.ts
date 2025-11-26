@@ -9,7 +9,8 @@ type Table =
   | "topic_threads"
   | "notifications"
   | "beliefs"
-  | "feelings";
+  | "feelings"
+  | "relations";
 
 export async function putKV(table: Table, rec: any) {
   return putLocal(table as any, rec as any);

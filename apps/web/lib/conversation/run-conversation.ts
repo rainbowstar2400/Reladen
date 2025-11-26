@@ -126,6 +126,45 @@ async function loadResidentProfiles(
   return dict;
 }
 
+type RelationRow = {
+  a_id?: string;
+  b_id?: string;
+  aId?: string;
+  bId?: string;
+  type?: string;
+  deleted?: boolean;
+};
+
+async function hasNoneRelationBetween(
+  participants: [string, string],
+): Promise<boolean> {
+  const rows = (await listAny("relations")) as unknown as RelationRow[] | null;
+  if (!Array.isArray(rows)) return false;
+
+  const [a, b] = participants;
+
+  return rows.some((rel) => {
+    if (!rel || rel.deleted) return false;
+    const aId = typeof rel.a_id === "string"
+      ? rel.a_id
+      : typeof (rel as any).aId === "string"
+        ? (rel as any).aId
+        : undefined;
+    const bId = typeof rel.b_id === "string"
+      ? rel.b_id
+      : typeof (rel as any).bId === "string"
+        ? (rel as any).bId
+        : undefined;
+
+    if (!aId || !bId) return false;
+    const isPair =
+      (aId === a && bId === b) ||
+      (aId === b && bId === a);
+
+    return isPair && rel.type === "none";
+  });
+}
+
 /** threadId と participants から GPT向けの thread オブジェクトを構築 */
 async function ensureThreadForGpt(input: {
   threadId?: string;
@@ -189,6 +228,16 @@ export async function runConversation(
     participants,
   });
   const participantSet = new Set(participants);
+
+  let relationBlocked = false;
+  try {
+    relationBlocked = await hasNoneRelationBetween(thread.participants);
+  } catch (error) {
+    console.warn('[runConversation] Failed to load relations for participants.', error);
+  }
+  if (relationBlocked) {
+    throw new Error("[runConversation] Conversation aborted because relation is 'none'.");
+  }
 
   let beliefs: Record<string, BeliefRecord> = {};
   try {

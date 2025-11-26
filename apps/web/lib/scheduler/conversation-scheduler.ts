@@ -8,7 +8,7 @@
 import { listLocal } from "@/lib/db-local";
 import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
 import { selectConversationCandidates } from "@/lib/conversation/candidates";
-import type { Resident, Preset } from "@/types";
+import type { Resident, Preset, Relation } from "@/types";
 import type { ConversationResidentProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 
 type StartConversationPayload = {
@@ -105,6 +105,39 @@ function buildContextForParticipants(
   return context;
 }
 
+function hasNoneRelationBetween(
+  participants: [string, string],
+  relations: Relation[],
+) {
+  const [a, b] = participants;
+  return relations.some((rel) => {
+    if (rel.deleted) return false;
+    const aId = (rel as any)?.a_id ?? (rel as any)?.aId;
+    const bId = (rel as any)?.b_id ?? (rel as any)?.bId;
+    if (!aId || !bId) return false;
+    const isPair =
+      (aId === a && bId === b) ||
+      (aId === b && bId === a);
+    return isPair && rel.type === "none";
+  });
+}
+
+function pickAllowedPair(
+  awakeCandidates: Resident[],
+  relations: Relation[],
+): [string, string] | null {
+  const shuffled = [...awakeCandidates].sort(() => 0.5 - Math.random());
+  for (let i = 0; i < shuffled.length; i += 1) {
+    for (let j = i + 1; j < shuffled.length; j += 1) {
+      const pair: [string, string] = [shuffled[i].id, shuffled[j].id];
+      if (!hasNoneRelationBetween(pair, relations)) {
+        return pair;
+      }
+    }
+  }
+  return null;
+}
+
 export type SchedulerOptions = {
   /** 有効/無効（UIからも切替できるようにしておくと便利） */
   enabled?: boolean;
@@ -171,14 +204,21 @@ function refreshLock() {
 async function pickThreadOrDefault(
   /** 現在活動中の住人リスト */
   awakeCandidates: Resident[],
+  relations: Relation[],
 ): Promise<{
   threadId?: string;
   participants: [string, string];
 } | null> { // null を返す可能性を追加
   const allThreads = (await listLocal("topic_threads")) as unknown as TopicThread[];
+  const usableThreads = allThreads.filter((t) => {
+    const ps = (t.participants as [string, string]) ?? [];
+    const hasPair = Array.isArray(ps) && ps.length === 2;
+    if (!hasPair) return false;
+    return !hasNoneRelationBetween(ps, relations);
+  });
   // 条件：status が "ongoing" のものを優先、updated_at が古いものから順
-  const ongoing = allThreads.filter((t) => (t as any).status === "ongoing");
-  const sorted = (ongoing.length ? ongoing : allThreads).sort((a, b) => {
+  const ongoing = usableThreads.filter((t) => (t as any).status === "ongoing");
+  const sorted = (ongoing.length ? ongoing : usableThreads).sort((a, b) => {
     const ta = new Date(a.updated_at ?? 0).getTime();
     const tb = new Date(b.updated_at ?? 0).getTime();
     return ta - tb;
@@ -202,8 +242,8 @@ async function pickThreadOrDefault(
   }
 
   // 活動中の住人をシャッフルして先頭2名を選ぶ
-  const shuffled = [...awakeCandidates].sort(() => 0.5 - Math.random());
-  const newPair: [string, string] = [shuffled[0].id, shuffled[1].id];
+  const newPair = pickAllowedPair(awakeCandidates, relations);
+  if (!newPair) return null;
 
   // 新規会話として参加者ペアを返す（threadId はなし）
   return { participants: newPair };
@@ -246,7 +286,9 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
       const allResidents = (await listLocal("residents")) as Resident[];
       const allBeliefs = (await listLocal("beliefs")) as BeliefRecord[];
       const allPresets = (await listLocal("presets")) as Preset[];
+      const allRelations = (await listLocal("relations")) as Relation[];
       const activePresets = allPresets.filter((p) => !p.deleted);
+      const activeRelations = allRelations.filter((r) => !r.deleted);
       const now = new Date();
       const awakeCandidates = selectConversationCandidates(now, allResidents);
       const awakeIds = new Set(awakeCandidates.map((r) => r.id));
@@ -262,7 +304,7 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
       }
 
       // 対象選定（既存スレッド or 新規ペア）
-      const target = await pickThreadOrDefault(awakeCandidates);
+      const target = await pickThreadOrDefault(awakeCandidates, activeRelations);
 
       // 対象が見つからない場合（通常は発生しない）
       if (!target) {
@@ -276,6 +318,15 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
 
       // 選定された参加者が活動中か最終確認
       // （主に既存スレッドが選ばれたが、その参加者が寝たケース）
+      if (hasNoneRelationBetween(target.participants, activeRelations)) {
+        console.log(
+          "[Scheduler] Skipping conversation: relation is 'none' between participants.",
+        );
+        refreshLock();
+        scheduleNext();
+        return;
+      }
+
       const [pA, pB] = target.participants;
       if (!awakeIds.has(pA) || !awakeIds.has(pB)) {
         // ログメッセージが実際のID（pA, pB）で表示される
