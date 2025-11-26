@@ -9,6 +9,7 @@ export type ConversationResidentProfile = {
   age?: number | null;
   occupation?: string | null;
   speechPreset?: string | null;
+  speechPresetDescription?: string | null;
   speechExample?: string | null;
   firstPerson?: string | null;
   traits?: unknown;
@@ -17,15 +18,15 @@ export type ConversationResidentProfile = {
 };
 
 export const systemPromptConversation = `
-あなたはキャラクター同士の会話を生成するAIです。
-返答は必ず「有効なJSONのみ」を出力してください。前後に説明文や補足は一切付けないでください。
-返すJSONは以下のスキーマに従います：
+あなたはキャラクター間の会話を生成するAIです。
+出力は必ず「正しいJSONのみ」を出力してください。前後に説明文や補足は一切付けないでください。
+出力JSONは以下のスキーマに従います：
 
 {
   "threadId": string,                   // 現在のスレッドID
   "participants": [string, string],     // 登場人物のUUID
   "topic": string,                      // 会話トピック
-  "lines": [                            // 実際のセリフ
+  "lines": [                            // 会話のセリフ
     { "speaker": string, "text": string }
   ],
   "meta": {
@@ -40,6 +41,10 @@ export const systemPromptConversation = `
     }
   }
 }
+このデータに紐づく登場人物には「一人称」「話し方（プリセット名）」「話し方の説明」「話し方の例文」が設定されています。
+それぞれの登場人物は常にプロフィールで指定された一人称のみを使い、会話途中で他の一人称へ変えないでください。
+セリフの文体や雰囲気は「話し方（プリセット名）」「話し方の説明」「話し方の例文」を参考にし、
+完全一致でなくてもよいのでなるべく近い口調にしてください。
 `.trim();
 
 function formatProfileLine(
@@ -60,12 +65,13 @@ function formatProfileLine(
   if (profile.firstPerson) parts.push(`一人称: ${profile.firstPerson}`);
   if (profile.speechPreset) parts.push(`話し方: ${profile.speechPreset}`);
 
-  const profileLine = parts.length ? parts.join(" / ") : "基本プロフィール情報なし";
+  const profileLine = parts.length ? parts.join(" / ") : "（プロフィールなし）";
   const traitLine = profile.traits ? `性格・特徴: ${JSON.stringify(profile.traits)}` : "性格・特徴: 未設定";
-  const interestLine = profile.interests
-    ? `興味・関心: ${JSON.stringify(profile.interests)}`
-    : "興味・関心: 未設定";
-  const summaryLine = profile.summary ? `メモ: ${profile.summary}` : "";
+  const interestLine = profile.interests ? `趣味・関心: ${JSON.stringify(profile.interests)}` : "趣味・関心: 未設定";
+  const summaryLine = profile.summary ? `要約: ${profile.summary}` : "";
+  const firstPersonLine = profile.firstPerson ?? "未設定";
+  const speechPresetLine = profile.speechPreset ?? "未設定";
+  const speechPresetDescriptionLine = profile.speechPresetDescription ?? "未設定";
 
   const beliefLine = `Belief = ${JSON.stringify(belief ?? {})}`;
 
@@ -74,6 +80,12 @@ function formatProfileLine(
     `  ${profileLine}`,
     `  ${traitLine}`,
     `  ${interestLine}`,
+    "  会話スタイル:",
+    `    - 一人称: 「${firstPersonLine}」`,
+    "      どのセリフでも常にこの一人称を使い、途中で別の一人称に変えないこと。",
+    `    - 話し方: ${speechPresetLine}`,
+    `    - 話し方の説明: ${speechPresetDescriptionLine}`,
+    profile.speechExample ? `    - 話し方の例: 「${profile.speechExample}」` : undefined,
     summaryLine ? `  ${summaryLine}` : undefined,
     `  ${beliefLine}`,
   ]
@@ -101,12 +113,16 @@ export function buildUserPromptConversation(opts: {
 登場人物は2人です：
 ${participantBlock}
 
+会話スタイルの共通ルール：
+- プロフィールに書かれた一人称のみを使い、途中で変えないこと
+- 話し方（プリセット名）・説明・例文は口調の参考にすること
+
 最近の会話まとめ：
 ${lastSummary ?? "(なし)"}
 
 次のトピック: ${topic}
 
-上記をもとに、短い会話を生成してください。
-返答は必ず上記スキーマに適合するJSONのみとします。
+これらを踏まえて、短い会話を生成してください。
+出力は必ず上記スキーマに合致したJSONのみとします。
 `.trim();
 }
