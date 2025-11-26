@@ -69,7 +69,9 @@ function formatProfileLine(
   const traitLine = profile.traits ? `性格・特徴: ${JSON.stringify(profile.traits)}` : "性格・特徴: 未設定";
   const interestLine = profile.interests ? `趣味・関心: ${JSON.stringify(profile.interests)}` : "趣味・関心: 未設定";
   const summaryLine = profile.summary ? `要約: ${profile.summary}` : "";
-  const firstPersonLine = profile.firstPerson ?? "未設定";
+
+  // 一人称・話し方まわり
+  const firstPerson = profile.firstPerson; // 「未設定」を一人称としては渡さない
   const speechPresetLine = profile.speechPreset ?? "未設定";
   const speechPresetDescriptionLine = profile.speechPresetDescription ?? "未設定";
 
@@ -81,11 +83,24 @@ function formatProfileLine(
     `  ${traitLine}`,
     `  ${interestLine}`,
     "  会話スタイル:",
-    `    - 一人称: 「${firstPersonLine}」`,
-    "      どのセリフでも常にこの一人称を使い、途中で別の一人称に変えないこと。",
+    // 一人称
+    firstPerson
+      ? `    - 一人称: 「${firstPerson}」`
+      : "    - 一人称: （未設定）",
+    firstPerson
+      ? "      セリフ中で自分を指すときは、必ずこの一人称だけを使うこと。"
+      : undefined,
+    firstPerson
+      ? "      表記（漢字・ひらがな・カタカナなど）や単語の形を一切変えないこと。"
+      : undefined,
+    // 話し方
     `    - 話し方: ${speechPresetLine}`,
     `    - 話し方の説明: ${speechPresetDescriptionLine}`,
+    // 例文（ある場合だけ）
     profile.speechExample ? `    - 話し方の例: 「${profile.speechExample}」` : undefined,
+    profile.speechExample
+      ? "      セリフの文体や語尾は、この例文と上の説明を真似するようにしてください。"
+      : undefined,
     summaryLine ? `  ${summaryLine}` : undefined,
     `  ${beliefLine}`,
   ]
