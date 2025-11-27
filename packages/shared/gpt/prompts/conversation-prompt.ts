@@ -71,35 +71,28 @@ function formatProfileLine(
   const summaryLine = profile.summary ? `要約: ${profile.summary}` : "";
 
   // 一人称・話し方まわり
-  const firstPerson = profile.firstPerson; // 「未設定」を一人称としては渡さない
+  const firstPerson = profile.firstPerson; // 「未設定」を一人称としては使わない
   const speechPresetLine = profile.speechPreset ?? "未設定";
   const speechPresetDescriptionLine = profile.speechPresetDescription ?? "未設定";
 
   const beliefLine = `Belief = ${JSON.stringify(belief ?? {})}`;
+  const displayName = profile.name ?? id;
 
   return [
-    `- ${profile.name ?? id} (ID: ${id})`,
+    `- ${displayName} (ID: ${id})`,
     `  ${profileLine}`,
     `  ${traitLine}`,
     `  ${interestLine}`,
-    "  会話スタイル:",
-    // 一人称
+
+    // 話し方（テンプレート名 + 説明）
+    `  ${displayName}の話し方: テンプレート「${speechPresetLine}」 ${speechPresetDescriptionLine}`,
+    // 一人称（必須）… Relation_Sim と同じノリ
     firstPerson
-      ? `    - 一人称: 「${firstPerson}」`
-      : "    - 一人称: （未設定）",
-    firstPerson
-      ? "      セリフ中で自分を指すときは、必ずこの一人称だけを使うこと。"
-      : undefined,
-    firstPerson
-      ? "      表記（漢字・ひらがな・カタカナなど）や単語の形を一切変えないこと。"
-      : undefined,
-    // 話し方
-    `    - 話し方: ${speechPresetLine}`,
-    `    - 話し方の説明: ${speechPresetDescriptionLine}`,
-    // 例文（ある場合だけ）
-    profile.speechExample ? `    - 話し方の例: 「${profile.speechExample}」` : undefined,
+      ? `  ${displayName}の一人称は「${firstPerson}」。この一人称だけを使って話してください。`
+      : "  一人称は未設定です。",
+    // 口調の例（あれば）
     profile.speechExample
-      ? "      セリフの文体や語尾は、この例文と上の説明を真似するようにしてください。"
+      ? `  普段の口調の例: 「${profile.speechExample}」`
       : undefined,
     summaryLine ? `  ${summaryLine}` : undefined,
     `  ${beliefLine}`,
