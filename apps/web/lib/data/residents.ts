@@ -128,7 +128,11 @@ async function saveAllRelationData(
 
   for (const [targetId, data] of Object.entries(relations)) {
     // 1. Relation (関係性)
-    const existingRelation = allRelations.find(r => (r.a_id === currentId && r.b_id === targetId));
+    const existingRelation = allRelations.find(
+      (r) =>
+        (r.a_id === currentId && r.b_id === targetId) ||
+        (r.a_id === targetId && r.b_id === currentId)
+    );
     const relationPayload: Relation = {
       // @ts-ignore
       id: existingRelation?.id ?? newId(),

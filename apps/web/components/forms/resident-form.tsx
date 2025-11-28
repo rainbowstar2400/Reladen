@@ -384,6 +384,7 @@ export function ResidentForm({
     defaults: Partial<ResidentWithRelations> | undefined,
     others: Resident[]
   ): Record<string, TempRelationData> {
+    const currentId = defaults?.id;
 
     // Skip when there are no other residents to relate to
     if (!others || others.length === 0) {
@@ -403,7 +404,9 @@ export function ResidentForm({
       const targetId = target.id;
 
       // 該当するデータを探す
-      const relation = relationsArr.find(r => r.b_id === targetId);
+      const relation =
+        relationsArr.find(r => r.b_id === targetId) ||
+        (currentId ? relationsArr.find(r => r.a_id === targetId && r.b_id === currentId) : undefined);
       const feelingTo = feelingsFromArr.find(f => f.to_id === targetId);
       const feelingFrom = feelingsToArr.find(f => f.from_id === targetId);
       const nicknameTo = nicknamesToArr.find(n => n.to_id === targetId);

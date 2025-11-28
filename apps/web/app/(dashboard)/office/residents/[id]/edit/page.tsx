@@ -30,10 +30,18 @@ export default function EditResidentPage({ params }: { params: { id: string } })
       const allFeelings = await listLocal<Feeling>('feelings');
       const allNicknames = await listLocal<Nickname>('nicknames');
 
+      const normalizedRelations = allRelations
+        .filter((r) => r.a_id === residentId || r.b_id === residentId)
+        .map((r) =>
+          r.a_id === residentId
+            ? r
+            : { ...r, a_id: residentId, b_id: r.a_id }
+        );
+
       // 3. ResidentWithRelations の型 に合わせてデータを組み立てる
       const data: ResidentWithRelations = {
         ...resident,
-        relations: allRelations.filter((r) => r.a_id === residentId),
+        relations: normalizedRelations,
         feelingsFrom: allFeelings.filter((f) => f.from_id === residentId),
         feelingsTo: allFeelings.filter((f) => f.to_id === residentId),
         nicknamesTo: allNicknames.filter((n) => n.from_id === residentId),
