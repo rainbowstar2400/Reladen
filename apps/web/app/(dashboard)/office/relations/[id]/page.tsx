@@ -21,22 +21,22 @@ import {
 import { FEELING_LABELS, RELATION_LABELS } from '@/lib/constants/labels';
 
 const AffinityBar = ({ value }: { value: number }) => {
-    // -100 〜 100 の範囲外の値を丸める
-    const clampedValue = Math.max(-100, Math.min(100, value));
-    const filledRange = clampedValue + 100; // 0〜200 の幅
-    const halfRange = filledRange / 2; // 中央から広がる幅
-    const fillStart = -halfRange;
-    const fillEnd = halfRange;
+    // -100 から 0 は左側、0 〜 100 は右側へ伸ばす積み上げ型のバー
+    const clamped = Math.max(-100, Math.min(100, value));
+    const segments = 20; // 10pt 刻みで 20 分割
+    const filledRatio = (clamped + 100) / 200; // 0.0 〜 1.0
+    const fullBoxes = Math.floor(filledRatio * segments);
+    const partial = filledRatio * segments - fullBoxes; // 0.0 〜 1.0
 
     return (
         <div className="flex space-x-0.5">
-            {Array.from({ length: 20 }).map((_, index) => {
-                const segmentStartValue = -100 + index * 10;
-                const segmentEndValue = segmentStartValue + 10;
-                const overlapStart = Math.max(segmentStartValue, fillStart);
-                const overlapEnd = Math.min(segmentEndValue, fillEnd);
-                const overlapWidth = Math.max(0, overlapEnd - overlapStart);
-                const widthPercent = (overlapWidth / 10) * 100;
+            {Array.from({ length: segments }).map((_, index) => {
+                const widthPercent =
+                    index < fullBoxes
+                        ? 100
+                        : index === fullBoxes && fullBoxes < segments
+                            ? Math.round(partial * 100)
+                            : 0;
 
                 return (
                     <div
