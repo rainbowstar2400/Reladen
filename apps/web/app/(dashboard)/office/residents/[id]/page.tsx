@@ -80,7 +80,10 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
     return new Map(allResidents.map(r => [r.id, r.name ?? '（名前なし）']));
   }, [allResidents]);
 
-  const relatedRelations = relations?.filter((relation) => [relation.a_id, relation.b_id].includes(residentId)) ?? [];
+  const relatedRelations =
+    relations?.filter((relation) => (
+      [relation.a_id, relation.b_id].includes(residentId) && relation.type !== 'none'
+    )) ?? [];
   const relatedFeelings = feelings?.filter((feeling) => feeling.from_id === residentId || feeling.to_id === residentId) ?? [];
 
   const feelingMap = useMemo(() => {

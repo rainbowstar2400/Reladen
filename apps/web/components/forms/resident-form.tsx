@@ -32,7 +32,7 @@ import { useFormDirty } from '@/components/providers/FormDirtyProvider';
 import { useLeaveConfirm } from '@/lib/hooks/useLeaveConfirm';
 import { usePresetsByCategory, useUpsertPreset } from '@/lib/data/presets';
 import { Loader2 } from 'lucide-react';
-import { DEFAULT_TRAITS, RELATION_LABELS, TRAIT_LABELS } from '@/lib/constants/labels';
+import { DEFAULT_TRAITS, FEELING_LABELS, RELATION_LABELS, TRAIT_LABELS } from '@/lib/constants/labels';
 
 // === フォーム内で使う選択肢（まずは固定配列で運用） ===
 const MBTI_TYPES = [
@@ -136,6 +136,21 @@ const DEFAULT_TEMP_RELATION: TempRelationData = {
   feelingScoreFrom: 50,
   nicknameTo: '',
   nicknameFrom: '',
+};
+
+// tempRelations
+const hasRelationChanges = (relation?: TempRelationData) => {
+  if (!relation) return false;
+
+  return (
+    relation.relationType !== DEFAULT_TEMP_RELATION.relationType ||
+    relation.feelingLabelTo !== DEFAULT_TEMP_RELATION.feelingLabelTo ||
+    relation.feelingLabelFrom !== DEFAULT_TEMP_RELATION.feelingLabelFrom ||
+    relation.feelingScoreTo !== DEFAULT_TEMP_RELATION.feelingScoreTo ||
+    relation.feelingScoreFrom !== DEFAULT_TEMP_RELATION.feelingScoreFrom ||
+    relation.nicknameTo.trim().length > 0 ||
+    relation.nicknameFrom.trim().length > 0
+  );
 };
 
 export function ResidentForm({
@@ -366,25 +381,23 @@ export function ResidentForm({
 
   //  初期化ロジック (コンポーネント内ヘルパー)
   function initializeTempRelations(
-    defaults: Partial<ResidentWithRelations>,
+    defaults: Partial<ResidentWithRelations> | undefined,
     others: Resident[]
   ): Record<string, TempRelationData> {
 
-    // 編集モードでない、または他の住人がいない場合は空
-    // `!defaults` のチェックを先頭に追加
-    if (!defaults || !defaults.id || !others || others.length === 0) {
+    // Skip when there are no other residents to relate to
+    if (!others || others.length === 0) {
       return {};
     }
 
-    const currentId = defaults.id;
     const initial: Record<string, TempRelationData> = {};
 
-    // DBからロードした生の配列データ
-    const relationsArr = defaults.relations ?? [];
-    const feelingsFromArr = defaults.feelingsFrom ?? []; // 自分 -> 相手
-    const feelingsToArr = defaults.feelingsTo ?? [];     // 相手 -> 自分
-    const nicknamesToArr = defaults.nicknamesTo ?? [];   // 自分が相手を呼ぶ
-    const nicknamesFromArr = defaults.nicknamesFrom ?? []; // 相手が自分を呼ぶ
+    // Existing records for relations/feelings/nicknames (empty arrays when creating new)
+    const relationsArr = defaults?.relations ?? [];
+    const feelingsFromArr = defaults?.feelingsFrom ?? []; // 自分 -> 相手
+    const feelingsToArr = defaults?.feelingsTo ?? [];     // 相手 -> 自分
+    const nicknamesToArr = defaults?.nicknamesTo ?? [];   // 自分が相手を呼ぶ
+    const nicknamesFromArr = defaults?.nicknamesFrom ?? []; // 相手が自分を呼ぶ
 
     for (const target of others) {
       const targetId = target.id;
@@ -422,7 +435,16 @@ export function ResidentForm({
     return otherResidents.find(r => r.id === editingRelationTargetId);
   }, [editingRelationTargetId, otherResidents]);
 
-  // ... (診断パネルのロジックは変更なし) ...
+  const configuredRelations = useMemo(() => {
+    return otherResidents.reduce((acc, resident) => {
+      const relation = tempRelations[resident.id];
+      if (hasRelationChanges(relation)) {
+        acc.push({ resident, relation: relation ?? DEFAULT_TEMP_RELATION });
+      }
+      return acc;
+    }, [] as { resident: Resident; relation: TempRelationData }[]);
+  }, [otherResidents, tempRelations]);
+
   // 診断パネルの開閉と、各設問のスコア（1〜5、初期値は中立3）
   const [showDiagnosis, setShowDiagnosis] = useState(false);
   const [diagScores, setDiagScores] = useState<Record<string, number>>(
@@ -1297,6 +1319,47 @@ export function ResidentForm({
             <p className="text-xs text-muted-foreground">
               この住人({watchName || '...'})が他の住人と既に持っている関係性を登録します。
             </p>
+
+            {/* 設定済みの関係の表示 */}
+            {configuredRelations.length > 0 && (
+              <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-semibold">既に登録済みの関係</p>
+                </div>
+                <div className="space-y-2">
+                  {configuredRelations.map(({ resident, relation }) => {
+                    const relationLabel = RELATION_LABELS[relation.relationType] ?? relation.relationType;
+                    const impressionToLabel = FEELING_LABELS[relation.feelingLabelTo] ?? relation.feelingLabelTo;
+                    const impressionFromLabel = FEELING_LABELS[relation.feelingLabelFrom] ?? relation.feelingLabelFrom;
+
+                    return (
+                      <div
+                        key={resident.id}
+                        className="flex flex-col gap-2 rounded border bg-background/60 px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold">{resident.name}</p>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span>関係: <span className="text-foreground">{relationLabel}</span></span>
+                            <span>印象: <span className="text-foreground">{impressionToLabel}</span> / <span className="text-foreground">{impressionFromLabel}</span></span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant={editingRelationTargetId === resident.id ? 'default' : 'secondary'}
+                            size="sm"
+                            onClick={() => setEditingRelationTargetId(resident.id)}
+                          >
+                            {editingRelationTargetId === resident.id ? '編集中' : '編集'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* 対象の住人を選択するリスト */}
             <div className="space-y-2">
