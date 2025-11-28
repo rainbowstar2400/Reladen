@@ -121,6 +121,7 @@ type ResidentFormValues = z.infer<typeof residentFormSchema>;
 // Relation_Sim の defaultAffections に相当
 const defaultScores: Record<RelationType, number> = {
   none: 0,
+  acquaintance: 10,
   friend: 20,
   best_friend: 40,
   lover: 60,

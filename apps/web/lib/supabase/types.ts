@@ -389,7 +389,7 @@ export type Database = {
         | 'love'
         | 'awkward';
       preset_category: 'speech' | 'occupation' | 'first_person';
-      relation_type: 'none' | 'friend' | 'best_friend' | 'lover' | 'family';
+      relation_type: 'none' | 'acquaintance' | 'friend' | 'best_friend' | 'lover' | 'family';
     };
     CompositeTypes: {
       [_ in never]: never;

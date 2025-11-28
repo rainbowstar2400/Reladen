@@ -79,7 +79,7 @@ export const residentSchema = baseEntitySchema.extend({
 export const relationSchema = baseEntitySchema.extend({
   a_id: z.string().uuid(),
   b_id: z.string().uuid(),
-  type: z.enum(['none', 'friend', 'best_friend', 'lover', 'family']),
+  type: z.enum(['none', 'acquaintance', 'friend', 'best_friend', 'lover', 'family']),
 });
 
 export const feelingSchema = baseEntitySchema.extend({

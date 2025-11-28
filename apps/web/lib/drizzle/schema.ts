@@ -1,7 +1,7 @@
 import { boolean, jsonb, pgEnum, pgTable, text, timestamp, integer, uuid, index } from 'drizzle-orm/pg-core';
 import { relations as createRelations } from 'drizzle-orm';
 
-export const relationTypeEnum = pgEnum('relation_type', ['none', 'friend', 'best_friend', 'lover', 'family']);
+export const relationTypeEnum = pgEnum('relation_type', ['none', 'acquaintance', 'friend', 'best_friend', 'lover', 'family']);
 export const feelingLabelEnum = pgEnum('feeling_label', [
   'none',
   'dislike',

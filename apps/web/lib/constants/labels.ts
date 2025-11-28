@@ -20,6 +20,7 @@ export const TRAIT_LABELS: Record<keyof typeof DEFAULT_TRAITS, string> = {
 // 関係性 (Relations)
 export const RELATION_LABELS: Record<Relation['type'], string> = {
   none: 'なし',
+  acquaintance: '認知（顔見知り）',
   friend: '友達',
   best_friend: '親友',
   lover: '恋人',

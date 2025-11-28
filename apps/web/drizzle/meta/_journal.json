@@ -15,6 +15,13 @@
       "when": 1764066983805,
       "tag": "0001_curly_sister_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1764315667672,
+      "tag": "0002_fixed_big_bertha",
+      "breakpoints": true
     }
   ]
 }

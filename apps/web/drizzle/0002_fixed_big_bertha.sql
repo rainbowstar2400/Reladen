@@ -1,0 +1,1 @@
+ALTER TYPE "relation_type" ADD VALUE 'acquaintance';
