@@ -48,6 +48,7 @@ export const systemPromptConversation = `
 漢字・ひらがな・カタカナの表記揺れも禁止です（例：「俺」指定の場合、「オレ」や「おれ」は使用不可）。
 一人称の表記の正確さは、セリフ全体の自然さよりも優先されます。
 どれだけ不自然になっても構わないので、一人称の表記だけは絶対に守ってください。
+（重要）一人称については firstPerson で渡された文字列を厳密にそのまま用い、スタイル変更やカタカナ/ひらがな/記号/Emoji への変換を一切行わないでください。
 `.trim();
 
 function formatProfileLine(
@@ -90,7 +91,7 @@ function formatProfileLine(
     // 話し方（テンプレート名 + 説明）
     `  ${displayName}の話し方: テンプレート「${speechPresetLine}」 ${speechPresetDescriptionLine}`,
     firstPerson
-      ? `  ${displayName}の一人称は「${firstPerson}」です。これ以外の表記（ひらがな・カタカナ・漢字の変換など）は一切禁止です。必ず「${firstPerson}」を使用してください。`
+      ? `  ${displayName}の一人称は「${firstPerson}」です。これ以外の表記（ひらがな・カタカナ・漢字の変換など）は一切禁止です。必ず「${firstPerson}」を使用してください。この文字列をセリフでそのまま使い、別表記や装飾を加えないでください。`
       : "  一人称は未設定です。",
     // 口調の例（あれば）
     profile.speechExample

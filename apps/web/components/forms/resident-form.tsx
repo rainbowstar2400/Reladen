@@ -339,6 +339,7 @@ export function ResidentForm({
     // フォーム用の tempRelations を「生成」する
     return initializeTempRelations(formDefaultValues, otherResidents);
   });
+  const [savingRelations, setSavingRelations] = useState(false);
 
   // (追加) defaultValues や otherResidents が非同期でロードされたら State を再同期
   // (useState の遅延初期化は一度しか実行されないため、
@@ -380,6 +381,23 @@ export function ResidentForm({
   };
 
   //  初期化ロジック (コンポーネント内ヘルパー)
+  const handleSaveRelationsOnly = async () => {
+    const currentId = form.getValues('id');
+    if (!currentId) {
+      window.alert('先に住人を保存してください。');
+      return;
+    }
+    setSavingRelations(true);
+    try {
+      await upsert.mutateAsync({
+        resident: { id: currentId },
+        relations: tempRelations,
+      });
+    } finally {
+      setSavingRelations(false);
+    }
+  };
+
   function initializeTempRelations(
     defaults: Partial<ResidentWithRelations> | undefined,
     others: Resident[]
@@ -615,6 +633,7 @@ export function ResidentForm({
   const watchOccupation = form.watch('occupation');
   const watchFirstPerson = form.watch('firstPerson');
   const watchName = form.watch('name');
+  const watchResidentId = form.watch('id');
   const speechExamplePlaceholder = useMemo(() => {
     return `例: 　今日はいい感じだね。　のように書いてください`;
   }, [watchFirstPerson]);
@@ -1514,6 +1533,17 @@ export function ResidentForm({
             })()}
           </div>
         )}
+
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleSaveRelationsOnly}
+            disabled={!watchResidentId || savingRelations || upsert.isPending || upsertPreset.isPending}
+          >
+            {savingRelations ? '関係を保存中...' : '関係のみ保存'}
+          </Button>
+        </div>
 
         <div className="flex justify-end gap-2">
           {/* プリセット保存中もボタンを無効化 */}
