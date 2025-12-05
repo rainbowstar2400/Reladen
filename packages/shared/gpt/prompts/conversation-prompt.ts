@@ -104,6 +104,24 @@ function formatProfileLine(
     .join("\n");
 }
 
+function formatTimeOfDayJst(now: Date) {
+  // JST (UTC+9) に変換
+  const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const hour = jstDate.getUTCHours();
+  const month = jstDate.getUTCMonth() + 1; // 0-11 を 1-12 に
+  const day = jstDate.getUTCDate();
+
+  let slot = "不明";
+  if (hour >= 6 && hour < 11) slot = "朝";
+  else if (hour >= 11 && hour < 16) slot = "昼";
+  else if (hour >= 16 && hour < 18) slot = "夕方";
+  else if (hour >= 18 && hour < 23) slot = "夜";
+  else if (hour >= 23 || hour < 4) slot = "深夜";
+  else if (hour >= 4 && hour < 6) slot = "明け方";
+
+  return `${month}月${day}日の${slot}です。`;
+}
+
 export function buildUserPromptConversation(opts: {
   thread: TopicThread;
   beliefs: Record<string, BeliefRecord>;
@@ -114,6 +132,7 @@ export function buildUserPromptConversation(opts: {
   const { thread, beliefs, topicHint, lastSummary, residents } = opts;
   const topic = topicHint ?? thread.topic ?? "雑談";
   const [a, b] = thread.participants;
+  const timeContext = formatTimeOfDayJst(new Date());
 
   const participantBlock = [
     formatProfileLine(a, residents?.[a], beliefs[a]),
@@ -123,6 +142,8 @@ export function buildUserPromptConversation(opts: {
   return `
 登場人物は2人です：
 ${participantBlock}
+
+現在、${timeContext}
 
 会話スタイルの共通ルール：
 - プロフィールの一人称指定を厳守し、漢字・ひらがな・カタカナの変換（表記揺れ）は一切行わないこと
