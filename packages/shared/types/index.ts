@@ -134,7 +134,7 @@ export type WorldStateRecord = {
   id: string;
   owner_id?: string | null;
   updated_at: string;
-  deleted?: boolean;
+  deleted: boolean;
   weatherCurrent: CurrentWeather;
   weatherQuietHours: QuietHours;
   weatherComment: WeatherComment | null;
