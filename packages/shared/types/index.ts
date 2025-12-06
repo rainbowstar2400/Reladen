@@ -130,11 +130,14 @@ export const worldWeatherStateSchema = z.object({
 });
 export type WorldWeatherState = z.infer<typeof worldWeatherStateSchema>;
 
-export type WorldStateRecord = WorldWeatherState & {
+export type WorldStateRecord = {
   id: string;
   owner_id?: string | null;
   updated_at: string;
   deleted?: boolean;
+  weatherCurrent: CurrentWeather;
+  weatherQuietHours: QuietHours;
+  weatherComment: WeatherComment | null;
 };
 
 export const eventSchema = baseEntitySchema.extend({
