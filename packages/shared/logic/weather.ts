@@ -1,5 +1,4 @@
 import type { QuietHours, Resident, WorldWeatherState, WeatherKind } from '../types';
-import type { SleepProfile } from './schedule';
 
 // Weighted transition table (simple, editable)
 export const WEATHER_TRANSITIONS: Record<WeatherKind, Array<{ to: WeatherKind; weight: number }>> = {
