@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { QueryClientProvider } from '@/components/query-client-provider'
 import ConversationSchedulerProvider from '@/components/providers/ConversationSchedulerProvider'
 import { FormDirtyProvider } from '@/components/providers/FormDirtyProvider';
+import WeatherSchedulerProvider from '@/components/providers/WeatherSchedulerProvider';
 // Sync や Toaster を使っているなら適宜
 // import { SyncProvider } from '@/lib/sync/use-sync'
 // import { SonnerToaster } from '@/components/sonner-toaster'
@@ -14,9 +15,11 @@ export function Providers({ children }: { children: ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <QueryClientProvider>
         <ConversationSchedulerProvider>
-          <FormDirtyProvider>
-            {children}
-          </FormDirtyProvider>
+          <WeatherSchedulerProvider>
+            <FormDirtyProvider>
+              {children}
+            </FormDirtyProvider>
+          </WeatherSchedulerProvider>
         </ConversationSchedulerProvider>
       </QueryClientProvider>
     </ThemeProvider>

@@ -9,6 +9,7 @@ import {
   getOrGenerateTodaySchedule,
   type SleepProfile
 } from '../../../../packages/shared/logic/schedule';
+import { loadWorldWeather, saveWorldWeather, DEFAULT_WORLD_ID } from '@/lib/data/world-weather';
 
 const KEY = ['residents'];
 // データをフェッチする関数にロジックを追加
@@ -265,7 +266,18 @@ export function useDeleteResident() {
   return useMutation({
     mutationFn: async (id: string) => {
       // @ts-ignore (markDeleted が string id を受け取る)
-      return markDeleted('residents', id);
+      await markDeleted('residents', id);
+
+      // 天気コメントの担当者だった場合はクリア
+      try {
+        const world = await loadWorldWeather(DEFAULT_WORLD_ID);
+        if (world.currentComment?.residentId === id) {
+          world.currentComment = null;
+          await saveWorldWeather(world);
+        }
+      } catch (e) {
+        console.warn('[useDeleteResident] failed to clear weather comment', e);
+      }
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: KEY });

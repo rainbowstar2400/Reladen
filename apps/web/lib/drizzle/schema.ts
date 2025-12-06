@@ -208,3 +208,15 @@ export const notifications = pgTable('notifications', {
   occurredIdx: index('notifications_occurred_idx').on(t.occurredAt),
   updatedIdx: index('notifications_updated_idx').on(t.updatedAt),
 }));
+
+export const worldStates = pgTable('world_states', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  weatherCurrent: jsonb('weather_current').notNull(),
+  weatherQuietHours: jsonb('weather_quiet_hours').notNull(),
+  weatherComment: jsonb('weather_comment'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deleted: boolean('deleted').notNull().default(false),
+  ownerId: uuid('owner_id'),
+}, (t) => ({
+  updatedIdx: index('world_states_updated_idx').on(t.updatedAt),
+}));
