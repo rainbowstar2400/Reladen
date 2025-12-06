@@ -18,6 +18,9 @@ const TABLES: SyncPayload['table'][] = [
   'world_states',
 ];
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (id?: string | null) => !!id && UUID_REGEX.test(id);
+
 // ヘルパー
 async function getAccessToken(): Promise<string | null> {
   const sb = supabaseClient;
@@ -105,15 +108,22 @@ function useSyncInternal() {
 
       for (const table of TABLES) {
         const localChanges = await since(table, pendingSince);
+        const isWorldStateTable = table === 'world_states';
 
         // outbox の pending を取得し、localChanges と LWW でマージ
         const pending = await listPendingByTable(table);
         const mergedMap = new Map<string, { data: any; updated_at: string; deleted?: boolean; __key?: string }>();
 
         for (const it of localChanges) {
-          mergedMap.set((it as any).id, { data: it, updated_at: (it as any).updated_at, deleted: (it as any).deleted });
+          const id = (it as any).id;
+          if (isWorldStateTable && !isUuid(id)) continue;
+          mergedMap.set(id, { data: it, updated_at: (it as any).updated_at, deleted: (it as any).deleted });
         }
         for (const ob of pending) {
+          if (isWorldStateTable && !isUuid(ob.id)) {
+            await markSent([makeOutboxKey(table, ob.id)]);
+            continue;
+          }
           const cur = mergedMap.get(ob.id);
           if (!cur || new Date(ob.updated_at).getTime() >= new Date(cur.updated_at).getTime()) {
             mergedMap.set(ob.id, { data: ob.data, updated_at: ob.updated_at, deleted: ob.deleted, __key: makeOutboxKey(table, ob.id) });

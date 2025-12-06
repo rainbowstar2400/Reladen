@@ -258,3 +258,19 @@ export async function clearLocalAll() {
   await Promise.all(stores.map((name) => tx.objectStore(name).clear()));
   await tx.done;
 }
+
+export async function removeLocal(table: LocalTableName, id: string) {
+  if (isTauri) {
+    const state = await getTauriState();
+    if (state) {
+      delete state.snapshot[table][id];
+      await state.persist();
+      return;
+    }
+  }
+
+  const db = await getDb();
+  const tx = db.transaction(table, 'readwrite');
+  await tx.objectStore(table).delete(id);
+  await tx.done;
+}

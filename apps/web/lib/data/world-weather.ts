@@ -1,9 +1,10 @@
-import { listLocal, putLocal } from '@/lib/db-local';
-import { newId } from '@/lib/newId';
+import { listLocal, putLocal, removeLocal } from '@/lib/db-local';
 import type { Resident, WorldStateRecord, WorldWeatherState } from '@/types';
 import { calcQuietHoursForWorld, createInitialWeatherState } from '@repo/shared/logic/weather';
 
-export const DEFAULT_WORLD_ID = 'default-world';
+export const DEFAULT_WORLD_ID = '00000000-0000-4000-8000-000000000000';
+const LEGACY_WORLD_IDS = ['default-world'];
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function toRich(record: WorldStateRecord): WorldStateRecord & WorldWeatherState {
   return {
@@ -28,6 +29,26 @@ function fromRich(world: WorldStateRecord & WorldWeatherState): WorldStateRecord
 
 export async function loadWorldWeather(worldId: string = DEFAULT_WORLD_ID): Promise<WorldStateRecord & WorldWeatherState> {
   const items = (await listLocal<WorldStateRecord>('world_states')) ?? [];
+
+  // migrate legacy non-UUID world IDs to the current UUID so sync passes validation
+  if (!items.some((w) => w.id === DEFAULT_WORLD_ID)) {
+    const legacy = items.find((w) => LEGACY_WORLD_IDS.includes(w.id) || !UUID_REGEX.test(w.id));
+    if (legacy) {
+      const migrated: WorldStateRecord = {
+        ...legacy,
+        id: DEFAULT_WORLD_ID,
+        updated_at: new Date().toISOString(),
+      };
+      try {
+        await removeLocal('world_states', legacy.id);
+      } catch (e) {
+        console.warn('[loadWorldWeather] failed to remove legacy world id', e);
+      }
+      await putLocal('world_states', migrated as any);
+      items.push(migrated);
+    }
+  }
+
   const found = items.find((w) => w.id === worldId);
   if (found) return toRich(found);
 
