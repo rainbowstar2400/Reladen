@@ -15,6 +15,7 @@ const TABLES: SyncPayload['table'][] = [
   'nicknames',
   'events',
   'consult_answers',
+  'world_states',
 ];
 
 // ヘルパー

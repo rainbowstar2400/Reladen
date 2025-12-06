@@ -19,6 +19,8 @@ import {
 import { useEffect, useState } from 'react';
 import { useResidents } from '@/lib/data/residents';
 import type { Resident } from '@/types';
+import { useWorldWeather } from '@/lib/data/use-world-weather';
+import { useResidentNameMap } from '@/lib/data/residents';
 
 /* ---------------------------
    共通UI：セクション見出し
@@ -96,6 +98,8 @@ function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation 
 export default function HomePage() {
   // useResidents フックからデータを取得
   const { data: residents = [], isLoading: isLoadingResidents } = useResidents();
+  const residentNameMap = useResidentNameMap();
+  const { data: weatherState } = useWorldWeather();
 
   // 1分ごとに tick して再レンダを促す。都度 new Date() を評価して calcSituation に渡す。
   const [tick, setTick] = useState(0);
@@ -191,11 +195,35 @@ export default function HomePage() {
         </div>
 
 
-        {/* 今日の新聞（プレースホルダ） */}
+        {/* 今日の新聞（天気＋コメント） */}
         <SectionTitle>今日の新聞</SectionTitle>
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            ここにニュースカードを追加予定
+          <CardContent className="py-4 flex flex-col gap-3">
+            {weatherState ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">現在の天気</div>
+                  <div className="text-lg font-semibold capitalize">{weatherState.current.kind}</div>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  最終更新: {new Date(weatherState.current.lastChangedAt).toLocaleString()}
+                </div>
+                <div className="h-px bg-border" />
+                <div className="text-sm">
+                  {weatherState.currentComment ? (
+                    <span>
+                      {weatherState.currentComment.residentId
+                        ? `${residentNameMap[weatherState.currentComment.residentId] ?? '住人'}「${weatherState.currentComment.text}」`
+                        : weatherState.currentComment.text}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">コメントはまだありません。</span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-muted-foreground">天気情報を読み込み中…</div>
+            )}
           </CardContent>
         </Card>
       </div>

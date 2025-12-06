@@ -1,5 +1,5 @@
 // apps/web/lib/sync/outbox.ts
-export type OutboxTable = 'residents' | 'relations' | 'feelings' | 'events' | 'presets' | 'nicknames' | 'consult_answers';
+export type OutboxTable = 'residents' | 'relations' | 'feelings' | 'events' | 'presets' | 'nicknames' | 'consult_answers' | 'world_states';
 
 export type OutboxEntry = {
   id: string;                       // レコードID
