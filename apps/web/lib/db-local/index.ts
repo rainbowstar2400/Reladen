@@ -2,7 +2,6 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { EventLog, Feeling, Relation, Resident, Nickname, Preset, WorldStateRecord } from '@/types';
-import { newId } from '@/lib/newId';
 import {
   BeliefRecord,
   NotificationRecord,
