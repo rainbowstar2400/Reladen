@@ -3,7 +3,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { MessageSquare, Cloud, AlertTriangle, Moon, Loader2 } from 'lucide-react';
+import { MessageSquare, Cloud, AlertTriangle, Moon, Loader2, Sun, CloudRain, CloudLightning } from 'lucide-react';
 import React, { useMemo } from 'react';
 import NotificationsSectionClient from '@/components/notifications/NotificationsSection.client';
 import { Suspense } from 'react';
@@ -21,6 +21,7 @@ import { useResidents } from '@/lib/data/residents';
 import type { Resident } from '@/types';
 import { useWorldWeather } from '@/lib/data/use-world-weather';
 import { useResidentNameMap } from '@/lib/data/residents';
+import type { WeatherKind } from '@repo/shared/types';
 
 /* ---------------------------
    共通UI：セクション見出し
@@ -88,6 +89,22 @@ function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation 
       <Button size="sm" disabled={disabled} className="min-w-20">
         {disabled ? '就寝中' : '話す'}
       </Button>
+    </div>
+  );
+}
+
+function WeatherIcon({ kind }: { kind: WeatherKind }) {
+  const map: Record<WeatherKind, React.ComponentType<{ className?: string }>> = {
+    sunny: Sun,
+    cloudy: Cloud,
+    rain: CloudRain,
+    storm: CloudLightning,
+  };
+  const Icon = map[kind] ?? Cloud;
+  return (
+    <div className="flex items-center justify-center">
+      <Icon className="h-8 w-8 text-foreground" aria-hidden />
+      <span className="sr-only">{kind}</span>
     </div>
   );
 }
@@ -203,7 +220,7 @@ export default function HomePage() {
               <>
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">現在の天気</div>
-                  <div className="text-lg font-semibold capitalize">{weatherState.current.kind}</div>
+                  <WeatherIcon kind={weatherState.current.kind as WeatherKind} />
                 </div>
                 <div className="text-xs text-muted-foreground">
                   最終更新: {new Date(weatherState.current.lastChangedAt).toLocaleString()}
