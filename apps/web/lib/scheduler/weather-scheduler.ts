@@ -10,7 +10,6 @@ import {
   pickNextWeatherKind,
 } from '@repo/shared/logic/weather';
 import type { WeatherKind, WorldWeatherState } from '@repo/shared/types';
-import { generateWeatherComment } from '@/lib/weather/generate-weather-comment';
 
 const LOCK_KEY = 'reladen:weather-scheduler:lock';
 const LOCK_TTL_MS = 5 * 60 * 1000;
@@ -150,23 +149,37 @@ export function startWeatherScheduler(opts?: SchedulerOptions) {
       const resident = await pickWeatherCommentResident(now, residents);
       let newComment = null;
       if (resident) {
-        const text = await generateWeatherComment({
-          world,
-          resident,
-          weatherKind: nextKind,
-          now,
-        });
-        if (!text) {
+        try {
+          const res = await fetch('/api/weather/comment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              resident,
+              weatherKind: nextKind,
+              now: now.toISOString(),
+            }),
+            credentials: 'include',
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const text = data?.text;
+            if (typeof text === 'string' && text.trim().length > 0) {
+              newComment = {
+                residentId: resident.id,
+                text,
+                status: 'normal' as const,
+                createdAt: now.toISOString(),
+              };
+            }
+          }
+        } catch (error) {
+          console.warn('[weather-scheduler] comment generation failed', error);
+        }
+        if (!newComment) {
           refreshLock();
           scheduleNext();
           return;
         }
-        newComment = {
-          residentId: resident.id,
-          text,
-          status: 'normal' as const,
-          createdAt: now.toISOString(),
-        };
       }
 
       world.current = { kind: nextKind, lastChangedAt: now.toISOString() };

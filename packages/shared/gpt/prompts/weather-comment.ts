@@ -1,7 +1,6 @@
-import type { WorldWeatherState, WeatherKind, Resident } from '@repo/shared/types';
+import type { WeatherKind, Resident } from '@repo/shared/types';
 
 export type WeatherCommentInput = {
-  world: WorldWeatherState;
   resident: Resident;
   weatherKind: WeatherKind;
   now: Date;
