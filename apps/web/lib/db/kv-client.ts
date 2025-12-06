@@ -10,7 +10,8 @@ type Table =
   | "notifications"
   | "beliefs"
   | "feelings"
-  | "relations";
+  | "relations"
+  | "world_states";
 
 export async function putKV(table: Table, rec: any) {
   return putLocal(table as any, rec as any);

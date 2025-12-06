@@ -8,7 +8,8 @@ export const allowedTables = [
   'events',
   'consult_answers',
   'presets',
-  'nicknames'
+  'nicknames',
+  'world_states',
 ] as const;
 export type AllowedTable = typeof allowedTables[number];
 

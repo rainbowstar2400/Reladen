@@ -371,6 +371,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      world_states: {
+        Row: {
+          deleted: boolean;
+          id: string;
+          owner_id: string | null;
+          updated_at: string;
+          weather_comment: Json | null;
+          weather_current: Json;
+          weather_quiet_hours: Json;
+        };
+        Insert: {
+          deleted?: boolean;
+          id?: string;
+          owner_id?: string | null;
+          updated_at?: string;
+          weather_comment?: Json | null;
+          weather_current: Json;
+          weather_quiet_hours: Json;
+        };
+        Update: {
+          deleted?: boolean;
+          id?: string;
+          owner_id?: string | null;
+          updated_at?: string;
+          weather_comment?: Json | null;
+          weather_current?: Json;
+          weather_quiet_hours?: Json;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;

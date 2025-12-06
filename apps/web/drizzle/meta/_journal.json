@@ -22,6 +22,20 @@
       "when": 1764315667672,
       "tag": "0002_fixed_big_bertha",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1764680000000,
+      "tag": "0003_world_weather",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1765020737295,
+      "tag": "0004_concerned_skaar",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,7 @@
 'use client';
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import { EventLog, Feeling, Relation, Resident, Nickname, Preset } from '@/types';
-import { newId } from '@/lib/newId';
+import { EventLog, Feeling, Relation, Resident, Nickname, Preset, WorldStateRecord } from '@/types';
 import {
   BeliefRecord,
   NotificationRecord,
@@ -21,7 +20,8 @@ export type LocalTableName =
   | 'notifications'
   | 'consult_answers'
   | 'nicknames'
-  | 'presets';
+  | 'presets'
+  | 'world_states';
 
 type Entity =
   & BaseEntity
@@ -36,6 +36,7 @@ type Entity =
     | NotificationRecord
     | Nickname
     | Preset
+    | WorldStateRecord
   );
 
 type PartialEntity<T extends Entity> = Partial<T> & Partial<BaseEntity>;
@@ -59,6 +60,7 @@ interface ReladenSchema extends DBSchema {
     };
   };
   presets: { key: string; value: Preset; };
+  world_states: { key: string; value: WorldStateRecord; };
 }
 
 type Snapshot = Record<LocalTableName, Record<string, Entity>>;
@@ -85,22 +87,23 @@ function createEmptySnapshot(): Snapshot {
     events: {},
     topic_threads: {},
     beliefs: {},
-    notifications: {},
-    consult_answers: {},
-    nicknames: {},
-    presets: {},
-  };
+  notifications: {},
+  consult_answers: {},
+  nicknames: {},
+  presets: {},
+  world_states: {},
+};
 }
 
 let dbPromise: Promise<IDBPDatabase<ReladenSchema>> | null = null;
 let tauriState: { snapshot: Snapshot; persist: () => Promise<void> } | null = null;
 
 const DB_NAME = 'reladen-db';
-const DB_VERSION = 2;
+const DB_VERSION = 5;
 
 async function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB<ReladenSchema>('reladen', 4, {
+    dbPromise = openDB<ReladenSchema>('reladen', DB_VERSION, {
       upgrade(database, oldVersion) {
         if (oldVersion < 1) {
           database.createObjectStore('residents');
@@ -118,6 +121,9 @@ async function getDb() {
         }
         if (oldVersion < 4) {
           database.createObjectStore('nicknames');
+        }
+        if (oldVersion < 5) {
+          database.createObjectStore('world_states');
         }
         if (oldVersion < 2) {
           if (!database.objectStoreNames.contains('presets')) {
@@ -246,7 +252,7 @@ export async function clearLocalAll() {
   const db = await getDb();
   const stores: LocalTableName[] = [
     'residents', 'relations', 'feelings', 'events',
-    'topic_threads', 'beliefs', 'notifications', 'consult_answers', 'nicknames'
+    'topic_threads', 'beliefs', 'notifications', 'consult_answers', 'nicknames', 'presets', 'world_states'
   ];
   const tx = db.transaction(stores, 'readwrite');
   await Promise.all(stores.map((name) => tx.objectStore(name).clear()));

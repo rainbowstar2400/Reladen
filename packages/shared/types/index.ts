@@ -95,6 +95,51 @@ export const nicknameSchema = baseEntitySchema.extend({
   nickname: z.string().min(1).max(50),
 });
 
+// --- Weather / World state --------------------------------------------------
+
+export const weatherKindEnum = z.enum(['sunny', 'cloudy', 'rain', 'storm']);
+export type WeatherKind = z.infer<typeof weatherKindEnum>;
+
+export const currentWeatherSchema = z.object({
+  kind: weatherKindEnum,
+  lastChangedAt: z.string().datetime(),
+});
+export type CurrentWeather = z.infer<typeof currentWeatherSchema>;
+
+export const weatherCommentStatusEnum = z.enum(['normal', 'sleeping']);
+export type WeatherCommentStatus = z.infer<typeof weatherCommentStatusEnum>;
+
+export const weatherCommentSchema = z.object({
+  residentId: z.string().uuid().nullable(),
+  text: z.string(),
+  status: weatherCommentStatusEnum,
+  createdAt: z.string().datetime(),
+});
+export type WeatherComment = z.infer<typeof weatherCommentSchema>;
+
+export const quietHoursSchema = z.object({
+  startHour: z.number().int().min(0).max(23),
+  endHour: z.number().int().min(0).max(23),
+});
+export type QuietHours = z.infer<typeof quietHoursSchema>;
+
+export const worldWeatherStateSchema = z.object({
+  current: currentWeatherSchema,
+  quietHours: quietHoursSchema,
+  currentComment: weatherCommentSchema.nullable(),
+});
+export type WorldWeatherState = z.infer<typeof worldWeatherStateSchema>;
+
+export type WorldStateRecord = {
+  id: string;
+  owner_id?: string | null;
+  updated_at: string;
+  deleted: boolean;
+  weatherCurrent: CurrentWeather;
+  weatherQuietHours: QuietHours;
+  weatherComment: WeatherComment | null;
+};
+
 export const eventSchema = baseEntitySchema.extend({
   kind: z.string(),
   payload: z.record(z.any()),
@@ -109,7 +154,7 @@ export const presetSchema = baseEntitySchema.extend({
 });
 
 export const syncPayloadSchema = z.object({
-  table: z.enum(['residents', 'relations', 'feelings', 'events', 'presets', 'nicknames', 'consult_answers']),
+  table: z.enum(['residents', 'relations', 'feelings', 'events', 'presets', 'nicknames', 'consult_answers', 'world_states']),
   changes: z.array(z.object({
     data: z.record(z.any()),
     updated_at: z.string().datetime(),

@@ -70,6 +70,12 @@ const PRESETS_ALLOWED = new Set([
   'is_managed', 'owner_id', 'updated_at', 'deleted'
 ]);
 
+// world_states の許可カラム
+const WORLD_STATES_ALLOWED = new Set([
+  'id', 'weather_current', 'weather_quiet_hours', 'weather_comment',
+  'owner_id', 'updated_at', 'deleted'
+]);
+
 // 許可リストのマップ (キーは sync.ts と一致)
 const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
   residents: RESIDENTS_ALLOWED,
@@ -79,6 +85,7 @@ const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
   events: EVENTS_ALLOWED,
   presets: PRESETS_ALLOWED,
   consult_answers: new Set(),
+  world_states: WORLD_STATES_ALLOWED,
 };
 
 export async function POST(req: NextRequest, { params }: { params: { table: string } }) {
