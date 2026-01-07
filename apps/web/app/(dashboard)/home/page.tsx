@@ -3,25 +3,17 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { MessageSquare, Cloud, AlertTriangle, Moon, Loader2, Sun, CloudRain, CloudLightning } from 'lucide-react';
-import React, { useMemo } from 'react';
-import NotificationsSectionClient from '@/components/notifications/NotificationsSection.client';
-import { Suspense } from 'react';
-import {
-  calcSituation,
-  defaultSleepByTendency,
-  getOrGenerateTodaySchedule,
-  type Situation,
-  type SleepProfile,
-  type BaseSleepProfile,
-  type ActivityTendency,
-} from '../../../../../packages/shared/logic/schedule';
-import { useEffect, useState } from 'react';
-import { useResidents } from '@/lib/data/residents';
-import type { Resident } from '@/types';
+import { Cloud, Sun, CloudRain, CloudLightning } from 'lucide-react';
+import React, { useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth/use-auth';
+import { fetchEventById, useMarkNotificationRead, useNotifications } from '@/lib/data/notifications';
+import type { NotificationRecord } from '@repo/shared/types/conversation';
+import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 import { useWorldWeather } from '@/lib/data/use-world-weather';
-import { useResidentNameMap } from '@/lib/data/residents';
 import type { WeatherKind } from '@repo/shared/types';
+import { useRelations } from '@/lib/data/relations';
+import { RELATION_LABELS } from '@/lib/constants/labels';
 
 /* ---------------------------
    共通UI：セクション見出し
@@ -35,62 +27,53 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* -------------------------------------
-   状況ラベル & バッジ（active/preparing/sleeping）
--------------------------------------- */
+type NotificationListItem = NotificationRecord;
 
-
-function SituationBadge({ situation }: { situation: Situation }) {
-  const label =
-    situation === 'preparing'
-      ? '就寝準備中'
-      : '活動中';
-
-  const style =
-    situation === 'sleeping'
-      ? 'bg-gray-200 text-gray-700 border border-gray-300'
-      : situation === 'preparing'
-        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-        : 'bg-emerald-100 text-emerald-800 border border-emerald-200';
-
-  return (
-    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs ${style}`}>
-      {label}
-    </span>
-  );
+function getPlayerDisplayName(email?: string | null) {
+  if (!email) return 'プレイヤー';
+  const trimmed = email.trim();
+  if (!trimmed) return 'プレイヤー';
+  return trimmed.split('@')[0] || 'プレイヤー';
 }
 
-/* ----------------------------
-   住人タイル（カード風アイテム）
------------------------------ */
-// 住人タイル表示用の最小限の型
-type ResidentLite = {
-  id: string;
-  name: string;
-};
+function filterRecentNotifications(notifications: NotificationRecord[]) {
+  const now = Date.now();
 
-function ResidentTile({ r, situation }: { r: ResidentLite; situation: Situation }) {
-  const disabled = situation === 'sleeping';
-  return (
-    <div className="relative flex h-32 w-32 flex-shrink-0 flex-col items-center justify-end gap-3 rounded-lg border p-3 text-center">
-      {/* 右上バッジ */}
-      <span className="absolute right-2 top-2">
-        {/* situation に応じて表示を切り替え */}
-        {situation === 'sleeping' ? (
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <Moon className="h-3 w-3" /> Zzz…
-          </span>
-        ) : (
-          <SituationBadge situation={situation} />
-        )}
-      </span>
+  return notifications.filter((n) => {
+    const occurredAt = new Date(n.occurredAt).getTime();
+    const diffHours = (now - occurredAt) / (1000 * 60 * 60);
 
-      <div className="font-medium">{r.name}</div>
-      <Button size="sm" disabled={disabled} className="min-w-20">
-        {disabled ? '就寝中' : '話す'}
-      </Button>
-    </div>
-  );
+    if (n.status === 'read') {
+      return diffHours < 5;
+    }
+
+    if (n.status === 'unread') {
+      return diffHours < 10;
+    }
+
+    return true;
+  });
+}
+
+function getNotificationTitle(n: NotificationRecord, residentNameMap: Record<string, string>) {
+  const participantIds = Array.isArray(n.participants) ? n.participants : [];
+  const participantNames = participantIds.map((id) => residentNameMap[id] ?? id);
+
+  if (n.type === 'conversation') {
+    if (participantNames.length === 2) {
+      return `${participantNames[0]}と${participantNames[1]}が話しています…`;
+    }
+    return '会話が発生しました';
+  }
+
+  if (n.type === 'consult') {
+    if (participantNames.length >= 1) {
+      return `${participantNames[0]}から相談が届きました`;
+    }
+    return '相談が届きました';
+  }
+
+  return 'お知らせ';
 }
 
 function WeatherIcon({ kind }: { kind: WeatherKind }) {
@@ -109,115 +92,203 @@ function WeatherIcon({ kind }: { kind: WeatherKind }) {
   );
 }
 
+function BoardCard({
+  title,
+  meta,
+  children,
+}: {
+  title: string;
+  meta?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="rounded-2xl">
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <div className="font-semibold">{title}</div>
+        {meta ? <div className="text-xs text-muted-foreground">{meta}</div> : null}
+      </div>
+      <div className="px-4 py-3">{children}</div>
+    </Card>
+  );
+}
+
+function NotificationList({
+  items,
+  isLoading,
+  emptyText,
+  onOpen,
+  residentNameMap,
+}: {
+  items: NotificationListItem[];
+  isLoading: boolean;
+  emptyText: string;
+  onOpen: (item: NotificationListItem) => void;
+  residentNameMap: Record<string, string>;
+}) {
+  return (
+    <ul className="divide-y">
+      {isLoading && (
+        <li className="py-2 text-sm text-muted-foreground">読み込み中…</li>
+      )}
+      {!isLoading && items.length === 0 && (
+        <li className="py-2 text-sm text-muted-foreground">{emptyText}</li>
+      )}
+      {items.map((n) => {
+        const title = getNotificationTitle(n, residentNameMap);
+        const snippet =
+          n.snippet ? replaceResidentIds(n.snippet, residentNameMap) : null;
+        const time = new Date(n.occurredAt).toLocaleString();
+        return (
+          <li key={n.id} className="py-2">
+            <button
+              onClick={() => onOpen(n)}
+              className="w-full flex items-start gap-3 text-left"
+              aria-label={snippet ?? title}
+            >
+              <span
+                className={`mt-1 h-2 w-2 rounded-full ${n.status === 'unread' ? 'bg-blue-600' : 'bg-gray-300'
+                  }`}
+              />
+              <span className="flex-1 min-w-0">
+                <div className="text-sm">{title}</div>
+                {snippet && (
+                  <div className="text-xs text-muted-foreground line-clamp-1">
+                    {snippet}
+                  </div>
+                )}
+              </span>
+              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                {time}
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /* ----------------------------
    ページ本体
 ----------------------------- */
 export default function HomePage() {
-  // useResidents フックからデータを取得
-  const { data: residents = [], isLoading: isLoadingResidents } = useResidents();
+  const router = useRouter();
+  const { user } = useAuth();
   const residentNameMap = useResidentNameMap();
   const { data: weatherState } = useWorldWeather();
+  const { data: notifications = [], isLoading: isLoadingNotifications } = useNotifications();
+  const markRead = useMarkNotificationRead();
+  const { data: relations = [], isLoading: isLoadingRelations } = useRelations();
 
-  // 1分ごとに tick して再レンダを促す。都度 new Date() を評価して calcSituation に渡す。
-  const [tick, setTick] = useState(0);
+  const playerName = useMemo(() => getPlayerDisplayName(user?.email), [user?.email]);
 
-  // 1分ごとに tick して再レンダを促す
-  useEffect(() => {
-    const timer = setInterval(() => setTick((v) => v + 1), 60 * 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const now = new Date();
-
-  // 型エイリアスを定義 (map の引数で使用)
-  type SituationEntry = { r: ResidentLite, sit: Situation };
-
-  const residentsWithSituation = useMemo(
-    () => {
-      // useResidents から取得した residents を使用
-      return residents.map((r) => {
-        const profile = (r as any).sleepProfile as SleepProfile | undefined;
-        let sit: Situation;
-
-        // useResidents ですでにスケジュール処理済み
-        if (profile && profile.todaySchedule) {
-          // 新しい calcSituation を呼ぶ
-          sit = calcSituation(now, profile);
-        } else {
-          // プロファイルがないか、今日のスケジュールが生成できなかった場合
-          sit = 'active';
-        }
-
-        // ResidentTile は name / id があれば表示できる
-        const lite: ResidentLite = {
-          id: (r as any).id,
-          name: (r as any).name ?? '',
-        };
-        return { r: lite, sit };
-      });
-    },
-    [residents, now] // tick で 'now' が更新されるたびに再計算
+  const recentNotifications = useMemo(
+    () => filterRecentNotifications(notifications),
+    [notifications],
   );
+
+  const conversationNotifications = useMemo(
+    () => recentNotifications.filter((n) => n.type === 'conversation'),
+    [recentNotifications],
+  );
+
+  const consultNotifications = useMemo(
+    () => recentNotifications.filter((n) => n.type === 'consult'),
+    [recentNotifications],
+  );
+
+  const unreadConversation = conversationNotifications.filter((n) => n.status === 'unread').length;
+  const unreadConsult = consultNotifications.filter((n) => n.status === 'unread').length;
+
+  const featuredRelations = useMemo(() => {
+    return relations
+      .filter((r) => r.type && r.type !== 'none')
+      .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))
+      .slice(0, 3);
+  }, [relations]);
+
+  const openNotification = useCallback(async (n: NotificationRecord) => {
+    try {
+      if (n.status !== 'read') {
+        markRead.mutate(n.id);
+      }
+
+      const kind = n.type ?? (n as any)?.payload?.kind ?? 'conversation';
+
+      if (kind === 'consult') {
+        const consultId =
+          (n as any).linkedConsultId ??
+          (n as any)?.payload?.consultId ??
+          (n as any)?.consultId;
+
+        if (consultId) {
+          const url = new URL(window.location.href);
+          url.searchParams.set('consult', String(consultId));
+          url.searchParams.delete('log');
+          router.push(url.pathname + '?' + url.searchParams.toString(), { scroll: false });
+        }
+        return;
+      }
+
+      const eventId =
+        n.linkedEventId ??
+        (n as any)?.payload?.eventId ??
+        (n as any)?.eventId;
+
+      if (eventId) {
+        const ev = await fetchEventById(eventId);
+        if (!ev) return;
+
+        const url = new URL(window.location.href);
+        url.searchParams.set('log', ev.id);
+        url.searchParams.delete('consult');
+        router.push(url.pathname + '?' + url.searchParams.toString(), { scroll: false });
+      }
+    } catch (e) {
+      // noop
+    }
+  }, [markRead, router]);
 
 
   return (
     <div className="p-4">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <h1 className="text-xl font-semibold">ホーム</h1>
-        <div className="group relative">{/* 右肩のアクション領域（将来） */}</div>
+        <Link
+          href="/player"
+          className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm hover:bg-muted"
+        >
+          <span className="text-xs text-muted-foreground">プレイヤー</span>
+          <span className="font-semibold">{playerName}</span>
+        </Link>
       </div>
 
       <div className="space-y-6">
-        {/* お知らせ（実データ接続 + クリックで会話詳細） */}
-        <section>
-          <Suspense
-            // fallback の中身を、NotificationsSectionClient/Panel のレイアウト（ヘッダー + 区切り線 + コンテンツ）に合わせる
-            fallback={
-              <div className="rounded-2xl border bg-white p-4 text-sm text-gray-500">
-                {/* ヘッダー (スケルトン) */}
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-lg text-foreground">お知らせ</h3>
-                  <span className="text-sm text-muted-foreground">未読 ... 件</span>
-                </div>
-                {/* 区切り線 */}
-                <div className="h-px w-full bg-border mb-4" />
-                {/* コンポーネント読み込み中のテキスト */}
-                <p className="text-muted-foreground">お知らせを読み込み中…</p>
-              </div>
-            }
-          >
-            <NotificationsSectionClient />
-          </Suspense>
-        </section>
+        <SectionTitle>掲示板</SectionTitle>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <BoardCard title="会話通知" meta={`未読 ${unreadConversation} 件`}>
+            <NotificationList
+              items={conversationNotifications.slice(0, 4)}
+              isLoading={isLoadingNotifications}
+              emptyText="会話の通知はありません。"
+              onOpen={openNotification}
+              residentNameMap={residentNameMap}
+            />
+          </BoardCard>
 
-        {/* みんなの様子 */}
-        <SectionTitle>みんなの様子</SectionTitle>
+          <BoardCard title="相談通知" meta={`未読 ${unreadConsult} 件`}>
+            <NotificationList
+              items={consultNotifications.slice(0, 4)}
+              isLoading={isLoadingNotifications}
+              emptyText="相談の通知はありません。"
+              onOpen={openNotification}
+              residentNameMap={residentNameMap}
+            />
+          </BoardCard>
 
-        <div className="overflow-x-auto">
-          <div className="flex gap-4 pb-2">
-            {/* ローディング状態を追加 */}
-            {isLoadingResidents ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground px-2 py-1">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                読み込み中…
-              </div>
-            ) : residentsWithSituation.length === 0 ? (
-              <div className="text-sm text-muted-foreground px-2 py-1">住人がいません。</div>
-            ) : (
-              residentsWithSituation.map(({ r, sit }: SituationEntry) => (
-                <ResidentTile key={r.id} r={r} situation={sit} />
-              ))
-            )}
-          </div>
-        </div>
-
-
-        {/* 今日の新聞（天気＋コメント） */}
-        <SectionTitle>今日の新聞</SectionTitle>
-        <Card>
-          <CardContent className="py-4 flex flex-col gap-3">
+          <BoardCard title="新聞">
             {weatherState ? (
-              <>
+              <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">現在の天気</div>
                   <WeatherIcon kind={weatherState.current.kind as WeatherKind} />
@@ -237,10 +308,49 @@ export default function HomePage() {
                     <span className="text-muted-foreground">コメントはまだありません。</span>
                   )}
                 </div>
-              </>
+              </div>
             ) : (
               <div className="text-sm text-muted-foreground">天気情報を読み込み中…</div>
             )}
+          </BoardCard>
+
+          <BoardCard title="注目の関係">
+            {isLoadingRelations ? (
+              <div className="text-sm text-muted-foreground">関係を読み込み中…</div>
+            ) : featuredRelations.length === 0 ? (
+              <div className="text-sm text-muted-foreground">注目の関係はまだありません。</div>
+            ) : (
+              <div className="space-y-3">
+                {featuredRelations.map((rel) => {
+                  const nameA = residentNameMap[rel.a_id] ?? '住人A';
+                  const nameB = residentNameMap[rel.b_id] ?? '住人B';
+                  const relationLabel = RELATION_LABELS[rel.type] ?? 'なし';
+                  return (
+                    <div key={rel.id} className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{nameA} × {nameB}</div>
+                        <div className="text-xs text-muted-foreground">{relationLabel}</div>
+                      </div>
+                      <Button size="sm" variant="ghost" asChild>
+                        <Link href={`/office/relations/${rel.id}`}>覗く</Link>
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </BoardCard>
+        </div>
+
+        <Card className="rounded-2xl border bg-muted/40">
+          <CardContent className="py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-semibold">みんなの様子</div>
+              <div className="text-sm text-muted-foreground">別ページで覗けるようになりました。</div>
+            </div>
+            <Button asChild>
+              <Link href="/home/residents">見に行く</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>

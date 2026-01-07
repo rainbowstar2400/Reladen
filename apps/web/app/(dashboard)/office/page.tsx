@@ -13,6 +13,12 @@ export default function OfficePage() {
     </Button>
   )
 
+  const SubBtn = ({ href, label }: { href: string; label: string }) => (
+    <Button asChild variant="outline" className="h-12 w-full rounded-xl text-base">
+      <Link href={href}>{label}</Link>
+    </Button>
+  )
+
   return (
     <div className="space-y-8">
       {/* タイトル行 */}
@@ -25,9 +31,23 @@ export default function OfficePage() {
 
       {/* 大きめボタンを中央縦並び */}
       <div className="mx-auto flex max-w-2xl flex-col gap-8">
-        <Btn href="/office/residents" label="住人一覧" />
-        <Btn href="/office/new" label="新規住人登録" />
-        <Btn href="/office/presets" label="プリセット管理" />
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold text-muted-foreground">住人管理</h2>
+          <div className="flex flex-col gap-6">
+            <Btn href="/office/residents" label="住人一覧" />
+            <Btn href="/office/new" label="新規住人登録" />
+            <Btn href="/office/presets" label="プリセット管理" />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold text-muted-foreground">管理室メニュー</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SubBtn href="/settings" label="設定" />
+            <SubBtn href="/playguide" label="遊び方" />
+            <SubBtn href="/specs" label="仕様について" />
+          </div>
+        </div>
       </div>
     </div>
   )
