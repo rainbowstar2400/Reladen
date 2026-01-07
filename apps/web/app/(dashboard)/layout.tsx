@@ -1,7 +1,6 @@
 'use client'; // フックを使うためクライアントコンポーネントに
 
 import { ReactNode } from 'react';
-import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { MotionMain } from '@/components/layout/motion-main';
 import DetailLayer from '@/components/logs/detail-layer';
@@ -20,9 +19,7 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <div className="grid flex-1 grid-cols-1 md:grid-cols-[16rem_1fr]">
-        <Sidebar />
-
+      <div className="flex-1">
         {/* 準備完了(ready) かつ ユーザーが存在する(user) の時だけ描画 */}
         {ready && user && <RealtimeSubscriber />}
 

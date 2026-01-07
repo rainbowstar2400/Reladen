@@ -264,6 +264,23 @@ export default function HomePage() {
       </div>
 
       <div className="space-y-6">
+        <Card className="rounded-2xl border bg-muted/40">
+          <CardContent className="py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-semibold">ホームメニュー</div>
+              <div className="text-sm text-muted-foreground">主要な画面へすぐ移動できます。</div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button asChild>
+                <Link href="/reports">日報</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/office">管理室</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <SectionTitle>掲示板</SectionTitle>
         <div className="grid gap-4 lg:grid-cols-2">
           <BoardCard title="会話通知" meta={`未読 ${unreadConversation} 件`}>
