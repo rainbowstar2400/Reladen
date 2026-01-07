@@ -252,124 +252,123 @@ export default function HomePage() {
 
   return (
     <div className="p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <h1 className="text-xl font-semibold">ホーム</h1>
-        <Link
-          href="/player"
-          className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-sm hover:bg-muted"
-        >
-          <span className="text-xs text-muted-foreground">プレイヤー</span>
-          <span className="font-semibold">{playerName}</span>
-        </Link>
-      </div>
-
       <div className="space-y-6">
-        <Card className="rounded-2xl border bg-muted/40">
-          <CardContent className="py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="font-semibold">ホームメニュー</div>
-              <div className="text-sm text-muted-foreground">主要な画面へすぐ移動できます。</div>
+        <Card className="rounded-3xl border bg-muted/30">
+          <CardContent className="relative min-h-[50vh] px-5 py-6 sm:min-h-[55vh]">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="text-center text-2xl font-semibold tracking-wide text-muted-foreground">
+                （電子的な）掲示板
+              </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button asChild>
-                <Link href="/reports">日報</Link>
-              </Button>
-              <Button variant="outline" asChild>
+
+            <div className="relative z-10 mt-auto">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <BoardCard title="会話通知" meta={`未読 ${unreadConversation} 件`}>
+                  <NotificationList
+                    items={conversationNotifications.slice(0, 4)}
+                    isLoading={isLoadingNotifications}
+                    emptyText="会話の通知はありません。"
+                    onOpen={openNotification}
+                    residentNameMap={residentNameMap}
+                  />
+                </BoardCard>
+
+                <BoardCard title="相談通知" meta={`未読 ${unreadConsult} 件`}>
+                  <NotificationList
+                    items={consultNotifications.slice(0, 4)}
+                    isLoading={isLoadingNotifications}
+                    emptyText="相談の通知はありません。"
+                    onOpen={openNotification}
+                    residentNameMap={residentNameMap}
+                  />
+                </BoardCard>
+
+                <BoardCard title="新聞">
+                  {weatherState ? (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-muted-foreground">現在の天気</div>
+                        <WeatherIcon kind={weatherState.current.kind as WeatherKind} />
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        最終更新: {new Date(weatherState.current.lastChangedAt).toLocaleString()}
+                      </div>
+                      <div className="h-px bg-border" />
+                      <div className="text-sm">
+                        {weatherState.currentComment ? (
+                          <span>
+                            {weatherState.currentComment.residentId
+                              ? `${residentNameMap[weatherState.currentComment.residentId] ?? '住人'}「${weatherState.currentComment.text}」`
+                              : weatherState.currentComment.text}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">コメントはまだありません。</span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">天気情報を読み込み中…</div>
+                  )}
+                </BoardCard>
+
+                <BoardCard title="注目の関係">
+                  {isLoadingRelations ? (
+                    <div className="text-sm text-muted-foreground">関係を読み込み中…</div>
+                  ) : featuredRelations.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">注目の関係はまだありません。</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {featuredRelations.map((rel) => {
+                        const nameA = residentNameMap[rel.a_id] ?? '住人A';
+                        const nameB = residentNameMap[rel.b_id] ?? '住人B';
+                        const relationLabel = RELATION_LABELS[rel.type] ?? 'なし';
+                        return (
+                          <div key={rel.id} className="flex items-center justify-between">
+                            <div>
+                              <div className="font-medium">{nameA} × {nameB}</div>
+                              <div className="text-xs text-muted-foreground">{relationLabel}</div>
+                            </div>
+                            <Button size="sm" variant="ghost" asChild>
+                              <Link href={`/office/relations/${rel.id}`}>覗く</Link>
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </BoardCard>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+          <Button asChild className="h-24 rounded-3xl text-lg">
+            <Link href="/reports">日報</Link>
+          </Button>
+
+          <div className="space-y-4">
+            <Button asChild className="h-16 w-full justify-between rounded-2xl text-base">
+              <Link href="/home/residents">
+                みんなの様子
+                <span className="text-sm">→</span>
+              </Link>
+            </Button>
+
+            <div className="grid gap-3 sm:grid-cols-[1.2fr_1fr]">
+              <Button asChild variant="outline" className="h-14 rounded-2xl text-base">
                 <Link href="/office">管理室</Link>
               </Button>
+
+              <Link
+                href="/player"
+                className="flex h-14 items-center justify-center rounded-2xl border bg-background text-sm font-semibold hover:bg-muted"
+              >
+                {playerName}
+              </Link>
             </div>
-          </CardContent>
-        </Card>
-
-        <SectionTitle>掲示板</SectionTitle>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <BoardCard title="会話通知" meta={`未読 ${unreadConversation} 件`}>
-            <NotificationList
-              items={conversationNotifications.slice(0, 4)}
-              isLoading={isLoadingNotifications}
-              emptyText="会話の通知はありません。"
-              onOpen={openNotification}
-              residentNameMap={residentNameMap}
-            />
-          </BoardCard>
-
-          <BoardCard title="相談通知" meta={`未読 ${unreadConsult} 件`}>
-            <NotificationList
-              items={consultNotifications.slice(0, 4)}
-              isLoading={isLoadingNotifications}
-              emptyText="相談の通知はありません。"
-              onOpen={openNotification}
-              residentNameMap={residentNameMap}
-            />
-          </BoardCard>
-
-          <BoardCard title="新聞">
-            {weatherState ? (
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">現在の天気</div>
-                  <WeatherIcon kind={weatherState.current.kind as WeatherKind} />
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  最終更新: {new Date(weatherState.current.lastChangedAt).toLocaleString()}
-                </div>
-                <div className="h-px bg-border" />
-                <div className="text-sm">
-                  {weatherState.currentComment ? (
-                    <span>
-                      {weatherState.currentComment.residentId
-                        ? `${residentNameMap[weatherState.currentComment.residentId] ?? '住人'}「${weatherState.currentComment.text}」`
-                        : weatherState.currentComment.text}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">コメントはまだありません。</span>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="text-sm text-muted-foreground">天気情報を読み込み中…</div>
-            )}
-          </BoardCard>
-
-          <BoardCard title="注目の関係">
-            {isLoadingRelations ? (
-              <div className="text-sm text-muted-foreground">関係を読み込み中…</div>
-            ) : featuredRelations.length === 0 ? (
-              <div className="text-sm text-muted-foreground">注目の関係はまだありません。</div>
-            ) : (
-              <div className="space-y-3">
-                {featuredRelations.map((rel) => {
-                  const nameA = residentNameMap[rel.a_id] ?? '住人A';
-                  const nameB = residentNameMap[rel.b_id] ?? '住人B';
-                  const relationLabel = RELATION_LABELS[rel.type] ?? 'なし';
-                  return (
-                    <div key={rel.id} className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{nameA} × {nameB}</div>
-                        <div className="text-xs text-muted-foreground">{relationLabel}</div>
-                      </div>
-                      <Button size="sm" variant="ghost" asChild>
-                        <Link href={`/office/relations/${rel.id}`}>覗く</Link>
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </BoardCard>
+          </div>
         </div>
-
-        <Card className="rounded-2xl border bg-muted/40">
-          <CardContent className="py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="font-semibold">みんなの様子</div>
-              <div className="text-sm text-muted-foreground">別ページで覗けるようになりました。</div>
-            </div>
-            <Button asChild>
-              <Link href="/home/residents">見に行く</Link>
-            </Button>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
