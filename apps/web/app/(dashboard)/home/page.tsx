@@ -96,13 +96,15 @@ function BoardCard({
   title,
   meta,
   children,
+  className,
 }: {
   title: string;
   meta?: React.ReactNode;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <Card className="rounded-2xl">
+    <Card className={`rounded-2xl ${className ?? ''}`}>
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="font-semibold">{title}</div>
         {meta ? <div className="text-xs text-muted-foreground">{meta}</div> : null}
@@ -252,14 +254,18 @@ export default function HomePage() {
 
   return (
     <div className="p-4">
-      <div className="space-y-6">
-        <Card className="rounded-3xl border bg-muted/30">
-          <CardContent className="px-5 py-6">
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-6">
+        <Card className="flex flex-1 flex-col rounded-3xl border bg-muted/30">
+          <CardContent className="flex flex-1 flex-col px-5 py-6">
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold text-muted-foreground">掲示板</div>
             </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <BoardCard title="会話" meta={`未読 ${unreadConversation} 件`}>
+            <div className="grid flex-1 gap-4 lg:grid-cols-2 lg:auto-rows-fr">
+              <BoardCard
+                title="会話"
+                meta={`未読 ${unreadConversation} 件`}
+                className="lg:min-h-[320px]"
+              >
                 <NotificationList
                   items={conversationNotifications.slice(0, 4)}
                   isLoading={isLoadingNotifications}
@@ -269,7 +275,11 @@ export default function HomePage() {
                 />
               </BoardCard>
 
-              <BoardCard title="受信箱" meta={`未読 ${unreadConsult} 件`}>
+              <BoardCard
+                title="受信箱"
+                meta={`未読 ${unreadConsult} 件`}
+                className="lg:min-h-[320px]"
+              >
                 <NotificationList
                   items={consultNotifications.slice(0, 4)}
                   isLoading={isLoadingNotifications}
@@ -337,7 +347,7 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        <div className="grid items-stretch gap-4 lg:grid-cols-[1.1fr_1fr] lg:h-[132px]">
+        <div className="grid items-stretch gap-4 lg:grid-cols-[1.1fr_1fr] lg:h-[180px]">
           <Button
             asChild
             variant="outline"
