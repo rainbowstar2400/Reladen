@@ -347,7 +347,7 @@ export default function HomePage() {
           </CardContent>
         </Card>
 
-        <div className="grid items-stretch gap-4 lg:grid-cols-[1.1fr_1fr] lg:h-[180px]">
+        <div className="grid items-stretch gap-4 lg:grid-cols-[1.1fr_1fr] lg:h-[132px]">
           <Button
             asChild
             variant="outline"
