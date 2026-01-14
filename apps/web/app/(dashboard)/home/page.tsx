@@ -260,7 +260,7 @@ export default function HomePage() {
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold text-muted-foreground">掲示板</div>
             </div>
-            <div className="grid flex-1 gap-4 lg:grid-cols-2 lg:auto-rows-fr">
+            <div className="grid flex-1 gap-4 lg:grid-cols-2">
               <BoardCard
                 title="会話"
                 meta={`未読 ${unreadConversation} 件`}
