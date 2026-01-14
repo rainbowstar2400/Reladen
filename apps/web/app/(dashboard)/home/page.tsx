@@ -87,7 +87,7 @@ function WeatherIcon({ kind }: { kind: WeatherKind }) {
   const Icon = map[kind] ?? Cloud;
   return (
     <div className="flex items-center justify-center">
-      <Icon className="h-8 w-8 text-foreground" aria-hidden />
+      <Icon className="h-8 w-8 text-[color:var(--ink)]" aria-hidden />
       <span className="sr-only">{kind}</span>
     </div>
   );
@@ -105,13 +105,17 @@ function BoardCard({
   className?: string;
 }) {
   return (
-    <Card className={`rounded-2xl border-secondary/30 bg-card/90 shadow-sm ${className ?? ''}`}>
-      <div className="flex items-center justify-between border-b border-secondary/30 px-4 py-3">
-        <div className="font-semibold">{title}</div>
-        {meta ? <div className="text-xs text-muted-foreground">{meta}</div> : null}
+    <div
+      className={`relative rounded-[22px] border border-[color:var(--paper-border)] bg-[color:var(--paper-bg)] shadow-[var(--shadow-paper)] ${className ?? ''}`}
+    >
+      <div className="flex items-center justify-between px-4 pb-2 pt-3">
+        <span className="inline-flex items-center rounded-full border border-[color:var(--label-border)] bg-[color:var(--label-bg)] px-2.5 py-1 text-[10px] font-semibold tracking-[0.25em] text-[color:var(--ink)]">
+          {title}
+        </span>
+        {meta ? <div className="text-[11px] text-[color:var(--ink-muted)]">{meta}</div> : null}
       </div>
-      <div className="px-4 py-3">{children}</div>
-    </Card>
+      <div className="px-4 pb-4">{children}</div>
+    </div>
   );
 }
 
@@ -129,12 +133,12 @@ function NotificationList({
   residentNameMap: Record<string, string>;
 }) {
   return (
-    <ul className="divide-y">
+    <ul className="divide-y divide-[color:var(--paper-border)]">
       {isLoading && (
-        <li className="py-2 text-sm text-muted-foreground">読み込み中…</li>
+        <li className="py-2 text-sm text-[color:var(--ink-muted)]">読み込み中…</li>
       )}
       {!isLoading && items.length === 0 && (
-        <li className="py-2 text-sm text-muted-foreground">{emptyText}</li>
+        <li className="py-2 text-sm text-[color:var(--ink-muted)]">{emptyText}</li>
       )}
       {items.map((n) => {
         const title = getNotificationTitle(n, residentNameMap);
@@ -149,18 +153,18 @@ function NotificationList({
               aria-label={snippet ?? title}
             >
               <span
-                className={`mt-1 h-2 w-2 rounded-full ${n.status === 'unread' ? 'bg-blue-600' : 'bg-gray-300'
+                className={`mt-1 h-2 w-2 rounded-full ${n.status === 'unread' ? 'bg-[color:var(--ink)]' : 'bg-[color:var(--ink-soft)]'
                   }`}
               />
               <span className="flex-1 min-w-0">
                 <div className="text-sm">{title}</div>
                 {snippet && (
-                  <div className="text-xs text-muted-foreground line-clamp-1">
+                  <div className="text-xs text-[color:var(--ink-muted)] line-clamp-1">
                     {snippet}
                   </div>
                 )}
               </span>
-              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+              <span className="text-[11px] text-[color:var(--ink-muted)] whitespace-nowrap">
                 {time}
               </span>
             </button>
@@ -254,12 +258,14 @@ export default function HomePage() {
 
 
   return (
-    <div className="p-4 bg-gradient-to-b from-secondary/20 via-background to-background">
-      <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-6">
-        <Card className="flex flex-1 flex-col rounded-3xl border border-secondary/30 bg-secondary/20 shadow-sm">
-          <CardContent className={`flex flex-1 flex-col px-5 py-6 ${fontRounded.className}`}>
+    <div className="min-h-screen bg-[color:var(--app-bg)] text-[color:var(--ink)] bg-[radial-gradient(1200px_600px_at_50%_10%,rgba(255,255,255,0.6),transparent_70%)]">
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-6 p-4 sm:p-6">
+        <Card className="relative flex flex-1 flex-col rounded-[34px] border-2 border-[color:var(--board-border)] bg-[color:var(--board-bg)] shadow-[var(--board-shadow)] before:pointer-events-none before:absolute before:inset-0 before:rounded-[34px] before:bg-[radial-gradient(120%_120%_at_50%_-10%,rgba(255,255,255,0.55),transparent_60%)] before:opacity-70 after:pointer-events-none after:absolute after:inset-0 after:rounded-[34px] after:bg-[radial-gradient(rgba(30,35,43,0.08)_1px,transparent_1px)] after:bg-[length:6px_6px] after:opacity-25">
+          <CardContent className={`relative z-10 flex flex-1 flex-col px-5 py-6 ${fontRounded.className}`}>
             <div className="mb-4 flex items-center justify-between">
-              <div className="text-sm font-semibold text-muted-foreground">掲示板</div>
+              <div className="text-[11px] font-semibold tracking-[0.4em] text-[color:var(--ink-muted)]">
+                掲示板
+              </div>
             </div>
             <div className="grid flex-1 gap-4 lg:grid-cols-2">
               <BoardCard
@@ -294,13 +300,13 @@ export default function HomePage() {
                 {weatherState ? (
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between">
-                      <div className="text-sm text-muted-foreground">現在の天気</div>
+                      <div className="text-sm text-[color:var(--ink-muted)]">現在の天気</div>
                       <WeatherIcon kind={weatherState.current.kind as WeatherKind} />
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-[color:var(--ink-muted)]">
                       最終更新: {new Date(weatherState.current.lastChangedAt).toLocaleString()}
                     </div>
-                    <div className="h-px bg-border" />
+                    <div className="h-px bg-[color:var(--paper-border)]" />
                     <div className="text-sm">
                       {weatherState.currentComment ? (
                         <span>
@@ -309,20 +315,20 @@ export default function HomePage() {
                             : weatherState.currentComment.text}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">コメントはまだありません。</span>
+                        <span className="text-[color:var(--ink-muted)]">コメントはまだありません。</span>
                       )}
                     </div>
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">天気情報を読み込み中…</div>
+                  <div className="text-sm text-[color:var(--ink-muted)]">天気情報を読み込み中…</div>
                 )}
               </BoardCard>
 
               <BoardCard title="注目の関係">
                 {isLoadingRelations ? (
-                  <div className="text-sm text-muted-foreground">関係を読み込み中…</div>
+                  <div className="text-sm text-[color:var(--ink-muted)]">関係を読み込み中…</div>
                 ) : featuredRelations.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">注目の関係は特にありません。</div>
+                  <div className="text-sm text-[color:var(--ink-muted)]">注目の関係は特にありません。</div>
                 ) : (
                   <div className="space-y-3">
                     {featuredRelations.map((rel) => {
@@ -333,9 +339,14 @@ export default function HomePage() {
                         <div key={rel.id} className="flex items-center justify-between">
                           <div>
                             <div className="font-medium">{nameA} × {nameB}</div>
-                            <div className="text-xs text-muted-foreground">{relationLabel}</div>
+                            <div className="text-xs text-[color:var(--ink-muted)]">{relationLabel}</div>
                           </div>
-                          <Button size="sm" variant="ghost" asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 rounded-full border-[color:var(--paper-border)] bg-[color:var(--label-bg)] text-[11px] text-[color:var(--ink)] hover:bg-[color:var(--paper-bg)]"
+                            asChild
+                          >
                             <Link href={`/office/relations/${rel.id}`}>覗く</Link>
                           </Button>
                         </div>
@@ -352,7 +363,7 @@ export default function HomePage() {
           <Button
             asChild
             variant="outline"
-            className="h-24 rounded-3xl bg-white text-lg text-foreground hover:bg-muted lg:h-full"
+            className="relative h-24 overflow-hidden rounded-[28px] border-2 border-[color:var(--plaque-border)] bg-[color:var(--plaque-bg)] text-lg text-[color:var(--ink)] shadow-[var(--plaque-shadow)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)] active:translate-y-0 active:shadow-[var(--plaque-shadow-pressed)] lg:h-full"
           >
             <Link href="/reports">日報</Link>
           </Button>
@@ -361,7 +372,7 @@ export default function HomePage() {
             <Button
               asChild
               variant="outline"
-              className="h-16 w-full justify-between rounded-2xl bg-white text-base text-foreground hover:bg-muted"
+              className="relative h-16 w-full justify-between overflow-hidden rounded-[22px] border-2 border-[color:var(--plaque-border)] bg-[color:var(--plaque-bg)] text-base text-[color:var(--ink)] shadow-[var(--plaque-shadow)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)] active:translate-y-0 active:shadow-[var(--plaque-shadow-pressed)]"
             >
               <Link href="/home/residents">
                 みんなの様子
@@ -370,13 +381,17 @@ export default function HomePage() {
             </Button>
 
             <div className="grid gap-3 sm:grid-cols-[1.2fr_1fr] lg:h-14">
-              <Button asChild variant="outline" className="h-14 rounded-2xl text-base">
+              <Button
+                asChild
+                variant="outline"
+                className="relative h-14 overflow-hidden rounded-[20px] border-2 border-[color:var(--plaque-border)] bg-[color:var(--plaque-bg)] text-base text-[color:var(--ink)] shadow-[var(--plaque-shadow)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)] active:translate-y-0 active:shadow-[var(--plaque-shadow-pressed)]"
+              >
                 <Link href="/office">管理室</Link>
               </Button>
 
               <Link
                 href="/player"
-                className="flex h-14 items-center justify-center rounded-2xl border bg-background text-sm font-semibold hover:bg-muted"
+                className="relative flex h-14 items-center justify-center overflow-hidden rounded-[20px] border-2 border-[color:var(--plaque-border)] bg-[color:var(--plaque-bg)] text-sm font-semibold text-[color:var(--ink)] shadow-[var(--plaque-shadow)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)] active:translate-y-0 active:shadow-[var(--plaque-shadow-pressed)]"
               >
                 {playerName}
               </Link>
