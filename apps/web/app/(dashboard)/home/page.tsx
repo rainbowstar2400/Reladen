@@ -14,6 +14,7 @@ import { useWorldWeather } from '@/lib/data/use-world-weather';
 import type { WeatherKind } from '@repo/shared/types';
 import { useRelations } from '@/lib/data/relations';
 import { RELATION_LABELS } from '@/lib/constants/labels';
+import { fontRounded } from '@/styles/fonts';
 
 /* ---------------------------
    共通UI：セクション見出し
@@ -104,8 +105,8 @@ function BoardCard({
   className?: string;
 }) {
   return (
-    <Card className={`rounded-2xl ${className ?? ''}`}>
-      <div className="flex items-center justify-between border-b px-4 py-3">
+    <Card className={`rounded-2xl border-secondary/30 bg-card/90 shadow-sm ${className ?? ''}`}>
+      <div className="flex items-center justify-between border-b border-secondary/30 px-4 py-3">
         <div className="font-semibold">{title}</div>
         {meta ? <div className="text-xs text-muted-foreground">{meta}</div> : null}
       </div>
@@ -253,10 +254,10 @@ export default function HomePage() {
 
 
   return (
-    <div className="p-4">
+    <div className="p-4 bg-gradient-to-b from-secondary/20 via-background to-background">
       <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-6">
-        <Card className="flex flex-1 flex-col rounded-3xl border bg-muted/30">
-          <CardContent className="flex flex-1 flex-col px-5 py-6">
+        <Card className="flex flex-1 flex-col rounded-3xl border border-secondary/30 bg-secondary/20 shadow-sm">
+          <CardContent className={`flex flex-1 flex-col px-5 py-6 ${fontRounded.className}`}>
             <div className="mb-4 flex items-center justify-between">
               <div className="text-sm font-semibold text-muted-foreground">掲示板</div>
             </div>
