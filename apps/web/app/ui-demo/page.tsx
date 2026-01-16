@@ -1,3 +1,5 @@
+'use client';
+
 export default function UiDemoPage() {
   return (
     <div className="scene" role="application" aria-label="Reladen UI demo scene">
