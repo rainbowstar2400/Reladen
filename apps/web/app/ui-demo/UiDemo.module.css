@@ -1,0 +1,431 @@
+.page {
+  position: relative;
+  min-height: 100vh;
+  color: #0a1b2b;
+  background: #a5b7c8;
+  overflow: hidden;
+  font-weight: 300;
+}
+
+.sky {
+  position: absolute;
+  inset: 0;
+  background: url("./pre_sky.png") center / cover no-repeat;
+  filter: saturate(1.05) contrast(1.05);
+}
+
+.windowGlassOverlay {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 10% 8%, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0)),
+    radial-gradient(circle at 90% 10%, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0)),
+    radial-gradient(circle at 0 100%, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0)),
+    radial-gradient(circle at 100% 100%, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0));
+  background-repeat: no-repeat;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.windowGlassOverlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      118deg,
+      rgba(255, 255, 255, 0.58) 12%,
+      rgba(255, 255, 255, 0.2) 34%,
+      rgba(255, 255, 255, 0) 58%
+    ),
+    linear-gradient(
+      140deg,
+      rgba(255, 255, 255, 0.38),
+      rgba(255, 255, 255, 0.08) 52%,
+      rgba(255, 255, 255, 0)
+    );
+  mix-blend-mode: screen;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.windowGlassOverlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.25) 0.5px,
+    transparent 0.6px
+  );
+  background-size: 7px 7px;
+  opacity: 0.3;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+
+.deskReflection {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 22%;
+  height: 40%;
+  background: url("./desk.png") center bottom / cover no-repeat;
+  transform: scaleY(-1);
+  opacity: 0.07;
+  filter: blur(8px) saturate(0.9);
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0));
+  -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0));
+  pointer-events: none;
+}
+
+.desk {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 24%;
+  background: url("./desk.png") center bottom / cover no-repeat;
+  box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.18);
+}
+
+.deskEdgeShadow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 24%;
+  height: 6%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0));
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 24px 48px 28px;
+  gap: 16px;
+}
+
+.glassPanel {
+  position: relative;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -8px 20px rgba(4, 18, 30, 0.14),
+    0 8px 16px rgba(4, 18, 30, 0.18),
+    0 26px 42px rgba(4, 18, 30, 0.22);
+  backdrop-filter: blur(18px) saturate(1.2) contrast(1.05);
+}
+
+.glassPanel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.6),
+      rgba(255, 255, 255, 0.22) 32%,
+      rgba(255, 255, 255, 0.05) 60%,
+      rgba(255, 255, 255, 0.18)
+    );
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.glassPanel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.2) 0.6px,
+    transparent 0.6px
+  );
+  background-size: 6px 6px;
+  opacity: 0.2;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+
+.glassStrong .windowGlassOverlay::before {
+  opacity: 0.9;
+}
+
+.glassStrong .windowGlassOverlay::after {
+  opacity: 0.45;
+}
+
+.glassStrong .deskReflection {
+  opacity: 0.08;
+}
+
+.glassStrong .glassPanel::before {
+  opacity: 0.7;
+}
+
+.glassStrong .glassPanel::after {
+  opacity: 0.28;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glassPanel {
+    background: rgba(210, 225, 235, 0.6);
+  }
+
+  .glassPanel::before {
+    opacity: 0.35;
+  }
+}
+
+.topBar {
+  display: flex;
+  justify-content: center;
+}
+
+.weatherChip {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 28px;
+}
+
+.weatherLabel {
+  font-weight: 500;
+  font-size: 18px;
+}
+
+.weatherStatus {
+  font-size: 18px;
+}
+
+.panels {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.panel {
+  padding: 18px 22px;
+}
+
+.panelLeft {
+  max-width: 620px;
+}
+
+.panelRight {
+  max-width: 460px;
+  justify-self: end;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.mailIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(0, 120, 160, 0.15);
+  color: #0b5e7a;
+  font-size: 16px;
+}
+
+.panelTitle {
+  font-weight: 500;
+  font-size: 17px;
+  flex: 1;
+}
+
+.panelTitleLarge {
+  font-weight: 600;
+  font-size: 20px;
+}
+
+.panelControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sortButton {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.searchInput {
+  width: 140px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.messageCard {
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 0 24px rgba(255, 255, 255, 0.35);
+  margin-bottom: 14px;
+}
+
+.messageRow {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 14px;
+  padding: 6px 0;
+}
+
+.initial {
+  font-weight: 600;
+  color: #15324b;
+}
+
+.time {
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 13px;
+}
+
+.link {
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+}
+
+.statusList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.statusRow {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.statusDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4dbb63;
+  box-shadow: 0 0 8px rgba(77, 187, 99, 0.6);
+}
+
+.toneGreen {
+  background: #4dbb63;
+  box-shadow: 0 0 8px rgba(77, 187, 99, 0.6);
+}
+
+.toneBlue {
+  background: #3a7bd5;
+  box-shadow: 0 0 8px rgba(58, 123, 213, 0.6);
+}
+
+.statusName {
+  font-weight: 500;
+}
+
+.peekButton {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.footer {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 16px;
+  margin-top: auto;
+}
+
+.navButton {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 18px;
+  font-weight: 500;
+  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.timeCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 24px;
+  border-radius: 12px;
+  color: #243749;
+  min-width: 160px;
+}
+
+.date {
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+.clock {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .content {
+    padding: 24px 20px 32px;
+  }
+
+  .panels {
+    grid-template-columns: 1fr;
+  }
+
+  .panelRight {
+    justify-self: stretch;
+    max-width: none;
+  }
+
+  .panelLeft {
+    max-width: none;
+  }
+
+  .footer {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 12px;
+  }
+
+  .navButton {
+    font-size: 16px;
+  }
+}
