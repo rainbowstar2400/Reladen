@@ -10,7 +10,7 @@
 .sky {
   position: absolute;
   inset: 0;
-  background: url("./pre_sky.png") center / cover no-repeat;
+  background: url("./pre_sky.jpg") center / cover no-repeat;
   filter: saturate(1.05) contrast(1.05);
 }
 
