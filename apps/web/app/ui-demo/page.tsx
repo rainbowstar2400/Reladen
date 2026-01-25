@@ -17,9 +17,6 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
   return (
     <div className={`${styles.page} ${notoSans.className} ${isStrongGlass ? styles.glassStrong : ''}`}>
       <div className={styles.sky} aria-hidden="true" />
-      <div className={styles.windowGlassOverlay} aria-hidden="true">
-        <div className={styles.deskReflection} />
-      </div>
       <div className={styles.desk} aria-hidden="true" />
       <div className={styles.deskEdgeShadow} aria-hidden="true" />
 
