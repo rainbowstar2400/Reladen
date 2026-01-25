@@ -134,7 +134,7 @@
 .panels {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 450px) minmax(0, 1fr);
   gap: 24px;
   align-items: start;
 }
@@ -145,14 +145,19 @@
 
 .panelLeft {
   max-width: none;
-  width: 100%;
-  justify-self: start;
+  width: 500px;
+  justify-self: end;
 }
 
 .panelRight {
   max-width: none;
+  width: 450px;
+  justify-self: start;
+}
+
+.panelCenter {
   width: 100%;
-  justify-self: end;
+  justify-self: center;
 }
 
 .panelHeader {
@@ -217,6 +222,11 @@
   border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow: inset 0 0 24px rgba(255, 255, 255, 0.35);
   margin-bottom: 14px;
+}
+
+.consultationPanel {
+  margin-top: 14px;
+  padding: 14px 16px;
 }
 
 .messageRow {

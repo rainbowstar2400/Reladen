@@ -30,13 +30,6 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
 
         <main className={styles.panels}>
           <section className={`${styles.glassPanel} ${styles.panel} ${styles.panelLeft}`}>
-            <div className={styles.panelHeader}>
-              <span className={styles.mailIcon} aria-hidden="true">
-                ✉
-              </span>
-              <span className={styles.panelTitle}>太郎から相談が届いています。</span>
-            </div>
-
             <div className={styles.messageCard}>
               <div className={styles.messageRow}>
                 <span className={styles.initial}>A</span>
@@ -61,6 +54,15 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
                 <span>「へえ、そうなんだ」</span>
                 <span className={styles.link}>見てみる &gt;</span>
               </div>
+            </div>
+          </section>
+
+          <section className={`${styles.glassPanel} ${styles.panel} ${styles.panelCenter}`}>
+            <div className={styles.panelHeader}>
+              <span className={styles.mailIcon} aria-hidden="true">
+                ✉
+              </span>
+              <span className={styles.panelTitle}>Bから相談が届いています。</span>
             </div>
           </section>
 
