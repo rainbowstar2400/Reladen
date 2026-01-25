@@ -30,6 +30,13 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
 
         <main className={styles.panels}>
           <section className={`${styles.glassPanel} ${styles.panel} ${styles.panelLeft}`}>
+            <div className={styles.panelHeader}>
+              <span className={styles.mailIcon} aria-hidden="true">
+                🗨️
+              </span>
+              <span className={styles.panelTitle}>会話</span>
+            </div>
+
             <div className={styles.messageCard}>
               <div className={styles.messageRow}>
                 <span className={styles.initial}>A</span>
@@ -62,7 +69,23 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
               <span className={styles.mailIcon} aria-hidden="true">
                 ✉
               </span>
-              <span className={styles.panelTitle}>Bから相談が届いています。</span>
+              <span className={styles.panelTitle}>相談</span>
+            </div>
+
+            <div className={styles.messageCard}>
+              <div className={`${styles.messageRow} ${styles.messageRowCenter}`}>
+                <span className={styles.time}>14:10</span>
+                <span className={styles.centerMessage}>Bから相談が届いています</span>
+                <span className={styles.link}>回答する &gt;</span>
+              </div>
+            </div>
+
+            <div className={styles.messageCard}>
+              <div className={`${styles.messageRow} ${styles.messageRowCenter}`}>
+                <span className={styles.time}>13:55</span>
+                <span className={styles.centerMessage}>Aから相談が届いています</span>
+                <span className={styles.link}>回答する &gt;</span>
+              </div>
             </div>
           </section>
 
