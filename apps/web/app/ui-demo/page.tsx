@@ -120,15 +120,15 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
         </main>
 
         <footer className={styles.footer}>
-          <button className={styles.navButton} type="button">
-            ← 日報へ
+          <button className={`${styles.navButton} ${styles.navButtonLeft}`} type="button">
+            ← 日報
           </button>
           <div className={`${styles.glassPanel} ${styles.timeCard}`}>
             <span className={styles.date}>2026/01/16</span>
             <span className={styles.clock}>14:00:00</span>
           </div>
-          <button className={styles.navButton} type="button">
-            管理室へ →
+          <button className={`${styles.navButton} ${styles.navButtonRight}`} type="button">
+            管理室 →
           </button>
         </footer>
       </div>

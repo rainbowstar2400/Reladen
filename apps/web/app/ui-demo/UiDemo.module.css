@@ -346,15 +346,45 @@
   align-items: end;
   gap: 16px;
   margin-top: auto;
+  transform: translateY(-48px);
 }
 
 .navButton {
-  border: none;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 42px;
+  justify-self: center;
+  width: 6em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(74, 45, 18, 0.6);
+  background:
+    linear-gradient(180deg, rgba(205, 166, 120, 0.58), rgba(171, 120, 67, 0.6)),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0,
+      rgba(255, 255, 255, 0.04) 6px,
+      rgba(255, 255, 255, 0) 6px,
+      rgba(255, 255, 255, 0) 12px
+    );
+  color: #3a240f;
+  font-size: 28px;
   font-weight: 500;
-  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+  padding: 7px 0.72em;
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -2px 4px rgba(74, 45, 18, 0.16),
+    0 8px 16px rgba(40, 22, 6, 0.18);
+}
+
+.navButtonLeft {
+  justify-self: start;
+  transform: translateX(80%) rotate(-20deg);
+}
+
+.navButtonRight {
+  justify-self: end;
+  transform: translateX(-80%) rotate(20deg);
 }
 
 .timeCard {
