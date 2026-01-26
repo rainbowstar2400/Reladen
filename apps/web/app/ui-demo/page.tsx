@@ -73,28 +73,43 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
             </div>
 
             <div className={styles.messageCard}>
-              <div className={`${styles.messageRow} ${styles.messageRowCenter}`}>
-                <span className={styles.time}>14:10</span>
-                <span className={styles.centerMessage}>Bから相談が届いています</span>
-                <span className={styles.link}>回答する &gt;</span>
+              <div className={styles.consultationRow}>
+                <span className={styles.consultationTime}>14:10</span>
+                <span className={styles.consultationMessage}>
+                  <span>
+                    <span className={styles.consultationName}>B</span>
+                    から
+                  </span>
+                  <span>　相談が届いています</span>
+                </span>
+                <span className={styles.consultationAction}>回答する &gt;</span>
               </div>
             </div>
 
             <div className={styles.messageCard}>
-              <div className={`${styles.messageRow} ${styles.messageRowCenter}`}>
-                <span className={styles.time}>13:55</span>
-                <span className={styles.centerMessage}>Aから相談が届いています</span>
-                <span className={styles.link}>回答する &gt;</span>
+              <div className={styles.consultationRow}>
+                <span className={styles.consultationTime}>13:55</span>
+                <span className={styles.consultationMessage}>
+                  <span>
+                    <span className={styles.consultationName}>A</span>
+                    から
+                  </span>
+                  <span>　相談が届いています</span>
+                </span>
+                <span className={styles.consultationAction}>回答する &gt;</span>
               </div>
             </div>
           </section>
 
           <section className={`${styles.glassPanel} ${styles.panel} ${styles.panelRight}`}>
             <div className={styles.panelHeader}>
-              <span className={styles.panelTitleLarge}>みんなの様子</span>
+              <span className={styles.mailIcon} aria-hidden="true">
+                🧑‍🤝‍🧑
+              </span>
+              <span className={styles.panelTitle}>みんなの様子</span>
               <div className={styles.panelControls}>
                 <button className={styles.sortButton} type="button">
-                  並べ替え
+                  並び替え
                 </button>
                 <input className={styles.searchInput} placeholder="検索" />
               </div>
