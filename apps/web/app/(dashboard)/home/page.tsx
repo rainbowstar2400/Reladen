@@ -1,41 +1,42 @@
 'use client';
 
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Noto_Sans_JP } from 'next/font/google';
 import Link from 'next/link';
-import { Cloud, Sun, CloudRain, CloudLightning } from 'lucide-react';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth/use-auth';
 import { fetchEventById, useMarkNotificationRead, useNotifications } from '@/lib/data/notifications';
 import type { NotificationRecord } from '@repo/shared/types/conversation';
 import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 import { useWorldWeather } from '@/lib/data/use-world-weather';
 import type { WeatherKind } from '@repo/shared/types';
-import { useRelations } from '@/lib/data/relations';
-import { RELATION_LABELS } from '@/lib/constants/labels';
-import { fontRounded } from '@/styles/fonts';
+import skyImage from '../../ui-demo/pre_sky.jpg';
+import deskImage from '../../ui-demo/desk.png';
 
-/* ---------------------------
-   共通UI：セクション見出し
----------------------------- */
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-6 mb-2">
-      <h2 className="text-xl font-semibold tracking-wide">{children}</h2>
-      <div className="h-px w-full bg-border mt-2" />
-    </div>
-  );
-}
+const notoSans = Noto_Sans_JP({
+  weight: ['300', '400', '500', '600'],
+  subsets: ['latin'],
+  display: 'swap',
+});
 
-type NotificationListItem = NotificationRecord;
+const WEATHER_LABELS: Record<WeatherKind, string> = {
+  sunny: '晴れ',
+  cloudy: 'くもり',
+  rain: '雨',
+  storm: '雷雨',
+};
 
-function getPlayerDisplayName(email?: string | null) {
-  if (!email) return 'プレイヤー';
-  const trimmed = email.trim();
-  if (!trimmed) return 'プレイヤー';
-  return trimmed.split('@')[0] || 'プレイヤー';
-}
+type ResidentStatusItem = {
+  id: string;
+  name: string;
+  tone: string;
+};
+
+const RESIDENT_STATUS_SAMPLE: ResidentStatusItem[] = [
+  { id: 'A', name: 'ハル', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]' },
+  { id: 'B', name: 'ミオ', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]' },
+  { id: 'C', name: 'コウ', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]' },
+  { id: 'D', name: 'レイ', tone: 'bg-[#3a7bd5] shadow-[0_0_8px_rgba(58,123,213,0.6)]' },
+];
 
 function filterRecentNotifications(notifications: NotificationRecord[]) {
   const now = Date.now();
@@ -77,327 +78,343 @@ function getNotificationTitle(n: NotificationRecord, residentNameMap: Record<str
   return 'お知らせ';
 }
 
-function WeatherIcon({ kind }: { kind: WeatherKind }) {
-  const map: Record<WeatherKind, React.ComponentType<{ className?: string }>> = {
-    sunny: Sun,
-    cloudy: Cloud,
-    rain: CloudRain,
-    storm: CloudLightning,
-  };
-  const Icon = map[kind] ?? Cloud;
-  return (
-    <div className="flex items-center justify-center">
-      <Icon className="h-8 w-8 text-[color:var(--ink)]" aria-hidden />
-      <span className="sr-only">{kind}</span>
-    </div>
-  );
+function getInitialFromTitle(title: string) {
+  if (!title) return '・';
+  return title.trim().slice(0, 1);
 }
 
-function BoardCard({
-  title,
-  meta,
-  children,
-  className,
-}: {
-  title: string;
-  meta?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`relative rounded-[22px] border border-[color:var(--paper-border)] bg-[color:var(--paper-bg)] shadow-[var(--shadow-paper)] ${className ?? ''}`}
-    >
-      <div className="flex items-center justify-between px-4 pb-2 pt-3">
-        <span className="inline-flex items-center rounded-full border border-[color:var(--label-border)] bg-[color:var(--label-bg)] px-2.5 py-1 text-[10px] font-semibold tracking-[0.25em] text-[color:var(--ink)]">
-          {title}
-        </span>
-        {meta ? <div className="text-[11px] text-[color:var(--ink-muted)]">{meta}</div> : null}
-      </div>
-      <div className="px-4 pb-4">{children}</div>
-    </div>
-  );
-}
-
-function NotificationList({
-  items,
-  isLoading,
-  emptyText,
-  onOpen,
-  residentNameMap,
-}: {
-  items: NotificationListItem[];
-  isLoading: boolean;
-  emptyText: string;
-  onOpen: (item: NotificationListItem) => void;
-  residentNameMap: Record<string, string>;
-}) {
-  return (
-    <ul className="divide-y divide-[color:var(--paper-border)]">
-      {isLoading && (
-        <li className="py-2 text-sm text-[color:var(--ink-muted)]">読み込み中…</li>
-      )}
-      {!isLoading && items.length === 0 && (
-        <li className="py-2 text-sm text-[color:var(--ink-muted)]">{emptyText}</li>
-      )}
-      {items.map((n) => {
-        const title = getNotificationTitle(n, residentNameMap);
-        const snippet =
-          n.snippet ? replaceResidentIds(n.snippet, residentNameMap) : null;
-        const time = new Date(n.occurredAt).toLocaleString();
-        return (
-          <li key={n.id} className="py-2">
-            <button
-              onClick={() => onOpen(n)}
-              className="w-full flex items-start gap-3 text-left"
-              aria-label={snippet ?? title}
-            >
-              <span
-                className={`mt-1 h-2 w-2 rounded-full ${n.status === 'unread' ? 'bg-[color:var(--ink)]' : 'bg-[color:var(--ink-soft)]'
-                  }`}
-              />
-              <span className="flex-1 min-w-0">
-                <div className="text-sm">{title}</div>
-                {snippet && (
-                  <div className="text-xs text-[color:var(--ink-muted)] line-clamp-1">
-                    {snippet}
-                  </div>
-                )}
-              </span>
-              <span className="text-[11px] text-[color:var(--ink-muted)] whitespace-nowrap">
-                {time}
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-/* ----------------------------
-   ページ本体
------------------------------ */
 export default function HomePage() {
   const router = useRouter();
-  const { user } = useAuth();
   const residentNameMap = useResidentNameMap();
   const { data: weatherState } = useWorldWeather();
   const { data: notifications = [], isLoading: isLoadingNotifications } = useNotifications();
   const markRead = useMarkNotificationRead();
-  const { data: relations = [], isLoading: isLoadingRelations } = useRelations();
+  const [now, setNow] = useState(() => new Date());
 
-  const playerName = useMemo(() => getPlayerDisplayName(user?.email), [user?.email]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const recentNotifications = useMemo(
     () => filterRecentNotifications(notifications),
-    [notifications],
+    [notifications]
   );
 
   const conversationNotifications = useMemo(
     () => recentNotifications.filter((n) => n.type === 'conversation'),
-    [recentNotifications],
+    [recentNotifications]
   );
 
   const consultNotifications = useMemo(
     () => recentNotifications.filter((n) => n.type === 'consult'),
-    [recentNotifications],
+    [recentNotifications]
   );
 
   const unreadConversation = conversationNotifications.filter((n) => n.status === 'unread').length;
   const unreadConsult = consultNotifications.filter((n) => n.status === 'unread').length;
 
-  const featuredRelations = useMemo(() => {
-    return relations
-      .filter((r) => r.type && r.type !== 'none')
-      .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))
-      .slice(0, 3);
-  }, [relations]);
+  const weatherLabel = weatherState ? WEATHER_LABELS[weatherState.current.kind as WeatherKind] : '---';
+  const weatherComment = useMemo(() => {
+    if (!weatherState?.currentComment) return '今は静かなようです。';
+    const name = weatherState.currentComment.residentId
+      ? residentNameMap[weatherState.currentComment.residentId] ?? '住人'
+      : null;
+    return name ? `${name}「${weatherState.currentComment.text}」` : weatherState.currentComment.text;
+  }, [weatherState, residentNameMap]);
 
-  const openNotification = useCallback(async (n: NotificationRecord) => {
-    try {
-      if (n.status !== 'read') {
-        markRead.mutate(n.id);
-      }
+  const conversationCards = useMemo(() => {
+    const items = conversationNotifications.slice(0, 4);
+    const cards: NotificationRecord[][] = [];
+    for (let i = 0; i < items.length; i += 2) {
+      cards.push(items.slice(i, i + 2));
+    }
+    return cards;
+  }, [conversationNotifications]);
 
-      const kind = n.type ?? (n as any)?.payload?.kind ?? 'conversation';
+  const consultCards = useMemo(() => consultNotifications.slice(0, 2), [consultNotifications]);
 
-      if (kind === 'consult') {
-        const consultId =
-          (n as any).linkedConsultId ??
-          (n as any)?.payload?.consultId ??
-          (n as any)?.consultId;
+  const openNotification = useCallback(
+    async (n: NotificationRecord) => {
+      try {
+        if (n.status !== 'read') {
+          markRead.mutate(n.id);
+        }
 
-        if (consultId) {
+        const kind = n.type ?? (n as any)?.payload?.kind ?? 'conversation';
+
+        if (kind === 'consult') {
+          const consultId =
+            (n as any).linkedConsultId ?? (n as any)?.payload?.consultId ?? (n as any)?.consultId;
+
+          if (consultId) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('consult', String(consultId));
+            url.searchParams.delete('log');
+            router.push(url.pathname + '?' + url.searchParams.toString(), { scroll: false });
+          }
+          return;
+        }
+
+        const eventId =
+          n.linkedEventId ?? (n as any)?.payload?.eventId ?? (n as any)?.eventId;
+
+        if (eventId) {
+          const ev = await fetchEventById(eventId);
+          if (!ev) return;
+
           const url = new URL(window.location.href);
-          url.searchParams.set('consult', String(consultId));
-          url.searchParams.delete('log');
+          url.searchParams.set('log', ev.id);
+          url.searchParams.delete('consult');
           router.push(url.pathname + '?' + url.searchParams.toString(), { scroll: false });
         }
-        return;
+      } catch (e) {
+        // noop
       }
+    },
+    [markRead, router]
+  );
 
-      const eventId =
-        n.linkedEventId ??
-        (n as any)?.payload?.eventId ??
-        (n as any)?.eventId;
+  const glassPanelClass =
+    'relative rounded-2xl border border-white/60 bg-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-8px_20px_rgba(4,18,30,0.14),0_8px_16px_rgba(4,18,30,0.18),0_26px_42px_rgba(4,18,30,0.22)] backdrop-blur-[18px] saturate-125';
 
-      if (eventId) {
-        const ev = await fetchEventById(eventId);
-        if (!ev) return;
-
-        const url = new URL(window.location.href);
-        url.searchParams.set('log', ev.id);
-        url.searchParams.delete('consult');
-        router.push(url.pathname + '?' + url.searchParams.toString(), { scroll: false });
-      }
-    } catch (e) {
-      // noop
-    }
-  }, [markRead, router]);
-
+  const glassOverlay =
+    'pointer-events-none absolute inset-0 rounded-2xl bg-[linear-gradient(115deg,rgba(255,255,255,0.6),rgba(255,255,255,0.22)_32%,rgba(255,255,255,0.05)_60%,rgba(255,255,255,0.18))] opacity-55';
+  const glassDots =
+    'pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(rgba(255,255,255,0.2)_0.6px,transparent_0.6px)] bg-[length:6px_6px] opacity-20 mix-blend-soft-light';
 
   return (
-    <div className="min-h-screen bg-[color:var(--app-bg)] text-[color:var(--ink)] bg-[radial-gradient(1200px_600px_at_50%_10%,rgba(255,255,255,0.6),transparent_70%)]">
-      <div className="flex min-h-[calc(100vh-4rem)] flex-col gap-6 p-4 sm:p-6">
-        <Card className="relative flex flex-1 flex-col rounded-[34px] border-2 border-[color:var(--board-border)] bg-[color:var(--board-bg)] shadow-[var(--board-shadow)] before:pointer-events-none before:absolute before:inset-0 before:rounded-[34px] before:bg-[radial-gradient(120%_120%_at_50%_-10%,rgba(255,255,255,0.55),transparent_60%)] before:opacity-70 after:pointer-events-none after:absolute after:inset-0 after:rounded-[34px] after:bg-[radial-gradient(rgba(30,35,43,0.08)_1px,transparent_1px)] after:bg-[length:6px_6px] after:opacity-25">
-          <CardContent className={`relative z-10 flex flex-1 flex-col px-5 py-6 ${fontRounded.className}`}>
-            <div className="mb-4 flex items-center justify-between">
-              <div className="text-[11px] font-semibold tracking-[0.4em] text-[color:var(--ink-muted)]">
-                掲示板
-              </div>
+    <div className={`relative min-h-screen overflow-hidden bg-[#a5b7c8] text-[#0a1b2b] ${notoSans.className}`}>
+      <div
+        className="absolute inset-0"
+        style={{ backgroundImage: `url(${skyImage.src})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+        aria-hidden="true"
+      />
+      <div
+        className="absolute inset-x-0 bottom-0 h-[24%]"
+        style={{ backgroundImage: `url(${deskImage.src})`, backgroundSize: 'cover', backgroundPosition: 'center bottom' }}
+        aria-hidden="true"
+      />
+      <div
+        className="absolute inset-x-0 bottom-[24%] h-[6%] bg-[linear-gradient(to_top,rgba(0,0,0,0.26),rgba(0,0,0,0))] opacity-40"
+        aria-hidden="true"
+      />
+
+      <div className="pointer-events-none absolute left-0 top-0 bottom-[24%] w-12 bg-[linear-gradient(180deg,rgba(13,33,54,0.32),rgba(13,33,54,0.22)),linear-gradient(90deg,rgba(255,255,255,0.5),rgba(255,255,255,0))] shadow-[inset_0_0_0_2px_rgba(13,33,54,0.5),inset_0_0_18px_rgba(8,20,34,0.35)]" />
+      <div className="pointer-events-none absolute right-0 top-0 bottom-[24%] w-12 bg-[linear-gradient(180deg,rgba(13,33,54,0.32),rgba(13,33,54,0.22)),linear-gradient(90deg,rgba(255,255,255,0.5),rgba(255,255,255,0))] shadow-[inset_0_0_0_2px_rgba(13,33,54,0.5),inset_0_0_18px_rgba(8,20,34,0.35)] scale-x-[-1]" />
+
+      <div className="relative z-10 flex min-h-screen flex-col gap-[clamp(24px,2.5vw,56px)] px-[clamp(32px,7.5vw,144px)] py-[clamp(16px,1.25vw,32px)] pb-[clamp(18px,1.5vw,36px)]">
+        <header className="flex justify-center">
+          <div className={`${glassPanelClass} flex w-[clamp(600px,52vw,1000px)] items-center gap-4 px-7 py-3`}>
+            <div className={glassOverlay} aria-hidden="true" />
+            <div className={glassDots} aria-hidden="true" />
+            <div className="relative z-10 flex items-center gap-4">
+              <span className="text-lg font-medium">天気：{weatherLabel}</span>
+              <span className="text-lg">{weatherComment}</span>
             </div>
-            <div className="grid flex-1 gap-4 lg:grid-cols-2">
-              <BoardCard
-                title="会話"
-                meta={`未読 ${unreadConversation} 件`}
-                className="lg:min-h-[320px]"
-              >
-                <NotificationList
-                  items={conversationNotifications.slice(0, 4)}
-                  isLoading={isLoadingNotifications}
-                  emptyText="誰も話していないようです。"
-                  onOpen={openNotification}
-                  residentNameMap={residentNameMap}
-                />
-              </BoardCard>
+          </div>
+        </header>
 
-              <BoardCard
-                title="受信箱"
-                meta={`未読 ${unreadConsult} 件`}
-                className="lg:min-h-[320px]"
-              >
-                <NotificationList
-                  items={consultNotifications.slice(0, 4)}
-                  isLoading={isLoadingNotifications}
-                  emptyText="相談は届いていません。"
-                  onOpen={openNotification}
-                  residentNameMap={residentNameMap}
-                />
-              </BoardCard>
+        <main
+          className="grid flex-1 items-start gap-[clamp(16px,1.25vw,32px)] max-[1240px]:grid-cols-1"
+          style={{
+            gridTemplateColumns:
+              'minmax(0,clamp(400px,26vw,540px)) minmax(0,clamp(350px,23.5vw,470px)) minmax(0,clamp(400px,23.5vw,500px))',
+            width:
+              'min(100%, calc(clamp(400px,26vw,540px) + clamp(350px,23.5vw,470px) + clamp(400px,23.5vw,500px) + clamp(16px,1.25vw,32px) * 2))',
+            marginInline: 'auto',
+          }}
+        >
+          <section className={`${glassPanelClass} px-5 py-4`}>
+            <div className={glassOverlay} aria-hidden="true" />
+            <div className={glassDots} aria-hidden="true" />
+            <div className="relative z-10">
+              <div className="mb-4 flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-[rgba(0,120,160,0.15)] text-base text-[#0b5e7a]">
+                  🗨️
+                </span>
+                <span className="text-xl font-medium">会話</span>
+                <span className="ml-auto text-sm text-black/60">未読 {unreadConversation} 件</span>
+              </div>
 
-              <BoardCard title="新聞">
-                {weatherState ? (
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm text-[color:var(--ink-muted)]">現在の天気</div>
-                      <WeatherIcon kind={weatherState.current.kind as WeatherKind} />
-                    </div>
-                    <div className="text-xs text-[color:var(--ink-muted)]">
-                      最終更新: {new Date(weatherState.current.lastChangedAt).toLocaleString()}
-                    </div>
-                    <div className="h-px bg-[color:var(--paper-border)]" />
-                    <div className="text-sm">
-                      {weatherState.currentComment ? (
-                        <span>
-                          {weatherState.currentComment.residentId
-                            ? `${residentNameMap[weatherState.currentComment.residentId] ?? '住人'}「${weatherState.currentComment.text}」`
-                            : weatherState.currentComment.text}
-                        </span>
-                      ) : (
-                        <span className="text-[color:var(--ink-muted)]">コメントはまだありません。</span>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-sm text-[color:var(--ink-muted)]">天気情報を読み込み中…</div>
-                )}
-              </BoardCard>
+              {isLoadingNotifications && (
+                <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
+                  読み込み中…
+                </div>
+              )}
 
-              <BoardCard title="注目の関係">
-                {isLoadingRelations ? (
-                  <div className="text-sm text-[color:var(--ink-muted)]">関係を読み込み中…</div>
-                ) : featuredRelations.length === 0 ? (
-                  <div className="text-sm text-[color:var(--ink-muted)]">注目の関係は特にありません。</div>
-                ) : (
-                  <div className="space-y-3">
-                    {featuredRelations.map((rel) => {
-                      const nameA = residentNameMap[rel.a_id] ?? '住人A';
-                      const nameB = residentNameMap[rel.b_id] ?? '住人B';
-                      const relationLabel = RELATION_LABELS[rel.type] ?? 'なし';
+              {!isLoadingNotifications && conversationCards.length === 0 && (
+                <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
+                  誰も話していないようです。
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {conversationCards.map((card, index) => (
+                  <div
+                    key={`conversation-card-${index}`}
+                    className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]"
+                  >
+                    {card.map((n, rowIndex) => {
+                      const title = getNotificationTitle(n, residentNameMap);
+                      const initial = getInitialFromTitle(title);
+                      const message =
+                        n.snippet ? replaceResidentIds(n.snippet, residentNameMap) : title;
+                      const time = new Date(n.occurredAt).toLocaleTimeString();
                       return (
-                        <div key={rel.id} className="flex items-center justify-between">
-                          <div>
-                            <div className="font-medium">{nameA} × {nameB}</div>
-                            <div className="text-xs text-[color:var(--ink-muted)]">{relationLabel}</div>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 rounded-full border-[color:var(--paper-border)] bg-[color:var(--label-bg)] text-[11px] text-[color:var(--ink)] hover:bg-[color:var(--paper-bg)]"
-                            asChild
-                          >
-                            <Link href={`/office/relations/${rel.id}`}>覗く</Link>
-                          </Button>
+                        <div
+                          key={n.id}
+                          className="grid grid-cols-[26px_1fr_auto] items-center gap-2 py-1 text-base"
+                        >
+                          <span className="font-semibold text-[#15324b]">{initial}</span>
+                          <span>{message}</span>
+                          {rowIndex === 0 ? (
+                            <span className="font-medium text-black/55">{time}</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openNotification(n)}
+                              className="text-sm text-black/60 transition hover:translate-x-0.5"
+                            >
+                              見てみる &gt;
+                            </button>
+                          )}
                         </div>
                       );
                     })}
                   </div>
-                )}
-              </BoardCard>
+                ))}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </section>
 
-        <div className="grid items-stretch gap-4 lg:grid-cols-[1.1fr_1fr] lg:h-[132px]">
-          <Button
-            asChild
-            variant="outline"
-            className="relative h-24 overflow-hidden rounded-[28px] border-2 border-[color:var(--plaque-border)] bg-[color:var(--plaque-bg)] text-lg text-[color:var(--ink)] shadow-[var(--plaque-shadow)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)] active:translate-y-0 active:shadow-[var(--plaque-shadow-pressed)] lg:h-full"
+          <section className={`${glassPanelClass} px-5 py-4`}>
+            <div className={glassOverlay} aria-hidden="true" />
+            <div className={glassDots} aria-hidden="true" />
+            <div className="relative z-10">
+              <div className="mb-4 flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-[rgba(0,120,160,0.15)] text-base text-[#0b5e7a]">
+                  ✉
+                </span>
+                <span className="text-xl font-medium">相談</span>
+                <span className="ml-auto text-sm text-black/60">未読 {unreadConsult} 件</span>
+              </div>
+
+              {isLoadingNotifications && (
+                <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
+                  読み込み中…
+                </div>
+              )}
+
+              {!isLoadingNotifications && consultCards.length === 0 && (
+                <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
+                  相談が届いていません。
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {consultCards.map((n) => {
+                  const title = getNotificationTitle(n, residentNameMap);
+                  const name = title.replace('から相談が届きました', '');
+                  const time = new Date(n.occurredAt).toLocaleTimeString();
+                  return (
+                    <div
+                      key={n.id}
+                      className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]"
+                    >
+                      <div className="grid grid-cols-[1fr_auto] grid-rows-[auto_auto] gap-x-4 text-base">
+                        <div className="row-span-2 flex flex-col pl-[2ch] leading-relaxed">
+                          <span className="font-semibold">{name}</span>
+                          <span>相談が届いています</span>
+                        </div>
+                        <span className="justify-self-end text-base font-medium text-black/55">
+                          {time}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => openNotification(n)}
+                          className="justify-self-end text-sm text-black/60 transition hover:translate-x-0.5"
+                        >
+                          回答する &gt;
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          <section className={`${glassPanelClass} px-5 py-4`}>
+            <div className={glassOverlay} aria-hidden="true" />
+            <div className={glassDots} aria-hidden="true" />
+            <div className="relative z-10">
+              <div className="mb-4 flex items-center gap-3">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-[rgba(0,120,160,0.15)] text-base text-[#0b5e7a]">
+                  🧑‍🤝‍🧑
+                </span>
+                <span className="text-xl font-medium">みんなの様子</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    className="rounded-[10px] border border-black/10 bg-white/55 px-3 py-1 text-[13px] font-medium transition hover:-translate-y-0.5 hover:bg-white/75"
+                    type="button"
+                  >
+                    並び替え
+                  </button>
+                  <input
+                    className="w-20 rounded-[10px] border border-black/10 bg-white/60 px-3 py-1 text-[13px]"
+                    placeholder="検索"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                {RESIDENT_STATUS_SAMPLE.map((item) => (
+                  <div
+                    key={item.id}
+                    className="grid grid-cols-[20px_1fr_auto] items-center gap-2 rounded-xl border border-white/55 bg-white/25 px-3 py-2"
+                  >
+                    <span className={`h-3 w-3 rounded-full ${item.tone}`} />
+                    <span className="font-medium">{item.name}</span>
+                    <button
+                      className="rounded-[10px] border border-black/10 bg-white/60 px-3 py-1 text-[12px] font-medium transition hover:-translate-y-0.5 hover:bg-white/75"
+                      type="button"
+                    >
+                      覗く
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <footer className="mt-auto grid grid-cols-[1fr_auto_1fr] items-end gap-4 translate-y-[clamp(-64px,-2.5vw,-32px)] max-[1240px]:grid-cols-1 max-[1240px]:justify-items-center">
+          <Link
+            href="/reports"
+            className="flex w-[6em] items-center justify-center justify-self-start rounded-[10px] border border-[rgba(74,45,18,0.6)] bg-[linear-gradient(180deg,rgba(205,166,120,0.58),rgba(171,120,67,0.6)),repeating-linear-gradient(90deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-[0.72em] py-2 text-[28px] font-medium text-[#3a240f] shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(74,45,18,0.16),0_8px_16px_rgba(40,22,6,0.18)] transition hover:-translate-y-0.5"
+            style={{ transform: 'translateX(80%) rotate(-20deg)' }}
           >
-            <Link href="/reports">日報</Link>
-          </Button>
+            ← 日報
+          </Link>
 
-          <div className="flex h-full flex-col gap-3">
-            <Button
-              asChild
-              variant="outline"
-              className="relative h-16 w-full justify-between overflow-hidden rounded-[22px] border-2 border-[color:var(--plaque-border)] bg-[color:var(--plaque-bg)] text-base text-[color:var(--ink)] shadow-[var(--plaque-shadow)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)] active:translate-y-0 active:shadow-[var(--plaque-shadow-pressed)]"
-            >
-              <Link href="/home/residents">
-                みんなの様子
-                <span className="text-sm">→</span>
-              </Link>
-            </Button>
-
-            <div className="grid gap-3 sm:grid-cols-[1.2fr_1fr] lg:h-14">
-              <Button
-                asChild
-                variant="outline"
-                className="relative h-14 overflow-hidden rounded-[20px] border-2 border-[color:var(--plaque-border)] bg-[color:var(--plaque-bg)] text-base text-[color:var(--ink)] shadow-[var(--plaque-shadow)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)] active:translate-y-0 active:shadow-[var(--plaque-shadow-pressed)]"
-              >
-                <Link href="/office">管理室</Link>
-              </Button>
-
-              <Link
-                href="/player"
-                className="relative flex h-14 items-center justify-center overflow-hidden rounded-[20px] border-2 border-[color:var(--plaque-border)] bg-[color:var(--plaque-bg)] text-sm font-semibold text-[color:var(--ink)] shadow-[var(--plaque-shadow)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-soft)] active:translate-y-0 active:shadow-[var(--plaque-shadow-pressed)]"
-              >
-                {playerName}
-              </Link>
+          <div className={`${glassPanelClass} min-w-[220px] px-9 py-5 text-center text-[#243749]`}>
+            <div className={glassOverlay} aria-hidden="true" />
+            <div className={glassDots} aria-hidden="true" />
+            <div className="relative z-10">
+              <div className="text-xl tracking-[0.5px]">{now.toLocaleDateString()}</div>
+              <div className="text-[32px] font-semibold">{now.toLocaleTimeString()}</div>
             </div>
           </div>
-        </div>
+
+          <Link
+            href="/office"
+            className="flex w-[6em] items-center justify-center justify-self-end rounded-[10px] border border-[rgba(74,45,18,0.6)] bg-[linear-gradient(180deg,rgba(205,166,120,0.58),rgba(171,120,67,0.6)),repeating-linear-gradient(90deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-[0.72em] py-2 text-[28px] font-medium text-[#3a240f] shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(74,45,18,0.16),0_8px_16px_rgba(40,22,6,0.18)] transition hover:-translate-y-0.5"
+            style={{ transform: 'translateX(-80%) rotate(20deg)' }}
+          >
+            管理室 →
+          </Link>
+        </footer>
       </div>
     </div>
   );
