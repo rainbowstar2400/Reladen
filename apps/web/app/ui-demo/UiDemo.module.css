@@ -243,6 +243,8 @@
   padding: 6px 12px;
   font-size: 13px;
   font-weight: 500;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
 
 .searchInput {
@@ -261,6 +263,13 @@
   border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow: inset 0 0 24px rgba(255, 255, 255, 0.35);
   margin-bottom: 14px;
+}
+
+.messageCard:focus-within {
+  box-shadow:
+    inset 0 0 24px rgba(255, 255, 255, 0.35),
+    0 0 0 2px rgba(15, 90, 130, 0.35),
+    0 10px 18px rgba(4, 18, 30, 0.18);
 }
 
 .consultationPanel {
@@ -328,6 +337,7 @@
   border: none;
   padding: 0;
   cursor: pointer;
+  transition: color 120ms ease, transform 120ms ease;
 }
 
 .consultationName {
@@ -352,6 +362,7 @@
   border: none;
   padding: 0;
   cursor: pointer;
+  transition: color 120ms ease, transform 120ms ease;
 }
 
 .statusList {
@@ -400,6 +411,8 @@
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
 
 .footer {
@@ -437,16 +450,22 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
     inset 0 -2px 4px rgba(74, 45, 18, 0.16),
     0 8px 16px rgba(40, 22, 6, 0.18);
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease;
 }
 
 .navButtonLeft {
   justify-self: start;
   transform: translateX(80%) rotate(-20deg);
+  --nav-shift: 80%;
+  --nav-rotate: -20deg;
 }
 
 .navButtonRight {
   justify-self: end;
   transform: translateX(-80%) rotate(20deg);
+  --nav-shift: -80%;
+  --nav-rotate: 20deg;
 }
 
 .timeCard {
@@ -468,6 +487,49 @@
 .clock {
   font-size: 32px;
   font-weight: 600;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sortButton:hover,
+  .peekButton:hover {
+    background: rgba(255, 255, 255, 0.75);
+    box-shadow: 0 6px 12px rgba(4, 18, 30, 0.16);
+    transform: translateY(-1px);
+  }
+
+  .navButton:hover {
+    transform:
+      translateX(var(--nav-shift, 0))
+      rotate(var(--nav-rotate, 0))
+      translateY(-2px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      inset 0 -2px 4px rgba(74, 45, 18, 0.2),
+      0 12px 18px rgba(40, 22, 6, 0.22);
+  }
+
+  .link:hover,
+  .consultationAction:hover {
+    color: rgba(0, 0, 0, 0.85);
+    transform: translateX(2px);
+  }
+}
+
+.sortButton:focus-visible,
+.peekButton:focus-visible,
+.navButton:focus-visible,
+.link:focus-visible,
+.consultationAction:focus-visible {
+  outline: 2px solid rgba(15, 90, 130, 0.45);
+  outline-offset: 2px;
+}
+
+.sortButton:active,
+.peekButton:active,
+.navButton:active,
+.link:active,
+.consultationAction:active {
+  transform: translateY(1px);
 }
 
 @media (max-width: 1240px) {
