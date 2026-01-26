@@ -46,7 +46,9 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
               <div className={styles.messageRow}>
                 <span className={styles.initial}>B</span>
                 <span>「うん、散歩日和。」</span>
-                <span className={styles.link}>見てみる &gt;</span>
+                <button className={styles.link} type="button">
+                  見てみる &gt;
+                </button>
               </div>
             </div>
 
@@ -59,7 +61,9 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
               <div className={styles.messageRow}>
                 <span className={styles.initial}>D</span>
                 <span>「へえ、そうなんだ」</span>
-                <span className={styles.link}>見てみる &gt;</span>
+                <button className={styles.link} type="button">
+                  見てみる &gt;
+                </button>
               </div>
             </div>
           </section>
@@ -82,7 +86,9 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
                   </span>
                   <span>　相談が届いています</span>
                 </span>
-                <span className={styles.consultationAction}>回答する &gt;</span>
+                <button className={styles.consultationAction} type="button">
+                  回答する &gt;
+                </button>
               </div>
             </div>
 
@@ -96,7 +102,9 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
                   </span>
                   <span>　相談が届いています</span>
                 </span>
-                <span className={styles.consultationAction}>回答する &gt;</span>
+                <button className={styles.consultationAction} type="button">
+                  回答する &gt;
+                </button>
               </div>
             </div>
           </section>
