@@ -9,6 +9,8 @@ import type { NotificationRecord } from '@repo/shared/types/conversation';
 import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 import { useWorldWeather } from '@/lib/data/use-world-weather';
 import type { WeatherKind } from '@repo/shared/types';
+import { GlassPanel } from '@/components/ui-demo/glass-panel';
+import { PanelHeader } from '@/components/ui-demo/panel-header';
 import skyImage from '../../ui-demo/pre_sky.jpg';
 import deskImage from '../../ui-demo/desk.png';
 
@@ -175,14 +177,6 @@ export default function HomePage() {
     [markRead, router]
   );
 
-  const glassPanelClass =
-    'relative rounded-2xl border border-white/60 bg-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-8px_20px_rgba(4,18,30,0.14),0_8px_16px_rgba(4,18,30,0.18),0_26px_42px_rgba(4,18,30,0.22)] backdrop-blur-[18px] saturate-125';
-
-  const glassOverlay =
-    'pointer-events-none absolute inset-0 rounded-2xl bg-[linear-gradient(115deg,rgba(255,255,255,0.6),rgba(255,255,255,0.22)_32%,rgba(255,255,255,0.05)_60%,rgba(255,255,255,0.18))] opacity-55';
-  const glassDots =
-    'pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(rgba(255,255,255,0.2)_0.6px,transparent_0.6px)] bg-[length:6px_6px] opacity-20 mix-blend-soft-light';
-
   return (
     <div className={`relative min-h-screen overflow-hidden bg-[#a5b7c8] text-[#0a1b2b] ${notoSans.className}`}>
       <div
@@ -205,14 +199,15 @@ export default function HomePage() {
 
       <div className="relative z-10 flex min-h-screen flex-col gap-[clamp(24px,2.5vw,56px)] px-[clamp(32px,7.5vw,144px)] py-[clamp(16px,1.25vw,32px)] pb-[clamp(18px,1.5vw,36px)]">
         <header className="flex justify-center">
-          <div className={`${glassPanelClass} flex w-[clamp(600px,52vw,1000px)] items-center gap-4 px-7 py-3`}>
-            <div className={glassOverlay} aria-hidden="true" />
-            <div className={glassDots} aria-hidden="true" />
-            <div className="relative z-10 flex items-center gap-4">
+          <GlassPanel
+            className="w-[clamp(600px,52vw,1000px)] px-7 py-3"
+            contentClassName="flex items-center gap-4"
+          >
+            <div className="flex items-center gap-4">
               <span className="text-lg font-medium">天気：{weatherLabel}</span>
               <span className="text-lg">{weatherComment}</span>
             </div>
-          </div>
+          </GlassPanel>
         </header>
 
         <main
@@ -225,136 +220,120 @@ export default function HomePage() {
             marginInline: 'auto',
           }}
         >
-          <section className={`${glassPanelClass} px-5 py-4`}>
-            <div className={glassOverlay} aria-hidden="true" />
-            <div className={glassDots} aria-hidden="true" />
-            <div className="relative z-10">
-              <div className="mb-4 flex items-center gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-[rgba(0,120,160,0.15)] text-base text-[#0b5e7a]">
-                  🗨️
-                </span>
-                <span className="text-xl font-medium">会話</span>
-                <span className="ml-auto text-sm text-black/60">未読 {unreadConversation} 件</span>
+          <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
+            <PanelHeader
+              icon="🗨️"
+              title="会話"
+              right={<span className="text-sm text-black/60">未読 {unreadConversation} 件</span>}
+            />
+
+            {isLoadingNotifications && (
+              <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
+                読み込み中…
               </div>
+            )}
 
-              {isLoadingNotifications && (
-                <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
-                  読み込み中…
+            {!isLoadingNotifications && conversationCards.length === 0 && (
+              <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
+                誰も話していないようです。
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {conversationCards.map((card, index) => (
+                <div
+                  key={`conversation-card-${index}`}
+                  className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]"
+                >
+                  {card.map((n, rowIndex) => {
+                    const title = getNotificationTitle(n, residentNameMap);
+                    const initial = getInitialFromTitle(title);
+                    const message =
+                      n.snippet ? replaceResidentIds(n.snippet, residentNameMap) : title;
+                    const time = new Date(n.occurredAt).toLocaleTimeString();
+                    return (
+                      <div
+                        key={n.id}
+                        className="grid grid-cols-[26px_1fr_auto] items-center gap-2 py-1 text-base"
+                      >
+                        <span className="font-semibold text-[#15324b]">{initial}</span>
+                        <span>{message}</span>
+                        {rowIndex === 0 ? (
+                          <span className="font-medium text-black/55">{time}</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openNotification(n)}
+                            className="text-sm text-black/60 transition hover:translate-x-0.5"
+                          >
+                            見てみる &gt;
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              ))}
+            </div>
+          </GlassPanel>
 
-              {!isLoadingNotifications && conversationCards.length === 0 && (
-                <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
-                  誰も話していないようです。
-                </div>
-              )}
+          <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
+            <PanelHeader
+              icon="✉"
+              title="相談"
+              right={<span className="text-sm text-black/60">未読 {unreadConsult} 件</span>}
+            />
 
-              <div className="space-y-4">
-                {conversationCards.map((card, index) => (
+            {isLoadingNotifications && (
+              <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
+                読み込み中…
+              </div>
+            )}
+
+            {!isLoadingNotifications && consultCards.length === 0 && (
+              <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
+                相談が届いていません。
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {consultCards.map((n) => {
+                const title = getNotificationTitle(n, residentNameMap);
+                const name = title.replace('から相談が届きました', '');
+                const time = new Date(n.occurredAt).toLocaleTimeString();
+                return (
                   <div
-                    key={`conversation-card-${index}`}
+                    key={n.id}
                     className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]"
                   >
-                    {card.map((n, rowIndex) => {
-                      const title = getNotificationTitle(n, residentNameMap);
-                      const initial = getInitialFromTitle(title);
-                      const message =
-                        n.snippet ? replaceResidentIds(n.snippet, residentNameMap) : title;
-                      const time = new Date(n.occurredAt).toLocaleTimeString();
-                      return (
-                        <div
-                          key={n.id}
-                          className="grid grid-cols-[26px_1fr_auto] items-center gap-2 py-1 text-base"
-                        >
-                          <span className="font-semibold text-[#15324b]">{initial}</span>
-                          <span>{message}</span>
-                          {rowIndex === 0 ? (
-                            <span className="font-medium text-black/55">{time}</span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => openNotification(n)}
-                              className="text-sm text-black/60 transition hover:translate-x-0.5"
-                            >
-                              見てみる &gt;
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className={`${glassPanelClass} px-5 py-4`}>
-            <div className={glassOverlay} aria-hidden="true" />
-            <div className={glassDots} aria-hidden="true" />
-            <div className="relative z-10">
-              <div className="mb-4 flex items-center gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-[rgba(0,120,160,0.15)] text-base text-[#0b5e7a]">
-                  ✉
-                </span>
-                <span className="text-xl font-medium">相談</span>
-                <span className="ml-auto text-sm text-black/60">未読 {unreadConsult} 件</span>
-              </div>
-
-              {isLoadingNotifications && (
-                <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
-                  読み込み中…
-                </div>
-              )}
-
-              {!isLoadingNotifications && consultCards.length === 0 && (
-                <div className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 text-base text-black/55 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]">
-                  相談が届いていません。
-                </div>
-              )}
-
-              <div className="space-y-4">
-                {consultCards.map((n) => {
-                  const title = getNotificationTitle(n, residentNameMap);
-                  const name = title.replace('から相談が届きました', '');
-                  const time = new Date(n.occurredAt).toLocaleTimeString();
-                  return (
-                    <div
-                      key={n.id}
-                      className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]"
-                    >
-                      <div className="grid grid-cols-[1fr_auto] grid-rows-[auto_auto] gap-x-4 text-base">
-                        <div className="row-span-2 flex flex-col pl-[2ch] leading-relaxed">
-                          <span className="font-semibold">{name}</span>
-                          <span>相談が届いています</span>
-                        </div>
-                        <span className="justify-self-end text-base font-medium text-black/55">
-                          {time}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => openNotification(n)}
-                          className="justify-self-end text-sm text-black/60 transition hover:translate-x-0.5"
-                        >
-                          回答する &gt;
-                        </button>
+                    <div className="grid grid-cols-[1fr_auto] grid-rows-[auto_auto] gap-x-4 text-base">
+                      <div className="row-span-2 flex flex-col pl-[2ch] leading-relaxed">
+                        <span className="font-semibold">{name}</span>
+                        <span>相談が届いています</span>
                       </div>
+                      <span className="justify-self-end text-base font-medium text-black/55">
+                        {time}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openNotification(n)}
+                        className="justify-self-end text-sm text-black/60 transition hover:translate-x-0.5"
+                      >
+                        回答する &gt;
+                      </button>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
-          </section>
+          </GlassPanel>
 
-          <section className={`${glassPanelClass} px-5 py-4`}>
-            <div className={glassOverlay} aria-hidden="true" />
-            <div className={glassDots} aria-hidden="true" />
-            <div className="relative z-10">
-              <div className="mb-4 flex items-center gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-[rgba(0,120,160,0.15)] text-base text-[#0b5e7a]">
-                  🧑‍🤝‍🧑
-                </span>
-                <span className="text-xl font-medium">みんなの様子</span>
-                <div className="ml-auto flex items-center gap-2">
+          <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
+            <PanelHeader
+              icon="🧑‍🤝‍🧑"
+              title="みんなの様子"
+              right={
+                <div className="flex items-center gap-2">
                   <button
                     className="rounded-[10px] border border-black/10 bg-white/55 px-3 py-1 text-[13px] font-medium transition hover:-translate-y-0.5 hover:bg-white/75"
                     type="button"
@@ -366,55 +345,80 @@ export default function HomePage() {
                     placeholder="検索"
                   />
                 </div>
-              </div>
+              }
+            />
 
-              <div className="flex flex-col gap-3">
-                {RESIDENT_STATUS_SAMPLE.map((item) => (
-                  <div
-                    key={item.id}
-                    className="grid grid-cols-[20px_1fr_auto] items-center gap-2 rounded-xl border border-white/55 bg-white/25 px-3 py-2"
+            <div className="flex flex-col gap-3">
+              {RESIDENT_STATUS_SAMPLE.map((item) => (
+                <div
+                  key={item.id}
+                  className="grid grid-cols-[20px_1fr_auto] items-center gap-2 rounded-xl border border-white/55 bg-white/25 px-3 py-2"
+                >
+                  <span className={`h-3 w-3 rounded-full ${item.tone}`} />
+                  <span className="font-medium">{item.name}</span>
+                  <button
+                    className="rounded-[10px] border border-black/10 bg-white/60 px-3 py-1 text-[12px] font-medium transition hover:-translate-y-0.5 hover:bg-white/75"
+                    type="button"
                   >
-                    <span className={`h-3 w-3 rounded-full ${item.tone}`} />
-                    <span className="font-medium">{item.name}</span>
-                    <button
-                      className="rounded-[10px] border border-black/10 bg-white/60 px-3 py-1 text-[12px] font-medium transition hover:-translate-y-0.5 hover:bg-white/75"
-                      type="button"
-                    >
-                      覗く
-                    </button>
-                  </div>
-                ))}
-              </div>
+                    覗く
+                  </button>
+                </div>
+              ))}
             </div>
-          </section>
+          </GlassPanel>
         </main>
 
         <footer className="mt-auto grid grid-cols-[1fr_auto_1fr] items-end gap-4 translate-y-[clamp(-64px,-2.5vw,-32px)] max-[1240px]:grid-cols-1 max-[1240px]:justify-items-center">
           <Link
             href="/reports"
-            className="flex w-[6em] items-center justify-center justify-self-start rounded-[10px] border border-[rgba(74,45,18,0.6)] bg-[linear-gradient(180deg,rgba(205,166,120,0.58),rgba(171,120,67,0.6)),repeating-linear-gradient(90deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-[0.72em] py-2 text-[28px] font-medium text-[#3a240f] shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(74,45,18,0.16),0_8px_16px_rgba(40,22,6,0.18)] transition hover:-translate-y-0.5"
-            style={{ transform: 'translateX(80%) rotate(-20deg)' }}
+            className="uiDemoNavButton uiDemoNavButtonLeft flex w-[6em] items-center justify-center justify-self-start rounded-[10px] border border-[rgba(74,45,18,0.6)] bg-[linear-gradient(180deg,rgba(205,166,120,0.58),rgba(171,120,67,0.6)),repeating-linear-gradient(90deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-[0.72em] py-2 text-[28px] font-medium text-[#3a240f] shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(74,45,18,0.16),0_8px_16px_rgba(40,22,6,0.18)]"
           >
             ← 日報
           </Link>
 
-          <div className={`${glassPanelClass} min-w-[220px] px-9 py-5 text-center text-[#243749]`}>
-            <div className={glassOverlay} aria-hidden="true" />
-            <div className={glassDots} aria-hidden="true" />
-            <div className="relative z-10">
-              <div className="text-xl tracking-[0.5px]">{now.toLocaleDateString()}</div>
-              <div className="text-[32px] font-semibold">{now.toLocaleTimeString()}</div>
-            </div>
-          </div>
+          <GlassPanel className="min-w-[220px] px-9 py-5 text-center text-[#243749]">
+            <div className="text-xl tracking-[0.5px]">{now.toLocaleDateString()}</div>
+            <div className="text-[32px] font-semibold">{now.toLocaleTimeString()}</div>
+          </GlassPanel>
 
           <Link
             href="/office"
-            className="flex w-[6em] items-center justify-center justify-self-end rounded-[10px] border border-[rgba(74,45,18,0.6)] bg-[linear-gradient(180deg,rgba(205,166,120,0.58),rgba(171,120,67,0.6)),repeating-linear-gradient(90deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-[0.72em] py-2 text-[28px] font-medium text-[#3a240f] shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(74,45,18,0.16),0_8px_16px_rgba(40,22,6,0.18)] transition hover:-translate-y-0.5"
-            style={{ transform: 'translateX(-80%) rotate(20deg)' }}
+            className="uiDemoNavButton uiDemoNavButtonRight flex w-[6em] items-center justify-center justify-self-end rounded-[10px] border border-[rgba(74,45,18,0.6)] bg-[linear-gradient(180deg,rgba(205,166,120,0.58),rgba(171,120,67,0.6)),repeating-linear-gradient(90deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-[0.72em] py-2 text-[28px] font-medium text-[#3a240f] shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(74,45,18,0.16),0_8px_16px_rgba(40,22,6,0.18)]"
           >
             管理室 →
           </Link>
         </footer>
+
+        <style jsx>{`
+          :global(.uiDemoNavButton) {
+            transition: transform 140ms ease, box-shadow 140ms ease;
+          }
+          :global(.uiDemoNavButtonLeft) {
+            transform: translateX(80%) rotate(-20deg);
+            --nav-shift: 80%;
+            --nav-rotate: -20deg;
+          }
+          :global(.uiDemoNavButtonRight) {
+            transform: translateX(-80%) rotate(20deg);
+            --nav-shift: -80%;
+            --nav-rotate: 20deg;
+          }
+          @media (hover: hover) and (pointer: fine) {
+            :global(.uiDemoNavButton:hover) {
+              transform: translateX(var(--nav-shift, 0)) rotate(var(--nav-rotate, 0))
+                translateY(-2px);
+              box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3),
+                inset 0 -2px 4px rgba(74, 45, 18, 0.2), 0 12px 18px rgba(40, 22, 6, 0.22);
+            }
+          }
+          :global(.uiDemoNavButton:focus-visible) {
+            outline: 2px solid rgba(15, 90, 130, 0.45);
+            outline-offset: 2px;
+          }
+          :global(.uiDemoNavButton:active) {
+            transform: translateY(1px);
+          }
+        `}</style>
       </div>
     </div>
   );
