@@ -2,6 +2,7 @@
 
 import { Noto_Sans_JP } from 'next/font/google';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { fetchEventById, useMarkNotificationRead, useNotifications } from '@/lib/data/notifications';
 import type { NotificationRecord } from '@repo/shared/types/conversation';
@@ -30,6 +31,8 @@ type ResidentStatusItem = {
   name: string;
   tone: string;
 };
+
+type HomePanelMode = 'none' | 'right-detail' | 'right-peek' | 'popup-consult';
 
 const RESIDENT_STATUS_SAMPLE: ResidentStatusItem[] = [
   { id: 'A', name: 'ハル', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]' },
@@ -91,6 +94,7 @@ export function HomeContent() {
   const { data: notifications = [], isLoading: isLoadingNotifications } = useNotifications();
   const markRead = useMarkNotificationRead();
   const [now, setNow] = useState(() => new Date());
+  const [panelMode, setPanelMode] = useState<HomePanelMode>('none');
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -134,6 +138,33 @@ export function HomeContent() {
   }, [conversationNotifications]);
 
   const consultCards = useMemo(() => consultNotifications.slice(0, 2), [consultNotifications]);
+
+  const slideAmount = 'clamp(480px, 30vw, 640px)';
+  const panelVars = {
+    '--panel-left': 'clamp(400px,26vw,540px)',
+    '--panel-center': 'clamp(350px,23.5vw,470px)',
+    '--panel-right': 'clamp(400px,23.5vw,500px)',
+    '--panel-gap': 'clamp(16px,1.25vw,32px)',
+    '--panel-slide': slideAmount,
+  } as React.CSSProperties;
+  const panelGridStyle = {
+    ...panelVars,
+    gridTemplateColumns:
+      'minmax(0,var(--panel-left)) minmax(0,var(--panel-center)) minmax(0,var(--panel-right))',
+    columnGap: 'var(--panel-gap)',
+    width:
+      'min(100%, calc(var(--panel-left) + var(--panel-center) + var(--panel-right) + (var(--panel-gap) * 2)))',
+    marginInline: 'auto',
+  } as React.CSSProperties;
+  const isRightDetail = panelMode === 'right-detail';
+  const isRightPeek = panelMode === 'right-peek';
+  const isPopupConsult = panelMode === 'popup-consult';
+  const showFloatingLayer = isRightDetail || isRightPeek;
+  const floatingPanelStyle = isRightDetail
+    ? { left: 'calc(var(--panel-left) + var(--panel-gap))', width: 'var(--panel-slide)' }
+    : isRightPeek
+      ? { right: 0, width: 'var(--panel-slide)' }
+      : undefined;
 
   const openNotification = useCallback(
     async (n: NotificationRecord) => {
@@ -201,17 +232,18 @@ export function HomeContent() {
         </GlassPanel>
       </header>
 
-      <main
-        className="grid flex-1 items-start gap-[clamp(16px,1.25vw,32px)] max-[1240px]:grid-cols-1"
-        style={{
-          gridTemplateColumns:
-            'minmax(0,clamp(400px,26vw,540px)) minmax(0,clamp(350px,23.5vw,470px)) minmax(0,clamp(400px,23.5vw,500px))',
-          width:
-            'min(100%, calc(clamp(400px,26vw,540px) + clamp(350px,23.5vw,470px) + clamp(400px,23.5vw,500px) + clamp(16px,1.25vw,32px) * 2))',
-          marginInline: 'auto',
-        }}
-      >
-        <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
+      <main className="relative flex-1">
+        <div
+          className="relative grid items-start gap-[clamp(16px,1.25vw,32px)] max-[1240px]:grid-cols-1"
+          style={panelGridStyle}
+        >
+          <motion.div
+            className="relative"
+            style={{ gridColumn: '1 / span 1' }}
+            animate={{ x: isRightPeek ? `calc(-1 * ${slideAmount})` : 0 }}
+            transition={{ type: 'spring', stiffness: 120, damping: 18 }}
+          >
+            <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
           <PanelHeader
             icon="🗨️"
             title="会話"
@@ -265,9 +297,27 @@ export function HomeContent() {
               </div>
             ))}
           </div>
-        </GlassPanel>
+            </GlassPanel>
+          </motion.div>
 
-        <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
+          <motion.div
+            className="relative grid"
+            style={{
+              gridColumn: '2 / span 2',
+              gridTemplateColumns:
+                'minmax(0,var(--panel-center)) minmax(0,var(--panel-right))',
+              columnGap: 'var(--panel-gap)',
+            }}
+            animate={{
+              x: isRightDetail
+                ? slideAmount
+                : isRightPeek
+                  ? `calc(-1 * ${slideAmount})`
+                  : 0,
+            }}
+            transition={{ type: 'spring', stiffness: 120, damping: 18 }}
+          >
+            <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
           <PanelHeader
             icon="✉"
             title="相談"
@@ -316,9 +366,9 @@ export function HomeContent() {
               );
             })}
           </div>
-        </GlassPanel>
+            </GlassPanel>
 
-        <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
+            <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
           <PanelHeader
             icon="🧑‍🤝‍🧑"
             title="みんなの様子"
@@ -355,7 +405,23 @@ export function HomeContent() {
               </div>
             ))}
           </div>
-        </GlassPanel>
+            </GlassPanel>
+          </motion.div>
+
+          {showFloatingLayer && (
+            <div className="pointer-events-none absolute inset-0">
+              <div className="relative h-full" style={panelGridStyle}>
+                <div className="absolute inset-y-0" style={floatingPanelStyle} />
+              </div>
+            </div>
+          )}
+
+          {isPopupConsult && (
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute inset-0" />
+            </div>
+          )}
+        </div>
       </main>
 
       <footer className="mt-auto grid grid-cols-[1fr_auto_1fr] items-end gap-4 translate-y-[clamp(-64px,-2.5vw,-32px)] max-[1240px]:grid-cols-1 max-[1240px]:justify-items-center">
