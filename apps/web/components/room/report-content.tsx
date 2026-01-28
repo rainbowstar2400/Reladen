@@ -11,6 +11,7 @@ import type { EventLogStrict } from '@repo/shared/types/conversation';
 import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 import { detectImpressionLabelChanges } from '@/lib/repos/conversation-repo';
 import { remoteFetchRecentEvents } from '@/lib/sync/remote-events';
+import { useDeskTransition } from '@/components/room/room-transition-context';
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度';
 type ChangeKindFilter = ChangeKind | '';
@@ -73,6 +74,7 @@ function useOpenConsult() {
 
 export function ReportContent() {
   const router = useRouter();
+  const deskTransition = useDeskTransition();
   const openConsult = useOpenConsult();
   const residentNameMap = useResidentNameMap();
 
@@ -83,6 +85,13 @@ export function ReportContent() {
     params.set('log', id);
     router.push(`?${params.toString()}`, { scroll: false });
   }
+
+  const navigateDesk = (href: string) => {
+    const delay = deskTransition?.beginDeskTransition() ?? 0;
+    window.setTimeout(() => {
+      router.push(href);
+    }, delay);
+  };
 
   const [date, setDate] = useState('');
   const [charA, setCharA] = useState<string>('');
@@ -280,6 +289,22 @@ export function ReportContent() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Button
+          variant="outline"
+          className="h-10 rounded-xl text-sm"
+          onClick={() => navigateDesk('/home')}
+        >
+          ホームに戻る
+        </Button>
+        <Button
+          variant="outline"
+          className="h-10 rounded-xl text-sm"
+          onClick={() => navigateDesk('/office')}
+        >
+          管理室へ
+        </Button>
+      </div>
       <Card>
         <CardContent className="flex flex-wrap items-center gap-3 py-3">
           <div className="flex items-center gap-2">

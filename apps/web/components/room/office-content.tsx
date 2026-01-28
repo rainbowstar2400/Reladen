@@ -1,10 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useResidents } from '@/lib/data/residents';
+import { useDeskTransition } from '@/components/room/room-transition-context';
 
 export function OfficeContent() {
+  const router = useRouter();
+  const deskTransition = useDeskTransition();
   const { data, isLoading } = useResidents();
   const count = isLoading ? '—' : (data?.length ?? 0);
 
@@ -20,8 +24,31 @@ export function OfficeContent() {
     </Button>
   );
 
+  const navigateDesk = (href: string) => {
+    const delay = deskTransition?.beginDeskTransition() ?? 0;
+    window.setTimeout(() => {
+      router.push(href);
+    }, delay);
+  };
+
   return (
     <div className="space-y-8">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Button
+          variant="outline"
+          className="h-10 rounded-xl text-sm"
+          onClick={() => navigateDesk('/home')}
+        >
+          ホームに戻る
+        </Button>
+        <Button
+          variant="outline"
+          className="h-10 rounded-xl text-sm"
+          onClick={() => navigateDesk('/reports')}
+        >
+          日報へ
+        </Button>
+      </div>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">管理室</h1>
         <p className="text-sm">

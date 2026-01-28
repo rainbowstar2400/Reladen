@@ -1,7 +1,6 @@
 'use client';
 
 import { Noto_Sans_JP } from 'next/font/google';
-import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchEventById, useMarkNotificationRead, useNotifications } from '@/lib/data/notifications';
@@ -11,6 +10,7 @@ import { useWorldWeather } from '@/lib/data/use-world-weather';
 import type { WeatherKind } from '@repo/shared/types';
 import { GlassPanel } from '@/components/ui-demo/glass-panel';
 import { PanelHeader } from '@/components/ui-demo/panel-header';
+import { useDeskTransition } from '@/components/room/room-transition-context';
 
 const notoSans = Noto_Sans_JP({
   weight: ['300', '400', '500', '600'],
@@ -85,6 +85,7 @@ function getInitialFromTitle(title: string) {
 
 export function HomeContent() {
   const router = useRouter();
+  const deskTransition = useDeskTransition();
   const residentNameMap = useResidentNameMap();
   const { data: weatherState } = useWorldWeather();
   const { data: notifications = [], isLoading: isLoadingNotifications } = useNotifications();
@@ -172,6 +173,16 @@ export function HomeContent() {
       }
     },
     [markRead, router]
+  );
+
+  const navigateDesk = useCallback(
+    (href: string) => {
+      const delay = deskTransition?.beginDeskTransition() ?? 0;
+      window.setTimeout(() => {
+        router.push(href);
+      }, delay);
+    },
+    [deskTransition, router]
   );
 
   return (
@@ -348,24 +359,26 @@ export function HomeContent() {
       </main>
 
       <footer className="mt-auto grid grid-cols-[1fr_auto_1fr] items-end gap-4 translate-y-[clamp(-64px,-2.5vw,-32px)] max-[1240px]:grid-cols-1 max-[1240px]:justify-items-center">
-        <Link
-          href="/reports"
+        <button
+          type="button"
+          onClick={() => navigateDesk('/reports')}
           className="uiDemoNavButton uiDemoNavButtonLeft flex w-[6em] items-center justify-center justify-self-start rounded-[10px] border border-[rgba(74,45,18,0.6)] bg-[linear-gradient(180deg,rgba(205,166,120,0.58),rgba(171,120,67,0.6)),repeating-linear-gradient(90deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-[0.72em] py-2 text-[28px] font-medium text-[#3a240f] shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(74,45,18,0.16),0_8px_16px_rgba(40,22,6,0.18)]"
         >
           ← 日報
-        </Link>
+        </button>
 
         <GlassPanel className="min-w-[220px] px-9 py-5 text-center text-[#243749]">
           <div className="text-xl tracking-[0.5px]">{now.toLocaleDateString()}</div>
           <div className="text-[32px] font-semibold">{now.toLocaleTimeString()}</div>
         </GlassPanel>
 
-        <Link
-          href="/office"
+        <button
+          type="button"
+          onClick={() => navigateDesk('/office')}
           className="uiDemoNavButton uiDemoNavButtonRight flex w-[6em] items-center justify-center justify-self-end rounded-[10px] border border-[rgba(74,45,18,0.6)] bg-[linear-gradient(180deg,rgba(205,166,120,0.58),rgba(171,120,67,0.6)),repeating-linear-gradient(90deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-[0.72em] py-2 text-[28px] font-medium text-[#3a240f] shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(74,45,18,0.16),0_8px_16px_rgba(40,22,6,0.18)]"
         >
           管理室 →
-        </Link>
+        </button>
       </footer>
 
       <style jsx>{`

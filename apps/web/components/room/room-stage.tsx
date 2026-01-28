@@ -1,9 +1,11 @@
 'use client';
 
-import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import skyImage from '@/app/ui-demo/pre_sky.jpg';
 import deskImage from '@/app/ui-demo/desk.png';
+import { DeskPanelVisibilityProvider } from '@/components/room/desk-panel-context';
+import { DeskTransitionProvider } from '@/components/room/room-transition-context';
 
 type RoomFace = 'front' | 'right' | 'left';
 
@@ -32,7 +34,24 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
   const [outgoingDesk, setOutgoingDesk] = useState<{ face: RoomFace; node: ReactNode } | null>(
     null
   );
-  const deskFadeSeconds = 0.28;
+  const deskSlideSeconds = 0.45;
+  const deskContentFadeSeconds = 0.2;
+  const [deskReady, setDeskReady] = useState(activeFace === 'front');
+  const [deskView, setDeskView] = useState(isDeskMode);
+  const [deskContentHidden, setDeskContentHidden] = useState(false);
+  const preFadeRef = useRef(false);
+  const prevFace = prevFaceRef.current;
+  const isDeskSwitch =
+    prevFace !== activeFace && prevFace !== 'front' && activeFace !== 'front';
+  const outgoingSnapshot = isDeskSwitch
+    ? { face: prevFace, node: prevChildrenRef.current }
+    : null;
+  const outgoingToRender = outgoingDesk ?? outgoingSnapshot;
+  const beginDeskTransition = useCallback(() => {
+    preFadeRef.current = true;
+    setDeskContentHidden(true);
+    return deskContentFadeSeconds * 1000;
+  }, [deskContentFadeSeconds]);
 
   const faceContent = useMemo(
     () => ({
@@ -43,34 +62,69 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
     [activeFace, children]
   );
 
-  useEffect(() => {
-    if (prevFaceRef.current !== activeFace) {
-      const prevFace = prevFaceRef.current;
-      const nextFace = activeFace;
+  useLayoutEffect(() => {
+    const prevFace = prevFaceRef.current;
+    const nextFace = activeFace;
+
+    if (prevFace !== nextFace) {
       if (prevFace !== 'front' && nextFace !== 'front') {
         setOutgoingDesk({ face: prevFace, node: prevChildrenRef.current });
+        setDeskContentHidden(true);
       } else {
         setOutgoingDesk(null);
       }
-      prevFaceRef.current = activeFace;
+
+      if (prevFace === 'front' && nextFace !== 'front') {
+        setDeskView(true);
+        setDeskReady(false);
+        if (!preFadeRef.current) {
+          setDeskContentHidden(true);
+        }
+        const slideDelaySeconds = preFadeRef.current ? 0 : deskContentFadeSeconds;
+        const timeoutId = window.setTimeout(() => {
+          setDeskReady(true);
+        }, slideDelaySeconds * 1000);
+        const showId = window.setTimeout(() => {
+          setDeskContentHidden(false);
+          preFadeRef.current = false;
+        }, (slideDelaySeconds + deskSlideSeconds) * 1000);
+        prevChildrenRef.current = children;
+        prevFaceRef.current = activeFace;
+        return () => {
+          window.clearTimeout(timeoutId);
+          window.clearTimeout(showId);
+        };
+      }
+
+      if (prevFace !== 'front' && nextFace === 'front') {
+        setDeskView(false);
+        setDeskReady(true);
+        setDeskContentHidden(false);
+        preFadeRef.current = false;
+      }
     }
+
     prevChildrenRef.current = children;
-  }, [activeFace, children]);
+    prevFaceRef.current = activeFace;
+  }, [activeFace, children, deskContentFadeSeconds, deskSlideSeconds]);
 
   useEffect(() => {
     if (!outgoingDesk) return;
     const timeoutId = window.setTimeout(() => {
       setOutgoingDesk(null);
-    }, deskFadeSeconds * 1000);
+      setDeskContentHidden(false);
+      preFadeRef.current = false;
+    }, deskSlideSeconds * 1000);
     return () => window.clearTimeout(timeoutId);
-  }, [outgoingDesk, deskFadeSeconds]);
+  }, [outgoingDesk, deskSlideSeconds]);
+
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#a5b7c8] text-[#0a1b2b]">
       <div className="absolute inset-0">
         <motion.div
           className="absolute inset-0"
-          animate={isDeskMode ? { y: '-110%', opacity: 0 } : { y: '0%', opacity: 1 }}
+          animate={deskView ? { y: '-110%', opacity: 0 } : { y: '0%', opacity: 1 }}
           transition={{ type: 'spring', stiffness: 120, damping: 20 }}
         >
           <div
@@ -92,7 +146,7 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
 
         <motion.div
           className="absolute inset-x-0 bottom-0 overflow-hidden"
-          animate={{ height: isDeskMode ? '100%' : '24%' }}
+          animate={{ height: deskView ? '100%' : '24%' }}
           transition={{ type: 'spring', stiffness: 120, damping: 20 }}
           aria-hidden="true"
         >
@@ -100,38 +154,45 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
             className="absolute inset-0"
             style={{
               backgroundImage: `url(${deskImage.src})`,
-              backgroundSize: isDeskMode ? '100% 100%' : '100% auto',
-              backgroundPosition: isDeskMode ? 'center center' : 'center top',
+              backgroundSize: deskView ? '100% 100%' : '100% auto',
+              backgroundPosition: deskView ? 'center center' : 'center top',
               backgroundRepeat: 'no-repeat',
             }}
           />
         </motion.div>
       </div>
 
-      <div className="relative z-10 min-h-screen" style={isDeskMode ? undefined : { perspective: '1800px' }}>
+      <DeskTransitionProvider beginDeskTransition={beginDeskTransition}>
+        <div className="relative z-10 min-h-screen" style={isDeskMode ? undefined : { perspective: '1800px' }}>
         {isDeskMode ? (
-          <div className="absolute inset-0">
-            {outgoingDesk && (
+          <div className="absolute inset-0 overflow-hidden">
+            {outgoingToRender && (
               <motion.div
-                key={`desk-outgoing-${outgoingDesk.face}`}
+                key={`desk-outgoing-${outgoingToRender.face}`}
                 className="absolute inset-0"
-                initial={{ opacity: 1 }}
-                animate={{ opacity: 0 }}
-                transition={{ duration: deskFadeSeconds }}
+                initial={{ x: 0 }}
+                animate={{ x: outgoingToRender.face === 'right' ? '100%' : '-100%' }}
+                transition={{ duration: deskSlideSeconds, ease: 'easeInOut' }}
                 style={{ pointerEvents: 'none' }}
               >
-                {outgoingDesk.node}
+                <DeskPanelVisibilityProvider visible={!deskContentHidden}>
+                  {outgoingToRender.node}
+                </DeskPanelVisibilityProvider>
               </motion.div>
             )}
-            <motion.div
-              key={`desk-incoming-${activeFace}`}
-              className="absolute inset-0"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: deskFadeSeconds }}
-            >
-              {children}
-            </motion.div>
+            {deskReady && (
+              <motion.div
+                key={`desk-incoming-${activeFace}`}
+                className="absolute inset-0"
+                initial={{ x: activeFace === 'right' ? '100%' : '-100%' }}
+                animate={{ x: 0 }}
+                transition={{ duration: deskSlideSeconds, ease: 'easeOut' }}
+              >
+                <DeskPanelVisibilityProvider visible={!deskContentHidden}>
+                  {children}
+                </DeskPanelVisibilityProvider>
+              </motion.div>
+            )}
           </div>
         ) : (
           <motion.div
@@ -175,7 +236,8 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
             </div>
           </motion.div>
         )}
-      </div>
+        </div>
+      </DeskTransitionProvider>
     </div>
   );
 }
