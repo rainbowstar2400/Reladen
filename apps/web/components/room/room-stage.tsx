@@ -96,7 +96,7 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
                 transform: FACE_TRANSFORMS.front,
                 backfaceVisibility: 'hidden',
                 transformStyle: 'preserve-3d',
-                pointerEvents: activeFace === 'front' ? 'auto' : 'none',
+                pointerEvents: 'auto',
               }}
             >
               {faceContent.front}
@@ -107,7 +107,7 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
                 transform: FACE_TRANSFORMS.right,
                 backfaceVisibility: 'hidden',
                 transformStyle: 'preserve-3d',
-                pointerEvents: activeFace === 'right' ? 'auto' : 'none',
+                pointerEvents: 'none',
               }}
             >
               {faceContent.right}
@@ -118,7 +118,7 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
                 transform: FACE_TRANSFORMS.left,
                 backfaceVisibility: 'hidden',
                 transformStyle: 'preserve-3d',
-                pointerEvents: activeFace === 'left' ? 'auto' : 'none',
+                pointerEvents: 'none',
               }}
             >
               {faceContent.left}
