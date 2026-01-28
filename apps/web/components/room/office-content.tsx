@@ -24,8 +24,8 @@ export function OfficeContent() {
     </Button>
   );
 
-  const navigateDesk = (href: string) => {
-    const delay = deskTransition?.beginDeskTransition() ?? 0;
+  const navigateDesk = (href: string, target: 'home' | 'desk') => {
+    const delay = deskTransition?.beginDeskTransition(target) ?? 0;
     window.setTimeout(() => {
       router.push(href);
     }, delay);
@@ -37,14 +37,14 @@ export function OfficeContent() {
         <Button
           variant="outline"
           className="h-10 rounded-xl text-sm"
-          onClick={() => navigateDesk('/home')}
+          onClick={() => navigateDesk('/home', 'home')}
         >
           ホームに戻る
         </Button>
         <Button
           variant="outline"
           className="h-10 rounded-xl text-sm"
-          onClick={() => navigateDesk('/reports')}
+          onClick={() => navigateDesk('/reports', 'desk')}
         >
           日報へ
         </Button>

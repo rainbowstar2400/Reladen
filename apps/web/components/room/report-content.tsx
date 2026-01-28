@@ -86,8 +86,8 @@ export function ReportContent() {
     router.push(`?${params.toString()}`, { scroll: false });
   }
 
-  const navigateDesk = (href: string) => {
-    const delay = deskTransition?.beginDeskTransition() ?? 0;
+  const navigateDesk = (href: string, target: 'home' | 'desk') => {
+    const delay = deskTransition?.beginDeskTransition(target) ?? 0;
     window.setTimeout(() => {
       router.push(href);
     }, delay);
@@ -293,14 +293,14 @@ export function ReportContent() {
         <Button
           variant="outline"
           className="h-10 rounded-xl text-sm"
-          onClick={() => navigateDesk('/home')}
+          onClick={() => navigateDesk('/home', 'home')}
         >
           ホームに戻る
         </Button>
         <Button
           variant="outline"
           className="h-10 rounded-xl text-sm"
-          onClick={() => navigateDesk('/office')}
+          onClick={() => navigateDesk('/office', 'desk')}
         >
           管理室へ
         </Button>

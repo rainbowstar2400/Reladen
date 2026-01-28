@@ -36,9 +36,11 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
   );
   const deskSlideSeconds = 0.45;
   const deskContentFadeSeconds = 0.2;
+  const deskSlideStartDelaySeconds = 0.3;
   const [deskReady, setDeskReady] = useState(activeFace === 'front');
   const [deskView, setDeskView] = useState(isDeskMode);
   const [deskContentHidden, setDeskContentHidden] = useState(false);
+  const [deskExitToHome, setDeskExitToHome] = useState(false);
   const preFadeRef = useRef(false);
   const prevFace = prevFaceRef.current;
   const isDeskSwitch =
@@ -47,11 +49,20 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
     ? { face: prevFace, node: prevChildrenRef.current }
     : null;
   const outgoingToRender = outgoingDesk ?? outgoingSnapshot;
-  const beginDeskTransition = useCallback(() => {
-    preFadeRef.current = true;
-    setDeskContentHidden(true);
-    return deskContentFadeSeconds * 1000;
-  }, [deskContentFadeSeconds]);
+  const beginDeskTransition = useCallback(
+    (target: 'home' | 'desk') => {
+      preFadeRef.current = true;
+      setDeskContentHidden(true);
+      if (target === 'home' && activeFace !== 'front') {
+        setDeskExitToHome(true);
+        setDeskReady(false);
+        setOutgoingDesk({ face: activeFace, node: children });
+        return (deskContentFadeSeconds + deskSlideSeconds) * 1000;
+      }
+      return deskContentFadeSeconds * 1000;
+    },
+    [activeFace, children, deskContentFadeSeconds, deskSlideSeconds]
+  );
 
   const faceContent = useMemo(
     () => ({
@@ -80,7 +91,9 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
         if (!preFadeRef.current) {
           setDeskContentHidden(true);
         }
-        const slideDelaySeconds = preFadeRef.current ? 0 : deskContentFadeSeconds;
+        const slideDelaySeconds = preFadeRef.current
+          ? deskSlideStartDelaySeconds
+          : deskContentFadeSeconds;
         const timeoutId = window.setTimeout(() => {
           setDeskReady(true);
         }, slideDelaySeconds * 1000);
@@ -97,26 +110,56 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
       }
 
       if (prevFace !== 'front' && nextFace === 'front') {
-        setDeskView(false);
-        setDeskReady(true);
-        setDeskContentHidden(false);
-        preFadeRef.current = false;
+        if (preFadeRef.current && deskExitToHome) {
+          setOutgoingDesk(null);
+          setDeskView(false);
+          setDeskContentHidden(false);
+          setDeskExitToHome(false);
+          preFadeRef.current = false;
+          prevChildrenRef.current = children;
+          prevFaceRef.current = activeFace;
+          return;
+        }
+        setOutgoingDesk({ face: prevFace, node: prevChildrenRef.current });
+        setDeskReady(false);
+        setDeskView(true);
+        setDeskContentHidden(true);
+        const slideDelaySeconds = preFadeRef.current ? 0 : deskContentFadeSeconds;
+        const clearId = window.setTimeout(() => {
+          setOutgoingDesk(null);
+          setDeskView(false);
+          setDeskContentHidden(false);
+          setDeskExitToHome(false);
+          preFadeRef.current = false;
+        }, (slideDelaySeconds + deskSlideSeconds) * 1000);
+        prevChildrenRef.current = children;
+        prevFaceRef.current = activeFace;
+        return () => window.clearTimeout(clearId);
       }
     }
 
     prevChildrenRef.current = children;
     prevFaceRef.current = activeFace;
-  }, [activeFace, children, deskContentFadeSeconds, deskSlideSeconds]);
+  }, [
+    activeFace,
+    children,
+    deskContentFadeSeconds,
+    deskSlideSeconds,
+    deskSlideStartDelaySeconds,
+    deskExitToHome,
+  ]);
 
   useEffect(() => {
     if (!outgoingDesk) return;
+    if (activeFace === 'front') return;
+    if (deskExitToHome) return;
     const timeoutId = window.setTimeout(() => {
       setOutgoingDesk(null);
       setDeskContentHidden(false);
       preFadeRef.current = false;
     }, deskSlideSeconds * 1000);
     return () => window.clearTimeout(timeoutId);
-  }, [outgoingDesk, deskSlideSeconds]);
+  }, [outgoingDesk, deskSlideSeconds, activeFace, deskExitToHome]);
 
 
   return (
@@ -163,8 +206,8 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
       </div>
 
       <DeskTransitionProvider beginDeskTransition={beginDeskTransition}>
-        <div className="relative z-10 min-h-screen" style={isDeskMode ? undefined : { perspective: '1800px' }}>
-        {isDeskMode ? (
+        <div className="relative z-10 min-h-screen" style={deskView ? undefined : { perspective: '1800px' }}>
+        {deskView ? (
           <div className="absolute inset-0 overflow-hidden">
             {outgoingToRender && (
               <motion.div

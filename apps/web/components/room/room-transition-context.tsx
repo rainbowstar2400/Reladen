@@ -3,7 +3,7 @@
 import { createContext, useContext } from 'react';
 
 type DeskTransitionContextValue = {
-  beginDeskTransition: () => number;
+  beginDeskTransition: (target: 'home' | 'desk') => number;
 };
 
 const DeskTransitionContext = createContext<DeskTransitionContextValue | null>(null);
@@ -12,7 +12,7 @@ export function DeskTransitionProvider({
   beginDeskTransition,
   children,
 }: {
-  beginDeskTransition: () => number;
+  beginDeskTransition: (target: 'home' | 'desk') => number;
   children: React.ReactNode;
 }) {
   return (

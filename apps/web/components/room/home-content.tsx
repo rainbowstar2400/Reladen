@@ -176,8 +176,8 @@ export function HomeContent() {
   );
 
   const navigateDesk = useCallback(
-    (href: string) => {
-      const delay = deskTransition?.beginDeskTransition() ?? 0;
+    (href: string, target: 'home' | 'desk') => {
+      const delay = deskTransition?.beginDeskTransition(target) ?? 0;
       window.setTimeout(() => {
         router.push(href);
       }, delay);
@@ -361,7 +361,7 @@ export function HomeContent() {
       <footer className="mt-auto grid grid-cols-[1fr_auto_1fr] items-end gap-4 translate-y-[clamp(-64px,-2.5vw,-32px)] max-[1240px]:grid-cols-1 max-[1240px]:justify-items-center">
         <button
           type="button"
-          onClick={() => navigateDesk('/reports')}
+          onClick={() => navigateDesk('/reports', 'desk')}
           className="uiDemoNavButton uiDemoNavButtonLeft flex w-[6em] items-center justify-center justify-self-start rounded-[10px] border border-[rgba(74,45,18,0.6)] bg-[linear-gradient(180deg,rgba(205,166,120,0.58),rgba(171,120,67,0.6)),repeating-linear-gradient(90deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-[0.72em] py-2 text-[28px] font-medium text-[#3a240f] shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(74,45,18,0.16),0_8px_16px_rgba(40,22,6,0.18)]"
         >
           ← 日報
@@ -374,7 +374,7 @@ export function HomeContent() {
 
         <button
           type="button"
-          onClick={() => navigateDesk('/office')}
+          onClick={() => navigateDesk('/office', 'desk')}
           className="uiDemoNavButton uiDemoNavButtonRight flex w-[6em] items-center justify-center justify-self-end rounded-[10px] border border-[rgba(74,45,18,0.6)] bg-[linear-gradient(180deg,rgba(205,166,120,0.58),rgba(171,120,67,0.6)),repeating-linear-gradient(90deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_6px,rgba(255,255,255,0)_6px,rgba(255,255,255,0)_12px)] px-[0.72em] py-2 text-[28px] font-medium text-[#3a240f] shadow-[inset_0_1px_0_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(74,45,18,0.16),0_8px_16px_rgba(40,22,6,0.18)]"
         >
           管理室 →
