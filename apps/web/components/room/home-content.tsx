@@ -95,6 +95,8 @@ export function HomeContent() {
   const markRead = useMarkNotificationRead();
   const [now, setNow] = useState(() => new Date());
   const [panelMode, setPanelMode] = useState<HomePanelMode>('none');
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeConsultId, setActiveConsultId] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -166,44 +168,41 @@ export function HomeContent() {
       ? { right: 0, width: 'var(--panel-slide)' }
       : undefined;
 
-  const openNotification = useCallback(
+  const openConversation = useCallback(
     async (n: NotificationRecord) => {
       try {
         if (n.status !== 'read') {
           markRead.mutate(n.id);
         }
-
-        const kind = n.type ?? (n as any)?.payload?.kind ?? 'conversation';
-
-        if (kind === 'consult') {
-          const consultId =
-            (n as any).linkedConsultId ?? (n as any)?.payload?.consultId ?? (n as any)?.consultId;
-
-          if (consultId) {
-            const url = new URL(window.location.href);
-            url.searchParams.set('consult', String(consultId));
-            url.searchParams.delete('log');
-            router.push(url.pathname + '?' + url.searchParams.toString(), { scroll: false });
-          }
-          return;
-        }
-
         const eventId = n.linkedEventId ?? (n as any)?.payload?.eventId ?? (n as any)?.eventId;
-
-        if (eventId) {
-          const ev = await fetchEventById(eventId);
-          if (!ev) return;
-
-          const url = new URL(window.location.href);
-          url.searchParams.set('log', ev.id);
-          url.searchParams.delete('consult');
-          router.push(url.pathname + '?' + url.searchParams.toString(), { scroll: false });
-        }
+        if (!eventId) return;
+        const ev = await fetchEventById(eventId);
+        if (!ev) return;
+        setActiveConversationId(ev.id);
+        setPanelMode('right-detail');
       } catch (e) {
         // noop
       }
     },
-    [markRead, router]
+    [markRead]
+  );
+
+  const openConsult = useCallback(
+    (n: NotificationRecord) => {
+      try {
+        if (n.status !== 'read') {
+          markRead.mutate(n.id);
+        }
+        const consultId =
+          (n as any).linkedConsultId ?? (n as any)?.payload?.consultId ?? (n as any)?.consultId;
+        if (!consultId) return;
+        setActiveConsultId(String(consultId));
+        setPanelMode('popup-consult');
+      } catch (e) {
+        // noop
+      }
+    },
+    [markRead]
   );
 
   const navigateDesk = useCallback(
@@ -276,17 +275,17 @@ export function HomeContent() {
                   return (
                     <div
                       key={n.id}
-                      className="grid grid-cols-[26px_1fr_auto] items-center gap-2 py-1 text-base"
+                      className="grid grid-cols-[26px_1fr_auto] items-center gap-[10px] py-[6px] text-[16px] leading-[1.1]"
                     >
                       <span className="font-semibold text-[#15324b]">{initial}</span>
                       <span>{message}</span>
                       {rowIndex === 0 ? (
-                        <span className="font-medium text-black/55">{time}</span>
+                        <span className="text-[16px] font-medium text-black/55">{time}</span>
                       ) : (
                         <button
                           type="button"
-                          onClick={() => openNotification(n)}
-                          className="text-sm text-black/60 transition hover:translate-x-0.5"
+                          onClick={() => openConversation(n)}
+                          className="text-[14px] text-black/60 transition hover:translate-x-0.5"
                         >
                           見てみる &gt;
                         </button>
@@ -346,18 +345,18 @@ export function HomeContent() {
                   key={n.id}
                   className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]"
                 >
-                  <div className="grid grid-cols-[1fr_auto] grid-rows-[auto_auto] gap-x-4 text-base">
-                    <div className="row-span-2 flex flex-col pl-[2ch] leading-relaxed">
-                      <span className="font-semibold">{name}</span>
+                  <div className="grid grid-cols-[1fr_auto] grid-rows-[auto_auto] items-center gap-x-4 gap-y-0.5 py-[6px] text-[16px]">
+                    <div className="row-span-2 flex flex-col pl-[2ch] leading-[1.5]">
+                      <span className="font-semibold">{name} から</span>
                       <span>相談が届いています</span>
                     </div>
-                    <span className="justify-self-end text-base font-medium text-black/55">
+                    <span className="justify-self-end text-[16px] font-medium text-black/55">
                       {time}
                     </span>
                     <button
                       type="button"
-                      onClick={() => openNotification(n)}
-                      className="justify-self-end text-sm text-black/60 transition hover:translate-x-0.5"
+                      onClick={() => openConsult(n)}
+                      className="justify-self-end text-[14px] text-black/60 transition hover:translate-x-0.5"
                     >
                       回答する &gt;
                     </button>
