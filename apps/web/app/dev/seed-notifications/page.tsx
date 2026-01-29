@@ -11,12 +11,14 @@ import type { NotificationRecord, EventLogStrict } from '@repo/shared/types/conv
 type SeedMessage = { kind: 'info' | 'error'; text: string } | null;
 
 function buildConversationPayload(): ConversationPayloadStrict {
+  const aId = newId();
+  const bId = newId();
   return {
-    threadId: `thread-${newId()}`,
-    participants: ['A', 'B'],
+    threadId: newId(),
+    participants: [aId, bId],
     lines: [
-      { speaker: 'A', text: '今日はいい天気だね。' },
-      { speaker: 'B', text: 'うん、散歩日和。' },
+      { speaker: aId, text: '今日はいい天気だね。' },
+      { speaker: bId, text: 'うん、散歩日和。' },
     ],
     meta: {
       tags: ['demo'],
@@ -30,7 +32,7 @@ function buildConversationPayload(): ConversationPayloadStrict {
   };
 }
 
-function buildConsultEvent(now: string): EventLogStrict {
+function buildConsultEvent(now: string, participantId: string): EventLogStrict {
   return {
     id: newId(),
     kind: 'consult',
@@ -45,17 +47,22 @@ function buildConsultEvent(now: string): EventLogStrict {
         { id: 'c3', label: '今日は早めに休む' },
       ],
       occurredAt: now,
-      participants: ['A'],
+      participants: [participantId],
     },
   };
 }
 
-function buildConsultNotification(consultId: string, now: string): NotificationRecord & { deleted: boolean } {
+function buildConsultNotification(
+  consultId: string,
+  now: string,
+  participantId: string
+): NotificationRecord & { deleted: boolean; linkedConsultId?: string } {
   return {
     id: newId(),
     type: 'consult',
+    linkedEventId: consultId,
     linkedConsultId: consultId,
-    participants: ['A'],
+    participants: [participantId, participantId],
     snippet: '相談が届いています',
     occurredAt: now,
     status: 'unread',
@@ -84,9 +91,10 @@ export default function SeedNotificationsPage() {
     try {
       for (let i = 0; i < Math.max(1, count); i += 1) {
         const now = new Date().toISOString();
-        const ev = buildConsultEvent(now);
+        const participantId = newId();
+        const ev = buildConsultEvent(now, participantId);
         await putLocal('events', ev as any);
-        const notif = buildConsultNotification(ev.id, now);
+        const notif = buildConsultNotification(ev.id, now, participantId);
         await putLocal('notifications', notif as any);
       }
       setMessage({ kind: 'info', text: '相談通知を追加しました。' });
