@@ -33,6 +33,7 @@ export function ConsultDetailPanelContent({
   onDecide?: (choiceId: string) => void
   onClose?: () => void
 }) {
+  const router = useRouter()
 
   // 一時選択（未確定）。クリックで何度でも変更可
   const [picked, setPicked] = useState<string | null>(null)
