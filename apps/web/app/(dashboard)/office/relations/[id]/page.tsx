@@ -19,6 +19,8 @@ import {
     ConversationPayloadStrict
 } from '@/lib/repos/conversation-repo'; //
 import { FEELING_LABELS, RELATION_LABELS } from '@/lib/constants/labels';
+import { DeskPanel } from '@/components/room/desk-panel';
+import { OfficePanelShell } from '@/components/room/office-panel-shell';
 
 const AffinityBar = ({ value }: { value: number }) => {
     // -100 から 0 は左側、0 〜 100 は右側へ伸ばす積み上げ型のバー
@@ -199,7 +201,9 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
     const relationLabel = RELATION_LABELS[relationType] ?? '（未設定）';
 
     return (
-        <div className="space-y-6">
+        <DeskPanel className="mx-auto mt-[clamp(24px,3vw,56px)] w-[min(100%,960px)]">
+          <OfficePanelShell showTitle={false}>
+            <div className="space-y-6">
             {/* --- ヘッダー（戻るボタン） --- */}
             <div className="flex items-center justify-between">
                 <Button variant="outline" asChild>
@@ -281,6 +285,8 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
                     )}
                 </CardContent>
             </Card>
-        </div>
+            </div>
+          </OfficePanelShell>
+        </DeskPanel>
     );
 }

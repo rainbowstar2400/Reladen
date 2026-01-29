@@ -18,8 +18,13 @@ export default function DashboardLayout({
   // `ready` に加えて `user` も取得
   const { ready, user } = useAuth();
   const pathname = usePathname();
-  const isRoomRoute = pathname === '/home' || pathname === '/office' || pathname === '/reports';
-  const activeFace = pathname === '/office' ? 'right' : pathname === '/reports' ? 'left' : 'front';
+  const isHomeRoute = pathname === '/home';
+  const isReportRoute = pathname === '/reports';
+  const isOfficeRoute =
+    pathname.startsWith('/office') ||
+    ['/settings', '/playguide', '/specs', '/legal', '/contact'].some((p) => pathname.startsWith(p));
+  const isRoomRoute = isHomeRoute || isReportRoute || isOfficeRoute;
+  const activeFace = isReportRoute ? 'left' : isOfficeRoute ? 'right' : 'front';
 
   return (
     <div className="flex min-h-screen flex-col">

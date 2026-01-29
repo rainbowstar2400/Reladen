@@ -23,6 +23,8 @@ import {
   type Preset,
   type PresetCategory,
 } from '@/lib/data/presets';
+import { DeskPanel } from '@/components/room/desk-panel';
+import { OfficePanelShell } from '@/components/room/office-panel-shell';
 
 const CATEGORY_DETAILS: Record<PresetCategory, { title: string; desc: string; labelHelp: string; descHelp?: string; exampleHelp?: string }> = {
   speech: {
@@ -375,46 +377,50 @@ export default function PresetsPage() {
   const activeDetails = CATEGORY_DETAILS[activeTab];
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">プリセット管理</h1>
-      <p className="text-sm text-muted-foreground">
-        住人登録時の選択リストに表示されるプリセット（話し方、職業、一人称）を管理します。
-      </p>
+    <DeskPanel className="mx-auto mt-[clamp(24px,3vw,56px)] w-[min(100%,960px)]">
+      <OfficePanelShell showTitle={false}>
+        <div className="space-y-6">
+          <h1 className="text-2xl font-semibold">プリセット管理</h1>
+          <p className="text-sm text-muted-foreground">
+            住人登録時の選択リストに表示されるプリセット（話し方、職業、一人称）を管理します。
+          </p>
 
-      <Tabs
-        value={activeTab}
-        onValueChange={(value) => setActiveTab(value as PresetCategory)}
-        className="w-full"
-      >
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="speech">
-            {CATEGORY_DETAILS['speech'].title}
-          </TabsTrigger>
-          <TabsTrigger value="occupation">
-            {CATEGORY_DETAILS['occupation'].title}
-          </TabsTrigger>
-          <TabsTrigger value="first_person">
-            {CATEGORY_DETAILS['first_person'].title}
-          </TabsTrigger>
-        </TabsList>
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as PresetCategory)}
+            className="w-full"
+          >
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="speech">
+                {CATEGORY_DETAILS['speech'].title}
+              </TabsTrigger>
+              <TabsTrigger value="occupation">
+                {CATEGORY_DETAILS['occupation'].title}
+              </TabsTrigger>
+              <TabsTrigger value="first_person">
+                {CATEGORY_DETAILS['first_person'].title}
+              </TabsTrigger>
+            </TabsList>
 
-        {/* タブの説明 */}
-        <p className="mt-2 text-sm text-muted-foreground">
-          {activeDetails.desc}
-        </p>
+            {/* タブの説明 */}
+            <p className="mt-2 text-sm text-muted-foreground">
+              {activeDetails.desc}
+            </p>
 
-        <div className="mt-4">
-          <TabsContent value="speech">
-            <PresetCategoryManager category="speech" />
-          </TabsContent>
-          <TabsContent value="occupation">
-            <PresetCategoryManager category="occupation" />
-          </TabsContent>
-          <TabsContent value="first_person">
-            <PresetCategoryManager category="first_person" />
-          </TabsContent>
+            <div className="mt-4">
+              <TabsContent value="speech">
+                <PresetCategoryManager category="speech" />
+              </TabsContent>
+              <TabsContent value="occupation">
+                <PresetCategoryManager category="occupation" />
+              </TabsContent>
+              <TabsContent value="first_person">
+                <PresetCategoryManager category="first_person" />
+              </TabsContent>
+            </div>
+          </Tabs>
         </div>
-      </Tabs>
-    </div>
+      </OfficePanelShell>
+    </DeskPanel>
   );
 }

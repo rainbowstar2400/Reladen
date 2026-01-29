@@ -1,8 +1,13 @@
 // /apps/web/app/(dashboard)/legal/privacy/page.tsx
 
+import { DeskPanel } from '@/components/room/desk-panel';
+import { OfficePanelShell } from '@/components/room/office-panel-shell';
+
 export default function PrivacyPolicyPage() {
   return (
-    <div className="max-w-4xl mx-auto p-4 space-y-6 text-foreground/90">
+    <DeskPanel className="mx-auto mt-[clamp(24px,3vw,56px)] w-[min(100%,960px)]">
+      <OfficePanelShell showTitle={false}>
+        <div className="max-w-4xl mx-auto p-4 space-y-6 text-foreground/90">
       <h1 className="text-3xl font-bold text-foreground">プライバシーポリシー</h1>
       <p>
         このプライバシーポリシー（以下「本ポリシー」といいます。）は、
@@ -145,6 +150,8 @@ export default function PrivacyPolicyPage() {
       <p className="text-right mt-8">
         制定日：<strong className="font-semibold">2025年11月20日</strong>
       </p>
-    </div>
+        </div>
+      </OfficePanelShell>
+    </DeskPanel>
   );
 }

@@ -16,6 +16,8 @@ import Link from 'next/link'; // Linkを追加
 import { SleepProfile } from '../../../../../../../packages/shared/logic/schedule'; // 型をインポート
 import { Feeling, Relation } from '@/types';
 import { DEFAULT_TRAITS, FEELING_LABELS, GENDER_LABELS, RELATION_LABELS, TRAIT_LABELS } from '@/lib/constants/labels';
+import { DeskPanel } from '@/components/room/desk-panel';
+import { OfficePanelShell } from '@/components/room/office-panel-shell';
 
 // --- (ここから) traits の日本語ラベルと表示用コンポーネント ---
 // 表示用の簡易レーティングボックス
@@ -124,7 +126,9 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
 
 
   return (
-    <div className="space-y-6">
+    <DeskPanel className="mx-auto mt-[clamp(24px,3vw,56px)] w-[min(100%,960px)]">
+      <OfficePanelShell showTitle={false}>
+        <div className="space-y-6">
       {/* --- ヘッダー（ボタン類） --- */}
       <div className="flex items-center justify-between">
         <Button variant="outline" asChild>
@@ -361,6 +365,8 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+        </div>
+      </OfficePanelShell>
+    </DeskPanel>
   );
 }

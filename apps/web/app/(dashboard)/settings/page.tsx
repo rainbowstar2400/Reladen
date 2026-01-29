@@ -9,6 +9,8 @@ import { useAuth } from '@/lib/auth/use-auth';
 import { clearLocalAll } from '@/lib/db-local';
 import { supabaseClient } from '@/lib/db-cloud/supabase';
 import { deleteAccountAction } from '@/app/actions/delete-account';
+import { DeskPanel } from '@/components/room/desk-panel';
+import { OfficePanelShell } from '@/components/room/office-panel-shell';
 
 const ROLLOVERS = ['00:00', '04:00', '05:00', '06:00', '07:00', '08:00'] as const
 
@@ -24,7 +26,9 @@ export default function SettingsPage() {
   const contactUrl = process.env.NEXT_PUBLIC_CONTACT_URL;
 
   return (
-    <div className="space-y-10">
+    <DeskPanel className="mx-auto mt-[clamp(24px,3vw,56px)] w-[min(100%,960px)]">
+      <OfficePanelShell showTitle={false}>
+        <div className="space-y-10">
 
       {/* データ管理 */}
       <section id="data" className="scroll-mt-24">
@@ -184,7 +188,9 @@ export default function SettingsPage() {
           </CardContent></Card>
         </div>
       </section>
-    </div>
+        </div>
+      </OfficePanelShell>
+    </DeskPanel>
   )
 }
 
