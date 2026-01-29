@@ -15,6 +15,73 @@ export type LogDetail = {
   system: string[]
 }
 
+export function LogDetailPanelContent({
+  data,
+  onClose,
+}: {
+  data: LogDetail;
+  onClose?: () => void;
+}) {
+  return (
+    <>
+      <div className="flex items-start justify-between border-b p-4">
+        <div className="text-lg font-medium">{data.title}</div>
+        <div className="flex items-start gap-4">
+          <div className="text-sm text-muted-foreground tabular-nums">
+            {data.date} {data.weekday}&nbsp;
+            {data.time}
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 hover:bg-muted"
+            aria-label="閉じる"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-4 items-start p-4 pb-20">
+          {data.lines.map((line, index) => (
+            <Fragment key={index}>
+              <div className="text-sm font-medium text-foreground text-center py-2 whitespace-nowrap">
+                {line.speaker}
+              </div>
+              <div className="relative max-w-[400px]">
+                <div className="rounded-2xl rounded-tl-sm bg-muted px-4 py-2 text-sm leading-relaxed">
+                  {line.text}
+                </div>
+                <div
+                  className="absolute left-[-6px] top-3 h-0 w-0 border-y-[6px] border-r-[8px] border-y-transparent border-r-muted"
+                  aria-hidden="true"
+                />
+              </div>
+            </Fragment>
+          ))}
+        </div>
+        <div className="mt-6 space-y-3 text-base leading-relaxed text-foreground">
+          {data.system.map((line, index) => (
+            <p key={index}>{line}</p>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-auto flex items-center justify-between gap-2 border-t p-3">
+        <button className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
+          <ChevronLeft className="h-4 w-4" />前の会話
+        </button>
+        <button className="rounded-md border px-3 py-1.5 text-sm" onClick={onClose}>
+          閉じる
+        </button>
+        <button className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
+          次の会話<ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </>
+  )
+}
+
 export default function LogDetailPanel({ open, data }: { open: boolean; data: LogDetail | null }) {
   const router = useRouter()
   useEffect(() => {
@@ -43,60 +110,7 @@ export default function LogDetailPanel({ open, data }: { open: boolean; data: Lo
           role="dialog"
           aria-modal={false}
         >
-          <div className="flex items-start justify-between border-b p-4">
-            <div className="text-lg font-medium">{data.title}</div>
-            <div className="flex items-start gap-4">
-              <div className="text-sm text-muted-foreground tabular-nums">
-                {data.date} {data.weekday}&nbsp;
-                {data.time}
-              </div>
-              <button
-                onClick={() => router.back()}
-                className="rounded-md p-1 hover:bg-muted"
-                aria-label="閉じる"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-
-          <div className="p-4">
-            <div className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-4 items-start p-4 pb-20">
-              {data.lines.map((line, index) => (
-                <Fragment key={index}>
-                  <div className="text-sm font-medium text-foreground text-center py-2 whitespace-nowrap">
-                    {line.speaker}
-                  </div>
-                  <div className="relative max-w-[400px]">
-                    <div className="rounded-2xl rounded-tl-sm bg-muted px-4 py-2 text-sm leading-relaxed">
-                      {line.text}
-                    </div>
-                    <div
-                      className="absolute left-[-6px] top-3 h-0 w-0 border-y-[6px] border-r-[8px] border-y-transparent border-r-muted"
-                      aria-hidden="true"
-                    />
-                  </div>
-                </Fragment>
-              ))}
-            </div>
-            <div className="mt-6 space-y-3 text-base leading-relaxed text-foreground">
-              {data.system.map((line, index) => (
-                <p key={index}>{line}</p>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-auto flex items-center justify-between gap-2 border-t p-3">
-            <button className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-              <ChevronLeft className="h-4 w-4" />前の会話
-            </button>
-            <button className="rounded-md border px-3 py-1.5 text-sm" onClick={() => router.back()}>
-              閉じる
-            </button>
-            <button className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-              次の会話<ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          <LogDetailPanelContent data={data} onClose={() => router.back()} />
         </motion.aside>
       </div>
     </AnimatePresence>
