@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ResidentForm } from '@/components/forms/resident-form';
 import { useRouter } from 'next/navigation';
 import { DeskPanel } from '@/components/room/desk-panel';
@@ -12,14 +12,14 @@ export default function NewResidentPage() {
   return (
     <DeskPanel className="mx-auto mt-[clamp(24px,3vw,56px)] w-[min(100%,960px)]">
       <OfficePanelShell title="住人を追加">
-        <Card>
-          <CardHeader>
+        <div className="space-y-4">
+          <CardHeader className="px-0">
             <CardTitle>住人を追加</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-0">
             <ResidentForm onSubmitted={() => router.push('/office/residents')} />
           </CardContent>
-        </Card>
+        </div>
       </OfficePanelShell>
     </DeskPanel>
   );

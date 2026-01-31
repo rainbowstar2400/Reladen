@@ -161,9 +161,9 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
   const uiDisabled = isMutating || isEditingAny;
 
   return (
-    <Card>
+    <div className="space-y-4">
       {/* <CardHeader> (Tabs 側で表示) </CardHeader> */}
-      <CardContent className="space-y-4 pt-6">
+      <CardContent className="space-y-4 px-0 pt-2">
 
         {/* ローディング表示 */}
         {isLoading && (
@@ -367,7 +367,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
           </Button>
         </div>
       </CardContent>
-    </Card>
+    </div>
   );
 }
 

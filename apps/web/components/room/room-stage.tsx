@@ -37,7 +37,7 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
   const deskSlideSeconds = 0.45;
   const deskContentFadeSeconds = 0.2;
   const deskSlideStartDelaySeconds = 0.3;
-  const [deskReady, setDeskReady] = useState(activeFace === 'front');
+  const [deskReady, setDeskReady] = useState(true);
   const [deskView, setDeskView] = useState(isDeskMode);
   const [deskContentHidden, setDeskContentHidden] = useState(false);
   const [deskExitToHome, setDeskExitToHome] = useState(false);

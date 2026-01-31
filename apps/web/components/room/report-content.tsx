@@ -548,7 +548,7 @@ export function ReportContent() {
           管理室へ
         </Button>
       </div>
-      <Card>
+      <Card className="border-white/55 bg-white/22 shadow-[inset_0_0_18px_rgba(255,255,255,0.22)]">
         <CardContent className="flex flex-wrap items-center gap-3 py-3">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">日付：</span>
@@ -556,7 +556,7 @@ export function ReportContent() {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="rounded-md border bg-background px-2 py-1 text-sm"
+              className="rounded-md border border-white/55 bg-white/18 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -564,7 +564,7 @@ export function ReportContent() {
             <select
               value={charA}
               onChange={(e) => setCharA(e.target.value)}
-              className="rounded-md border bg-background px-2 py-1 text-sm"
+              className="rounded-md border border-white/55 bg-white/18 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
             >
               <option value="">—</option>
               {allCharacters.map((c) => (
@@ -576,7 +576,7 @@ export function ReportContent() {
             <select
               value={charB}
               onChange={(e) => setCharB(e.target.value)}
-              className="rounded-md border bg-background px-2 py-1 text-sm"
+              className="rounded-md border border-white/55 bg-white/18 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
             >
               <option value="">—</option>
               {allCharacters.map((c) => (
@@ -591,7 +591,7 @@ export function ReportContent() {
             <select
               value={kind}
               onChange={(e) => setKind(e.target.value as ChangeKindFilter)}
-              className="rounded-md border bg-background px-2 py-1 text-sm"
+              className="rounded-md border border-white/55 bg-white/18 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
             >
               <option value="">—</option>
               {KINDS.map((k) => (
@@ -647,7 +647,7 @@ export function ReportContent() {
                       }
                     }}
                   >
-                    <div className="flex items-start justify-between rounded-2xl border px-4 py-3 hover:bg-muted/50">
+                    <div className="flex items-start justify-between rounded-2xl border border-white/60 bg-white/26 px-4 py-3 shadow-[inset_0_0_18px_rgba(255,255,255,0.24)] transition hover:bg-white/30">
                       <div className="space-y-2">
                         <p>{it.text}</p>
                         <div className="min-h-6 flex flex-wrap gap-2">
@@ -702,7 +702,7 @@ export function ReportContent() {
         </div>
 
         {loading && (
-          <div className="absolute inset-0 z-10 grid place-items-center bg-background/60 backdrop-blur-sm">
+          <div className="absolute inset-0 z-10 grid place-items-center bg-black/30 backdrop-blur-sm">
             <p className="text-sm text-muted-foreground">読み込み中…</p>
           </div>
         )}
@@ -713,7 +713,7 @@ export function ReportContent() {
         {panelMode !== 'none' && (
           <>
             <motion.div
-              className="absolute z-20 rounded-[26px] bg-white/15 backdrop-blur-[6px]"
+              className="absolute z-20 rounded-[26px] bg-white/22 backdrop-blur-[6px]"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -725,7 +725,7 @@ export function ReportContent() {
               animate={{ x: '-16px' }}
               exit={{ x: '100%' }}
               transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
-              className="absolute inset-y-0 right-0 z-30 w-full max-w-[560px] rounded-[24px] border border-white/60 bg-white/25 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md"
+              className="absolute inset-y-0 right-0 z-30 w-full max-w-[560px] rounded-[24px] border border-white/65 bg-white/30 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md"
             >
               {panelMode === 'log' && logDetail && (
                 <LogDetailPanelContent data={logDetail} onClose={closePanel} />

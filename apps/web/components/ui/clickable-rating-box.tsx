@@ -56,11 +56,10 @@ export function ClickableRatingBox({ value, onChange }: Props) {
           key={num}
           className={cn(
             'flex-1 select-none py-2 text-center text-sm font-medium',
-            index > 0 && 'border-l border-border', // shadcn/ui の border 色
-            // shadcn/ui のテーマ色に合わせて調整
+            index > 0 && 'border-l border-white/40',
             value === num
-              ? 'bg-primary text-primary-foreground' // 選択中のスタイル
-              : 'bg-background text-foreground hover:bg-muted', // 未選択のスタイル
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-white/12 text-black/80 hover:bg-white/20'
           )}
           onClick={(e) => handleClickOnBox(e, num)}
           role="radio"
