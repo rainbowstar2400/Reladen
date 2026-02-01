@@ -19,6 +19,7 @@ import { LogDetailPanelContent, type LogDetail } from '@/components/logs/log-det
 import { ConsultDetailPanelContent, type ConsultDetail } from '@/components/consults/consult-detail-panel';
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage';
 import { useSync } from '@/lib/sync/use-sync';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const notoSans = Noto_Sans_JP({
   weight: ['300', '400', '500', '600'],
@@ -37,15 +38,16 @@ type ResidentStatusItem = {
   id: string;
   name: string;
   tone: string;
+  trustToPlayer?: number;
 };
 
 type HomePanelMode = 'none' | 'right-detail' | 'right-peek' | 'popup-consult';
 
 const RESIDENT_STATUS_SAMPLE: ResidentStatusItem[] = [
-  { id: 'A', name: 'ハル', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]' },
-  { id: 'B', name: 'ミオ', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]' },
-  { id: 'C', name: 'コウ', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]' },
-  { id: 'D', name: 'レイ', tone: 'bg-[#3a7bd5] shadow-[0_0_8px_rgba(58,123,213,0.6)]' },
+  { id: 'A', name: 'ハル', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]', trustToPlayer: 50 },
+  { id: 'B', name: 'ミオ', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]', trustToPlayer: 45 },
+  { id: 'C', name: 'コウ', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]', trustToPlayer: 60 },
+  { id: 'D', name: 'レイ', tone: 'bg-[#3a7bd5] shadow-[0_0_8px_rgba(58,123,213,0.6)]', trustToPlayer: 55 },
 ];
 
 function filterRecentNotifications(notifications: NotificationRecord[]) {
@@ -113,6 +115,8 @@ export function HomeContent() {
   const [peekInteraction, setPeekInteraction] = useState<{ partnerName: string; kind: string } | null>(
     null
   );
+  const [sortKey, setSortKey] = useState<'name' | 'trust'>('name');
+  const [searchTerm, setSearchTerm] = useState('');
   const [conversationLineMap, setConversationLineMap] = useState<
     Record<string, { speaker: string; text: string }[]>
   >({});
@@ -146,8 +150,24 @@ export function HomeContent() {
       id: r.id,
       name: r.name ?? '住人',
       tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]',
+      trustToPlayer: r.trustToPlayer ?? 0,
     }));
   }, [residents]);
+  const filteredResidentStatusList = useMemo(() => {
+    const term = searchTerm.trim();
+    let list = residentStatusList;
+    if (term) {
+      list = list.filter((item) => item.name.includes(term));
+    }
+    if (sortKey === 'trust') {
+      list = [...list].sort(
+        (a, b) => (b.trustToPlayer ?? 0) - (a.trustToPlayer ?? 0)
+      );
+    } else {
+      list = [...list].sort((a, b) => a.name.localeCompare(b.name, 'ja-JP'));
+    }
+    return list;
+  }, [residentStatusList, searchTerm, sortKey]);
 
   const weatherLabel = weatherState ? WEATHER_LABELS[weatherState.current.kind as WeatherKind] : '---';
   const weatherComment = useMemo(() => {
@@ -252,9 +272,6 @@ export function HomeContent() {
   const openConsult = useCallback(
     (n: NotificationRecord) => {
       try {
-        if (n.status !== 'read') {
-          markRead.mutate(n.id);
-        }
         const consultId =
           (n as any).linkedConsultId ?? (n as any)?.payload?.consultId ?? (n as any)?.consultId;
         if (!consultId) return;
@@ -266,7 +283,7 @@ export function HomeContent() {
         // noop
       }
     },
-    [markRead]
+    []
   );
 
   const closePanel = useCallback(() => {
@@ -552,8 +569,16 @@ export function HomeContent() {
       } catch {
         // noop
       }
+      const notif = consultNotifications.find(
+        (n) =>
+          (n as any).linkedConsultId === activeConsultId ||
+          (n as any).linkedEventId === activeConsultId
+      );
+      if (notif && notif.status !== 'read') {
+        markRead.mutate(notif.id);
+      }
     },
-    [activeConsultId, sync]
+    [activeConsultId, consultNotifications, markRead, sync]
   );
 
   const navigateDesk = useCallback(
@@ -663,7 +688,10 @@ export function HomeContent() {
                         <button
                           type="button"
                           onClick={() => openConversation(n)}
-                          className="text-[14px] text-black/60 transition hover:translate-x-0.5"
+                          className={
+                            'text-[14px] text-black/60 transition hover:translate-x-0.5 ' +
+                            (n.status === 'unread' ? 'underline underline-offset-4' : '')
+                          }
                         >
                           見てみる &gt;
                         </button>
@@ -737,7 +765,10 @@ export function HomeContent() {
                     <button
                       type="button"
                       onClick={() => openConsult(n)}
-                      className="justify-self-end text-[14px] text-black/60 transition hover:translate-x-0.5"
+                      className={
+                        'justify-self-end text-[14px] text-black/60 transition hover:translate-x-0.5 ' +
+                        (n.status === 'unread' ? 'underline underline-offset-4' : '')
+                      }
                     >
                       回答する &gt;
                     </button>
@@ -754,22 +785,27 @@ export function HomeContent() {
             title="みんなの様子"
             right={
               <div className="flex items-center gap-2">
-                <button
-                  className="rounded-[10px] border border-black/10 bg-white/55 px-3 py-1 text-[13px] font-medium transition hover:-translate-y-0.5 hover:bg-white/75"
-                  type="button"
-                >
-                  並び替え
-                </button>
+                <Select value={sortKey} onValueChange={(value) => setSortKey(value as 'name' | 'trust')}>
+                  <SelectTrigger className="h-8 w-[100px] rounded-[10px] border border-black/10 bg-white/55 px-3 text-[13px] font-medium text-slate-600">
+                    <SelectValue placeholder="並び替え" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">名前順</SelectItem>
+                    <SelectItem value="trust">信頼度順</SelectItem>
+                  </SelectContent>
+                </Select>
                 <input
-                  className="w-20 rounded-[10px] border border-black/10 bg-white/60 px-3 py-1 text-[13px]"
+                  className="w-24 rounded-[10px] border border-black/10 bg-white/60 px-3 py-1 text-[13px]"
                   placeholder="検索"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
                 />
               </div>
             }
           />
 
           <div className="flex flex-col gap-3">
-            {residentStatusList.map((item) => (
+            {filteredResidentStatusList.map((item) => (
               <div
                 key={item.id}
                 className="grid grid-cols-[20px_1fr_auto] items-center gap-2 rounded-xl border border-white/55 bg-white/25 px-3 py-2"
