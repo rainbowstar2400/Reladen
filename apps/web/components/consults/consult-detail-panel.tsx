@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, ChevronLeft, ChevronRight, Check } from 'lucide-react'
+import { X, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 
@@ -91,17 +91,7 @@ export function ConsultDetailPanelContent({
       {/* 本文 */}
       <div className="space-y-4 p-4">
         {/* 相談フキダシ */}
-        <div className="flex items-center gap-3">
-          <div className="shrink-0 whitespace-nowrap text-right text-sm text-slate-600">{data.prompt.speaker}</div>
-          <div className="relative max-w-[420px]">
-            <div
-              className="rounded-[14px] px-[14px] py-[10px] text-sm leading-relaxed text-slate-700"
-              style={{ border: `2px solid ${bubbleBorder}`, backgroundColor: bubbleBg }}
-            >
-              {data.prompt.text}
-            </div>
-          </div>
-        </div>
+        <div className="text-base leading-relaxed text-slate-700">{data.prompt.text}</div>
 
         {/* 選択肢 */}
         <div className="mt-2 space-y-2">
@@ -115,10 +105,10 @@ export function ConsultDetailPanelContent({
                 disabled={answered} // 回答確定後は変更不可
                 onClick={() => setPicked(c.id)}
                 className={[
-                  'w-full rounded-md border px-3 py-1.5 text-sm transition',
-                  answered ? 'cursor-not-allowed' : 'hover:bg-muted',
+                  'w-full rounded-md border border-slate-300/80 bg-white/40 px-3 py-1.5 text-sm text-slate-700 transition',
+                  answered ? 'cursor-not-allowed' : 'hover:bg-white/55',
                   !answered && isPicked ? 'ring-2 ring-ring' : '',
-                  answered && isCommitted ? 'border-foreground/60 bg-muted' : '',
+                  answered && isCommitted ? 'border-slate-500/70 bg-white/65' : '',
                 ].join(' ')}
                 aria-pressed={!answered && isPicked}
                 aria-label={
@@ -129,7 +119,7 @@ export function ConsultDetailPanelContent({
                 <div className="flex items-center justify-between">
                   <span>{c.label}</span>
                   {isCommitted && (
-                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1 text-xs text-slate-600">
                       <Check className="h-4 w-4" />
                       あなたの回答
                     </span>
@@ -151,44 +141,14 @@ export function ConsultDetailPanelContent({
 
         {/* 住人の返答（確定後） */}
         {reply && (
-          <div className="mt-4 flex items-center gap-3" aria-live="polite">
-            <div className="shrink-0 whitespace-nowrap text-right text-sm text-slate-600">{reply.speaker}</div>
-            <div className="relative max-w-[420px]">
-              {/* 外側（三角：枠色） */}
-              <div
-                className="absolute left-[-24px] top-1/2 h-0 w-0 -translate-y-1/2 border-[12px] border-transparent"
-                style={{ borderRightColor: bubbleBorder, zIndex: 1 }}
-              />
-              {/* 内側（三角：背景色） */}
-              <div
-                className="absolute left-[-23px] top-1/2 h-0 w-0 -translate-y-1/2 border-[11px] border-transparent"
-                style={{ borderRightColor: bubbleBg, zIndex: 2 }}
-              />
-            </div>
-            <div className="relative max-w-[420px]">
-              <div
-                className="rounded-[14px] px-[14px] py-[10px] text-sm leading-relaxed text-slate-700"
-                style={{ border: `2px solid ${bubbleBorder}`, backgroundColor: bubbleBg }}
-              >
-                {reply.text}
-              </div>
-              {/* 外側（三角：枠色） */}
-              <div
-                className="absolute left-[-24px] top-1/2 h-0 w-0 -translate-y-1/2 border-[12px] border-transparent"
-                style={{ borderRightColor: bubbleBorder, zIndex: 1 }}
-              />
-              {/* 内側（三角：背景色） */}
-              <div
-                className="absolute left-[-23px] top-1/2 h-0 w-0 -translate-y-1/2 border-[11px] border-transparent"
-                style={{ borderRightColor: bubbleBg, zIndex: 2 }}
-              />
-            </div>
+          <div className="mt-4 text-base leading-relaxed text-slate-700" aria-live="polite">
+            {reply.text}
           </div>
         )}
 
         {/* SYSTEM 行（確定後） */}
         {answered && data.systemAfter && data.systemAfter.length > 0 && (
-          <div className="mt-6 space-y-2 text-sm text-muted-foreground">
+          <div className="mt-6 space-y-2 text-base text-muted-foreground">
             {data.systemAfter.map((s, i) => (
               <p key={i}>{s}</p>
             ))}
@@ -196,20 +156,6 @@ export function ConsultDetailPanelContent({
         )}
       </div>
 
-      {/* フッタ（前/閉じる/次） */}
-      <div className="mt-auto flex items-center justify-between gap-2 border-t p-3">
-        <button className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-          <ChevronLeft className="h-4 w-4" />
-          前の相談
-        </button>
-        <button className="rounded-md border px-3 py-1.5 text-sm" onClick={onClose ?? (() => router.back())}>
-          閉じる
-        </button>
-        <button className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-          次の相談
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
     </>
   )
 }

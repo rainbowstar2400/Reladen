@@ -2,16 +2,22 @@
 
 import { Noto_Sans_JP } from 'next/font/google';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { fetchEventById, useMarkNotificationRead, useNotifications } from '@/lib/data/notifications';
 import type { NotificationRecord } from '@repo/shared/types/conversation';
+import type { EventLogStrict } from '@repo/shared/types/conversation';
 import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 import { useWorldWeather } from '@/lib/data/use-world-weather';
 import type { WeatherKind } from '@repo/shared/types';
+import { listLocal } from '@/lib/db-local';
 import { GlassPanel } from '@/components/ui-demo/glass-panel';
 import { PanelHeader } from '@/components/ui-demo/panel-header';
 import { useDeskTransition } from '@/components/room/room-transition-context';
+import { LogDetailPanelContent, type LogDetail } from '@/components/logs/log-detail-panel';
+import { ConsultDetailPanelContent, type ConsultDetail } from '@/components/consults/consult-detail-panel';
+import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage';
+import { useSync } from '@/lib/sync/use-sync';
 
 const notoSans = Noto_Sans_JP({
   weight: ['300', '400', '500', '600'],
@@ -93,10 +99,16 @@ export function HomeContent() {
   const { data: weatherState } = useWorldWeather();
   const { data: notifications = [], isLoading: isLoadingNotifications } = useNotifications();
   const markRead = useMarkNotificationRead();
+  const { sync } = useSync();
   const [now, setNow] = useState(() => new Date());
   const [panelMode, setPanelMode] = useState<HomePanelMode>('none');
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeConsultId, setActiveConsultId] = useState<string | null>(null);
+  const [logDetail, setLogDetail] = useState<LogDetail | null>(null);
+  const [consultDetail, setConsultDetail] = useState<ConsultDetail | null>(null);
+  const [conversationLineMap, setConversationLineMap] = useState<
+    Record<string, { speaker: string; text: string }[]>
+  >({});
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -130,16 +142,45 @@ export function HomeContent() {
     return name ? `${name}「${weatherState.currentComment.text}」` : weatherState.currentComment.text;
   }, [weatherState, residentNameMap]);
 
-  const conversationCards = useMemo(() => {
-    const items = conversationNotifications.slice(0, 4);
-    const cards: NotificationRecord[][] = [];
-    for (let i = 0; i < items.length; i += 2) {
-      cards.push(items.slice(i, i + 2));
-    }
-    return cards;
-  }, [conversationNotifications]);
+  const conversationCards = useMemo(
+    () => conversationNotifications.slice(0, 4),
+    [conversationNotifications]
+  );
 
   const consultCards = useMemo(() => consultNotifications.slice(0, 2), [consultNotifications]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const items = conversationNotifications.slice(0, 4);
+      const results = await Promise.all(
+        items.map(async (n) => {
+          const eventId = n.linkedEventId ?? (n as any)?.payload?.eventId ?? (n as any)?.eventId;
+          if (!eventId) return [null, null] as const;
+          const ev = await fetchEventById(eventId);
+          if (!ev || !isEventLogStrict(ev) || ev.kind !== 'conversation' || !isConversationPayload(ev.payload)) {
+            return [eventId, null] as const;
+          }
+          const lines = ev.payload.lines
+            .map((ln) => ({
+              speaker: replaceResidentIds(ln.speaker, residentNameMap),
+              text: replaceResidentIds(ln.text, residentNameMap),
+            }))
+            .slice(0, 2);
+          return [eventId, lines] as const;
+        })
+      );
+      if (!alive) return;
+      const next: Record<string, { speaker: string; text: string }[]> = {};
+      results.forEach(([id, lines]) => {
+        if (id && lines) next[id] = lines;
+      });
+      setConversationLineMap(next);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [conversationNotifications, residentNameMap]);
 
   const slideAmount = 'clamp(480px, 30vw, 640px)';
   const panelVars = {
@@ -163,7 +204,10 @@ export function HomeContent() {
   const isPopupConsult = panelMode === 'popup-consult';
   const showFloatingLayer = isRightDetail || isRightPeek;
   const floatingPanelStyle = isRightDetail
-    ? { left: 'calc(var(--panel-left) + var(--panel-gap))', width: 'var(--panel-slide)' }
+    ? {
+        left: 'calc(var(--panel-left) + var(--panel-gap))',
+        width: 'calc(var(--panel-slide) - var(--panel-gap))',
+      }
     : isRightPeek
       ? { right: 0, width: 'var(--panel-slide)' }
       : undefined;
@@ -179,6 +223,8 @@ export function HomeContent() {
         const ev = await fetchEventById(eventId);
         if (!ev) return;
         setActiveConversationId(ev.id);
+        setActiveConsultId(null);
+        setConsultDetail(null);
         setPanelMode('right-detail');
       } catch (e) {
         // noop
@@ -197,12 +243,250 @@ export function HomeContent() {
           (n as any).linkedConsultId ?? (n as any)?.payload?.consultId ?? (n as any)?.consultId;
         if (!consultId) return;
         setActiveConsultId(String(consultId));
+        setActiveConversationId(null);
+        setLogDetail(null);
         setPanelMode('popup-consult');
       } catch (e) {
         // noop
       }
     },
     [markRead]
+  );
+
+  const closePanel = useCallback(() => {
+    setPanelMode('none');
+    setActiveConversationId(null);
+    setActiveConsultId(null);
+    setLogDetail(null);
+    setConsultDetail(null);
+  }, []);
+
+  function formatDateParts(iso?: string) {
+    const d = iso ? new Date(iso) : new Date();
+    const date = d.toLocaleDateString('ja-JP');
+    const time = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    const weekday = new Intl.DateTimeFormat('ja-JP', { weekday: 'short' }).format(d);
+    return { date, weekday, time };
+  }
+
+  function translateImpressionLabel(label: string) {
+    const dictionary: Record<string, string> = {
+      dislike: '苦手',
+      maybe_dislike: '嫌いかも',
+      awkward: '気まずい',
+      none: 'なし',
+      curious: '気になる',
+      maybe_like: '好きかも',
+      like: '好き',
+    };
+    return dictionary[label] ?? label;
+  }
+
+  function parseSystemLine(rawLine: string, nameMap: Record<string, string>): string[] {
+    if (!rawLine) return [];
+    const replaced = replaceResidentIds(rawLine, nameMap);
+    if (!replaced.startsWith('SYSTEM: ')) return [replaced];
+    const body = replaced.replace(/^SYSTEM:\s*/, '');
+    const segments = body.split(' / ').map((segment) => segment.trim()).filter(Boolean);
+    const messages: string[] = [];
+    segments.forEach((segment) => {
+      if (segment.includes('Belief更新')) return;
+      const favorMatch = segment.match(/^(.*?)→(.*?)\s*好感度:\s*(↑|↓)/);
+      if (favorMatch) {
+        const [, from, to, direction] = favorMatch;
+        const change = direction === '↑' ? '上昇しました。' : '下降しました。';
+        messages.push(`${from}から${to}への好感度が${change}`);
+        return;
+      }
+      const impressionMatch = segment.match(/^(.*?)→(.*?)\s*印象:\s*([^→]+)→(.+)$/);
+      if (impressionMatch) {
+        const [, from, to, next] = impressionMatch;
+        const translated = translateImpressionLabel(next.trim());
+        messages.push(`${from}から${to}への印象が「${translated}」に変化しました。`);
+        return;
+      }
+      messages.push(segment);
+    });
+    return messages;
+  }
+
+  function isEventLogStrict(x: unknown): x is EventLogStrict {
+    const e = x as EventLogStrict | undefined;
+    return !!e && typeof e === 'object' && 'kind' in e && 'payload' in e;
+  }
+
+  function isConversationPayload(p: any): p is {
+    threadId: string;
+    participants: [string, string];
+    lines: { speaker: string; text: string }[];
+    deltas?: any;
+    systemLine?: string;
+    topic?: string;
+  } {
+    return !!p
+      && typeof p.threadId === 'string'
+      && Array.isArray(p.participants)
+      && p.participants.length === 2
+      && Array.isArray(p.lines);
+  }
+
+  function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
+    const src = apiData?.consult ?? apiData ?? {};
+    const p = src?.payload ?? src?.data ?? src ?? {};
+    const updatedISO: string | undefined =
+      src?.updated_at || p?.updated_at || p?.occurredAt || undefined;
+    const d = updatedISO ? new Date(updatedISO) : new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
+    const participantFallback =
+      Array.isArray(p?.participants) && p.participants.length > 0 ? p.participants[0] : undefined;
+    const prompt = {
+      speaker: p?.speaker ?? p?.residentName ?? p?.from ?? participantFallback ?? 'Someone',
+      text: p?.text ?? p?.content ?? p?.body ?? '',
+    };
+    const choicesRaw: any[] =
+      Array.isArray(p?.choices) ? p.choices : Array.isArray(p?.options) ? p.options : [];
+    const choices: ConsultDetail['choices'] = choicesRaw.map((c, idx) => ({
+      id: String(c?.id ?? c?.value ?? `c${idx + 1}`),
+      label: String(c?.label ?? c?.text ?? c ?? `選択肢 ${idx + 1}`),
+    }));
+    const replyEntries = p?.replyByChoice ?? p?.replies ?? {};
+    const replyByChoice: ConsultDetail['replyByChoice'] = Object.fromEntries(
+      Object.entries(replyEntries).map(([k, v]) => [String(k), String(v as any)])
+    );
+    const systemAfter: string[] = Array.isArray(p?.systemAfter)
+      ? p.systemAfter.map(String)
+      : [];
+    return {
+      id: src?.id ?? id,
+      title: p?.title ?? p?.subject ?? `${prompt.speaker}からの相談`,
+      date: `${yyyy}/${mm}/${dd}`,
+      weekday,
+      time: `${hh}:${mi}`,
+      prompt,
+      choices,
+      replyByChoice,
+      systemAfter,
+      selectedChoiceId: null,
+    };
+  }
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!activeConversationId) {
+        if (alive) setLogDetail(null);
+        return;
+      }
+      const ev = await fetchEventById(activeConversationId);
+      if (!alive) return;
+      if (!ev || !isEventLogStrict(ev) || ev.kind !== 'conversation' || !isConversationPayload(ev.payload)) {
+        setLogDetail(null);
+        return;
+      }
+      const p = ev.payload;
+      const { date, weekday, time } = formatDateParts((ev as any).updated_at);
+      const participantNames: [string, string] = [
+        residentNameMap[p.participants[0]] ?? p.participants[0],
+        residentNameMap[p.participants[1]] ?? p.participants[1],
+      ];
+      const title = p.topic ?? `${participantNames[0]} と ${participantNames[1]} が話している。`;
+      const lines: LogDetail['lines'] = p.lines.map((ln) => ({
+        speaker: residentNameMap[ln.speaker] ?? replaceResidentIds(ln.speaker, residentNameMap),
+        text: replaceResidentIds(ln.text, residentNameMap),
+      }));
+      const system = p.systemLine ? parseSystemLine(p.systemLine, residentNameMap) : [];
+      const fallbackMessages: string[] = [];
+      const deltas = (p as any)?.deltas ?? {};
+      const pickImpression = (entry: any) => {
+        const st = entry?.impressionState;
+        if (st?.special === 'awkward') return 'awkward';
+        if (st?.base) return String(st.base);
+        if (entry?.impression != null) return String(entry.impression);
+        return null;
+      };
+      const impAB = pickImpression(deltas.aToB ?? {});
+      const impBA = pickImpression(deltas.bToA ?? {});
+      if (impAB) fallbackMessages.push(`${participantNames[0]} から ${participantNames[1]} への印象が ${translateImpressionLabel(impAB)}に変化した。`);
+      if (impBA) fallbackMessages.push(`${participantNames[1]} から ${participantNames[0]} への印象が ${translateImpressionLabel(impBA)}に変化した。`);
+      const systemMessages = (system.length ? system : fallbackMessages).map((line) =>
+        replaceResidentIds(line, residentNameMap)
+      );
+      setLogDetail({
+        id: (ev as any).id,
+        title,
+        date,
+        weekday,
+        time,
+        lines,
+        system: systemMessages,
+      });
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [activeConversationId, residentNameMap]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!activeConsultId) {
+        if (alive) setConsultDetail(null);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/consults/${activeConsultId}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`failed to load consult (${res.status})`);
+        const json = await res.json();
+        if (!alive) return;
+        const base = normalizeToConsultDetail(json, activeConsultId);
+        const mappedSpeaker = residentNameMap[base.prompt.speaker] ?? base.prompt.speaker;
+        const stored = await loadConsultAnswer(base.id);
+        if (!alive) return;
+        setConsultDetail({
+          ...base,
+          prompt: { ...base.prompt, speaker: mappedSpeaker },
+          selectedChoiceId: stored?.selectedChoiceId ?? null,
+        });
+      } catch {
+        try {
+          const localEvents = (await listLocal('events')) as EventLogStrict[];
+          const ev = localEvents.find((item) => item.id === activeConsultId);
+          if (!ev || ev.kind !== 'consult') throw new Error('no local consult');
+          const base = normalizeToConsultDetail(ev, activeConsultId);
+          const mappedSpeaker = residentNameMap[base.prompt.speaker] ?? base.prompt.speaker;
+          if (!alive) return;
+          setConsultDetail({
+            ...base,
+            prompt: { ...base.prompt, speaker: mappedSpeaker },
+            selectedChoiceId: null,
+          });
+        } catch {
+          if (alive) setConsultDetail(null);
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [activeConsultId]);
+
+  const handleConsultDecide = useCallback(
+    async (choiceId: string) => {
+      if (!activeConsultId) return;
+      await saveConsultAnswer(activeConsultId, choiceId);
+      setConsultDetail((prev) => (prev ? { ...prev, selectedChoiceId: choiceId } : prev));
+      try {
+        await sync();
+      } catch {
+        // noop
+      }
+    },
+    [activeConsultId, sync]
   );
 
   const navigateDesk = useCallback(
@@ -262,26 +546,53 @@ export function HomeContent() {
           )}
 
           <div className="space-y-4">
-            {conversationCards.map((card, index) => (
+            {conversationCards.map((n) => (
               <div
-                key={`conversation-card-${index}`}
+                key={`conversation-card-${n.id}`}
                 className="rounded-[14px] border border-white/50 bg-white/25 px-4 py-3 shadow-[inset_0_0_24px_rgba(255,255,255,0.35)]"
+                style={
+                  activeConversationId && (() => {
+                    const linkedEventId =
+                      n.linkedEventId ?? (n as any)?.payload?.eventId ?? (n as any)?.eventId;
+                    return linkedEventId === activeConversationId;
+                  })()
+                    ? {
+                        backgroundColor: 'rgba(255,255,255,0.5)',
+                        boxShadow:
+                          'inset 0 0 24px rgba(255,255,255,0.55), 0 0 0 2px rgba(255,255,255,0.95), 0 12px 24px rgba(6,18,32,0.2)',
+                        border: '2px solid rgba(255,255,255,0.95)',
+                      }
+                    : undefined
+                }
               >
-                {card.map((n, rowIndex) => {
+                {(() => {
                   const title = getNotificationTitle(n, residentNameMap);
-                  const initial = getInitialFromTitle(title);
-                  const message = n.snippet ? replaceResidentIds(n.snippet, residentNameMap) : title;
-                  const time = new Date(n.occurredAt).toLocaleTimeString();
+                  const time = new Date(n.occurredAt).toLocaleTimeString('ja-JP', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  });
+                  const linkedEventId =
+                    n.linkedEventId ?? (n as any)?.payload?.eventId ?? (n as any)?.eventId;
+                  const lines = (linkedEventId && conversationLineMap[linkedEventId])
+                    ? conversationLineMap[linkedEventId]
+                    : [{
+                        speaker: '',
+                        text: n.snippet ? replaceResidentIds(n.snippet, residentNameMap) : title,
+                      }];
                   return (
-                    <div
-                      key={n.id}
-                      className="grid grid-cols-[26px_1fr_auto] items-center gap-[10px] py-[6px] text-[16px] leading-[1.1]"
-                    >
-                      <span className="font-semibold text-[#15324b]">{initial}</span>
-                      <span>{message}</span>
-                      {rowIndex === 0 ? (
+                    <>
+                      <div className="grid grid-cols-[4em_1fr_auto] items-center gap-[10px] px-1 py-[6px] text-[16px] leading-[1.1]">
+                        <span className="overflow-hidden whitespace-nowrap font-semibold text-[#15324b]">
+                          {lines[0]?.speaker ?? ''}
+                        </span>
+                        <span>{lines[0]?.text ?? title}</span>
                         <span className="text-[16px] font-medium text-black/55">{time}</span>
-                      ) : (
+                      </div>
+                      <div className="grid grid-cols-[4em_1fr_auto] items-center gap-[10px] px-1 py-[6px] text-[16px] leading-[1.1]">
+                        <span className="overflow-hidden whitespace-nowrap font-semibold text-[#15324b]">
+                          {lines[1]?.speaker ?? ''}
+                        </span>
+                        <span>{lines[1]?.text ?? ''}</span>
                         <button
                           type="button"
                           onClick={() => openConversation(n)}
@@ -289,10 +600,10 @@ export function HomeContent() {
                         >
                           見てみる &gt;
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    </>
                   );
-                })}
+                })()}
               </div>
             ))}
           </div>
@@ -339,7 +650,10 @@ export function HomeContent() {
             {consultCards.map((n) => {
               const title = getNotificationTitle(n, residentNameMap);
               const name = title.replace('から相談が届きました', '');
-              const time = new Date(n.occurredAt).toLocaleTimeString();
+              const time = new Date(n.occurredAt).toLocaleTimeString('ja-JP', {
+                hour: '2-digit',
+                minute: '2-digit',
+              });
               return (
                 <div
                   key={n.id}
@@ -415,11 +729,66 @@ export function HomeContent() {
             </div>
           )}
 
-          {isPopupConsult && (
-            <div className="pointer-events-none absolute inset-0">
-              <div className="absolute inset-0" />
-            </div>
-          )}
+          <AnimatePresence>
+            {isRightDetail && logDetail && (
+              <>
+                <motion.div
+                  className="absolute inset-0 z-30 rounded-[24px] bg-white/10 backdrop-blur-[6px]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, x: slideAmount }}
+                  exit={{ opacity: 0 }}
+                  onClick={closePanel}
+                />
+                <motion.aside
+                  initial={{ x: 80, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: 80, opacity: 0 }}
+                  transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+                  className="absolute z-40 rounded-[24px] border border-white/60 bg-white/34 text-slate-700 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md"
+                  style={{
+                    ...floatingPanelStyle,
+                    backgroundColor: 'rgba(255,255,255,0.44)',
+                    borderColor: 'rgba(255,255,255,0.7)',
+                  }}
+                >
+                  <LogDetailPanelContent data={logDetail} onClose={closePanel} />
+                </motion.aside>
+              </>
+            )}
+
+            {isPopupConsult && consultDetail && (
+              <>
+                <motion.div
+                  className="absolute inset-0 z-30 rounded-[24px] bg-white/10 backdrop-blur-[6px]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={closePanel}
+                />
+                <motion.div
+                  className="absolute inset-0 z-40 flex items-center justify-center"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <motion.aside
+                    initial={{ y: 24, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 24, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+                    className="w-[min(520px,86vw)] rounded-[24px] border border-white/60 bg-white/30 text-slate-700 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.32)', borderColor: 'rgba(255,255,255,0.65)', marginTop: '15vh' }}
+                  >
+                    <ConsultDetailPanelContent
+                      data={consultDetail}
+                      onDecide={handleConsultDecide}
+                      onClose={closePanel}
+                    />
+                  </motion.aside>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </main>
 

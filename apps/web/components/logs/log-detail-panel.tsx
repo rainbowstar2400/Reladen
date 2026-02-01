@@ -1,7 +1,7 @@
 'use client'
 import { Fragment, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 type Line = { speaker: string; text: string }
@@ -44,15 +44,15 @@ export function LogDetailPanelContent({
       </div>
 
       <div className="p-4">
-        <div className="space-y-4 p-4 pb-20">
+        <div className="space-y-4 p-4">
           {data.lines.map((line, index) => (
             <div key={index} className="flex items-center gap-3">
               <div className="shrink-0 whitespace-nowrap text-right text-sm font-medium text-slate-600">
                 {line.speaker}
               </div>
               <div className="relative max-w-[400px]">
-                                <div
-                  className="rounded-[14px] px-[14px] py-[10px] text-sm leading-relaxed text-slate-700"
+                <div
+                  className="rounded-[14px] px-[14px] py-[10px] text-base leading-relaxed text-slate-700"
                   style={{
                     border: `2px solid ${bubbleBorder}`,
                     boxSizing: 'border-box',
@@ -77,23 +77,13 @@ export function LogDetailPanelContent({
             </div>
           ))}
         </div>
-        <div className="mt-6 space-y-3 text-base leading-relaxed text-foreground">
-          {data.system.map((line, index) => (
-            <p key={index}>{line}</p>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-auto flex items-center justify-between gap-2 border-t p-3">
-        <button className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-          <ChevronLeft className="h-4 w-4" />前の会話
-        </button>
-        <button className="rounded-md border px-3 py-1.5 text-sm" onClick={onClose}>
-          閉じる
-        </button>
-        <button className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-          次の会話<ChevronRight className="h-4 w-4" />
-        </button>
+        {data.system.length > 0 && (
+          <div className="mt-3 space-y-2 px-4 pb-4 text-sm text-slate-700">
+            {data.system.map((line, index) => (
+              <div key={index}>{line}</div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   )

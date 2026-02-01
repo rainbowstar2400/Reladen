@@ -7,18 +7,17 @@ import type { ConversationPayloadStrict } from '@/lib/repos/conversation-repo';
 import { putLocal, listLocal, removeLocal } from '@/lib/db-local';
 import { newId } from '@/lib/newId';
 import type { NotificationRecord, EventLogStrict } from '@repo/shared/types/conversation';
+import type { Resident } from '@/types';
 
 type SeedMessage = { kind: 'info' | 'error'; text: string } | null;
 
-function buildConversationPayload(): ConversationPayloadStrict {
-  const aId = newId();
-  const bId = newId();
+function buildConversationPayload(a: Resident, b: Resident): ConversationPayloadStrict {
   return {
     threadId: newId(),
-    participants: [aId, bId],
+    participants: [a.id, b.id],
     lines: [
-      { speaker: aId, text: '今日はいい天気だね。' },
-      { speaker: bId, text: 'うん、散歩日和。' },
+      { speaker: a.id, text: '今日はいい天気だね。' },
+      { speaker: b.id, text: 'うん、散歩日和。' },
     ],
     meta: {
       tags: ['demo'],
@@ -28,18 +27,18 @@ function buildConversationPayload(): ConversationPayloadStrict {
       aToB: { favor: 1, impression: 'like' },
       bToA: { favor: 0, impression: 'curious' },
     },
-    systemLine: 'A と B が話している。',
+    systemLine: '',
   };
 }
 
-function buildConsultEvent(now: string, participantId: string): EventLogStrict {
+function buildConsultEvent(now: string, participant: Resident): EventLogStrict {
   return {
     id: newId(),
     kind: 'consult',
     updated_at: now,
     deleted: false,
     payload: {
-      title: '相談',
+      title: `${participant.name}からの相談`,
       content: '最近眠れなくて困っています。',
       choices: [
         { id: 'c1', label: '温かい飲み物を試してみる' },
@@ -47,7 +46,7 @@ function buildConsultEvent(now: string, participantId: string): EventLogStrict {
         { id: 'c3', label: '今日は早めに休む' },
       ],
       occurredAt: now,
-      participants: [participantId],
+      participants: [participant.id],
     },
   };
 }
@@ -76,10 +75,42 @@ export default function SeedNotificationsPage() {
   const [message, setMessage] = useState<SeedMessage>(null);
   const [count, setCount] = useState(2);
 
+  const ensureSeedResidents = async () => {
+    const now = new Date().toISOString();
+    const residents = ((await listLocal<Resident>('residents')) ?? []).filter(
+      (item) => !item.deleted
+    );
+    if (residents.length >= 2) return residents;
+
+    const createResident = (name: string): Resident => ({
+      id: newId(),
+      updated_at: now,
+      deleted: false,
+      name,
+      traits: {},
+      trustToPlayer: 0
+    });
+
+    if (residents.length === 0) {
+      const a = createResident('テストA');
+      const b = createResident('テストB');
+      await putLocal('residents', a);
+      await putLocal('residents', b);
+      return [a, b];
+    }
+
+    const extra = createResident('テストB');
+    await putLocal('residents', extra);
+    return [residents[0], extra];
+  };
+
   const seedConversations = async () => {
     try {
+      const residents = await ensureSeedResidents();
       for (let i = 0; i < Math.max(1, count); i += 1) {
-        await createConversationEvent(buildConversationPayload());
+        const a = residents[i % residents.length];
+        const b = residents[(i + 1) % residents.length];
+        await createConversationEvent(buildConversationPayload(a, b));
       }
       setMessage({ kind: 'info', text: '会話通知を追加しました。' });
     } catch (e) {
@@ -89,12 +120,13 @@ export default function SeedNotificationsPage() {
 
   const seedConsults = async () => {
     try {
+      const residents = await ensureSeedResidents();
       for (let i = 0; i < Math.max(1, count); i += 1) {
         const now = new Date().toISOString();
-        const participantId = newId();
-        const ev = buildConsultEvent(now, participantId);
+        const participant = residents[i % residents.length];
+        const ev = buildConsultEvent(now, participant);
         await putLocal('events', ev as any);
-        const notif = buildConsultNotification(ev.id, now, participantId);
+        const notif = buildConsultNotification(ev.id, now, participant.id);
         await putLocal('notifications', notif as any);
       }
       setMessage({ kind: 'info', text: '相談通知を追加しました。' });

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +31,8 @@ type ReportItem = {
   chips: { kind: ChangeKind; label: string }[];
   a?: string;
   b?: string;
+  previewLines?: { speaker: string; text: string }[];
+  consultPreview?: { speaker: string; text: string };
 };
 
 const KINDS: ChangeKind[] = ['好感度', '印象', '関係', '信頼度'];
@@ -138,8 +141,10 @@ function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
   const mi = String(d.getMinutes()).padStart(2, '0');
   const weekday = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
 
+  const participantFallback =
+    Array.isArray(p?.participants) && p.participants.length > 0 ? p.participants[0] : undefined;
   const prompt = {
-    speaker: p?.speaker ?? p?.residentName ?? p?.from ?? 'Someone',
+    speaker: p?.speaker ?? p?.residentName ?? p?.from ?? participantFallback ?? 'Someone',
     text: p?.text ?? p?.content ?? p?.body ?? '',
   };
 
@@ -164,7 +169,7 @@ function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
 
   return {
     id: src?.id ?? id,
-    title: p?.title ?? p?.subject ?? '相談',
+    title: p?.title ?? p?.subject ?? `${prompt.speaker}からの相談`,
     date: `${yyyy}/${mm}/${dd}`,
     weekday,
     time: `${hh}:${mi}`,
@@ -210,6 +215,7 @@ export function ReportContent() {
   const [activeConsultId, setActiveConsultId] = useState<string | null>(null);
   const [logDetail, setLogDetail] = useState<LogDetail | null>(null);
   const [consultDetail, setConsultDetail] = useState<ConsultDetail | null>(null);
+  const [overlayRoot, setOverlayRoot] = useState<HTMLElement | null>(null);
 
   const openLog = useCallback((id: string) => {
     setActiveConsultId(null);
@@ -252,6 +258,12 @@ export function ReportContent() {
   };
 
   const [convItems, setConvItems] = useState<ReportItem[]>([]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const node = document.getElementById('desk-panel-overlay');
+    setOverlayRoot(node);
+  }, []);
 
   const buildReportItems = useCallback(
     (events: EventLogStrict[]): ReportItem[] => {
@@ -350,6 +362,27 @@ export function ReportContent() {
         const category: ReportItem['category'] =
           ev.kind === 'consult' ? 'consult' : ev.kind === 'conversation' ? 'conversation' : 'other';
 
+        const previewLines =
+          ev.kind === 'conversation' && Array.isArray((ev as any)?.payload?.lines)
+            ? (ev as any).payload.lines.slice(0, 2).map((line: any) => ({
+                speaker: residentNameMap[line.speaker] ?? line.speaker ?? '',
+                text: replaceResidentIds(line.text ?? '', residentNameMap),
+              }))
+            : undefined;
+        const consultPreview =
+          ev.kind === 'consult'
+            ? {
+                speaker: displayA || '相談者',
+                text: replaceResidentIds(
+                  (ev as any)?.payload?.content ??
+                    (ev as any)?.payload?.text ??
+                    (ev as any)?.payload?.body ??
+                    '',
+                  residentNameMap
+                ),
+              }
+            : undefined;
+
         return {
           id: ev.id,
           at: occurred,
@@ -358,6 +391,8 @@ export function ReportContent() {
           chips,
           a,
           b,
+          previewLines,
+          consultPreview,
         };
       });
     },
@@ -419,10 +454,10 @@ export function ReportContent() {
         residentNameMap[p.participants[0]] ?? p.participants[0],
         residentNameMap[p.participants[1]] ?? p.participants[1],
       ];
-      const title = p.topic ?? `${participantNames[0]} と ${participantNames[1]} の会話`;
+      const title = p.topic ?? `${participantNames[0]} と ${participantNames[1]} が話している。`;
       const lines: LogDetail['lines'] = p.lines.map((ln) => ({
-        speaker: residentNameMap[ln.speaker] ?? ln.speaker,
-        text: ln.text,
+        speaker: residentNameMap[ln.speaker] ?? replaceResidentIds(ln.speaker, residentNameMap),
+        text: replaceResidentIds(ln.text, residentNameMap),
       }));
       const system = p.systemLine ? parseSystemLine(p.systemLine, residentNameMap) : [];
       const fallbackMessages: string[] = [];
@@ -436,9 +471,11 @@ export function ReportContent() {
       };
       const impAB = pickImpression(deltas.aToB ?? {});
       const impBA = pickImpression(deltas.bToA ?? {});
-      if (impAB) fallbackMessages.push(`${participantNames[0]}から${participantNames[1]}への印象: ${translateImpressionLabel(impAB)}`);
-      if (impBA) fallbackMessages.push(`${participantNames[1]}から${participantNames[0]}への印象: ${translateImpressionLabel(impBA)}`);
-      const systemMessages = system.length ? system : fallbackMessages;
+      if (impAB) fallbackMessages.push(`${participantNames[0]}から${participantNames[1]}への印象が ${translateImpressionLabel(impAB)}に変化した。`);
+      if (impBA) fallbackMessages.push(`${participantNames[1]}から${participantNames[0]}への印象が ${translateImpressionLabel(impBA)}に変化した。`);
+      const systemMessages = (system.length ? system : fallbackMessages).map((line) =>
+        replaceResidentIds(line, residentNameMap)
+      );
 
       setLogDetail({
         id: (ev as any).id,
@@ -468,14 +505,38 @@ export function ReportContent() {
         const json = await res.json();
         if (!alive) return;
         const base = normalizeToConsultDetail(json, activeConsultId);
+        const mappedSpeaker = residentNameMap[base.prompt.speaker] ?? base.prompt.speaker;
+        const mappedSystemAfter = base.systemAfter?.map((line) =>
+          replaceResidentIds(line, residentNameMap)
+        );
         const stored = await loadConsultAnswer(base.id);
         if (!alive) return;
         setConsultDetail({
           ...base,
+          prompt: { ...base.prompt, speaker: mappedSpeaker },
+          systemAfter: mappedSystemAfter ?? base.systemAfter,
           selectedChoiceId: stored?.selectedChoiceId ?? null,
         });
       } catch {
-        if (alive) setConsultDetail(null);
+        try {
+          const localEvents = (await listLocal('events')) as EventLogStrict[];
+          const ev = localEvents.find((item) => item.id === activeConsultId);
+          if (!ev || ev.kind !== 'consult') throw new Error('no local consult');
+          const base = normalizeToConsultDetail(ev, activeConsultId);
+          const mappedSpeaker = residentNameMap[base.prompt.speaker] ?? base.prompt.speaker;
+          const mappedSystemAfter = base.systemAfter?.map((line) =>
+            replaceResidentIds(line, residentNameMap)
+          );
+          if (!alive) return;
+          setConsultDetail({
+            ...base,
+            prompt: { ...base.prompt, speaker: mappedSpeaker },
+            systemAfter: mappedSystemAfter ?? base.systemAfter,
+            selectedChoiceId: null,
+          });
+        } catch {
+          if (alive) setConsultDetail(null);
+        }
       }
     })();
     return () => {
@@ -708,7 +769,24 @@ export function ReportContent() {
                       style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
                     >
                       <div className="space-y-2">
-                        <p>{it.text}</p>
+                        {it.category === 'conversation' && it.previewLines && it.previewLines.length > 0 ? (
+                          <div className="space-y-1 text-base text-white">
+                            {it.previewLines.map((line, idx) => (
+                              <div key={idx} className="grid grid-cols-[3.5em_1fr] items-start gap-2">
+                                <span className="overflow-hidden whitespace-nowrap font-medium text-white/90">
+                                  {line.speaker}
+                                </span>
+                                <span>「{line.text}」</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : it.category === 'consult' && it.consultPreview?.text ? (
+                          <div className="text-base text-white">
+                            {it.consultPreview.speaker}「{it.consultPreview.text}」
+                          </div>
+                        ) : (
+                          <p className="text-slate-700">{it.text}</p>
+                        )}
                         <div className="min-h-6 flex flex-wrap gap-2">
                           {it.chips?.map((c, idx) => (
                             <Badge
@@ -797,43 +875,45 @@ export function ReportContent() {
 
       </div>
 
-      <AnimatePresence>
-        {panelMode !== 'none' && (
-          <>
-            <motion.div
-              className="absolute z-20 rounded-[26px] bg-white/10 backdrop-blur-[6px]"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={closePanel}
-              style={{ top: '-64px', right: '-40px', bottom: '-64px', left: '-40px' }}
-            />
-            <motion.aside
-              initial={{ x: '100%' }}
-              animate={{ x: '-16px' }}
-              exit={{ x: '100%' }}
-              transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
-              className="absolute inset-y-0 right-0 z-30 w-full max-w-[560px] rounded-[24px] border border-white/70 bg-white/34 text-slate-700 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md [&_*]:text-slate-700 [&_strong]:text-slate-800 [&_.text-white]:text-slate-700 [&_.text-muted-foreground]:text-slate-500 [&_.text-foreground]:text-slate-700 [&_.text-gray-700]:text-slate-600 [&_.text-gray-600]:text-slate-500 [&_.text-gray-500]:text-slate-500 [&_.text-gray-400]:text-slate-400"
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.44)',
-                borderColor: 'rgba(255,255,255,0.7)',
-                color: 'rgba(90,90,90,0.9)',
-              }}
-            >
-              {panelMode === 'log' && logDetail && (
-                <LogDetailPanelContent data={logDetail} onClose={closePanel} />
-              )}
-              {panelMode === 'consult' && consultDetail && (
-                <ConsultDetailPanelContent
-                  data={consultDetail}
-                  onDecide={handleConsultDecide}
-                  onClose={closePanel}
-                />
-              )}
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
+      {overlayRoot && createPortal(
+        <AnimatePresence>
+          {panelMode !== 'none' && (
+            <>
+              <motion.div
+                className="absolute inset-0 z-20 rounded-[28px] bg-white/10 backdrop-blur-[6px] pointer-events-auto"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={closePanel}
+              />
+              <motion.aside
+                initial={{ x: '100%' }}
+                animate={{ x: '-16px' }}
+                exit={{ x: '100%' }}
+                transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+                className="pointer-events-auto absolute inset-y-16 right-6 z-30 w-full max-w-[520px] rounded-[24px] border border-white/70 bg-white/34 text-base text-slate-700 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md [&_*]:text-slate-700 [&_strong]:text-slate-800 [&_.text-white]:text-slate-700 [&_.text-muted-foreground]:text-slate-500 [&_.text-foreground]:text-slate-700 [&_.text-gray-700]:text-slate-600 [&_.text-gray-600]:text-slate-500 [&_.text-gray-500]:text-slate-500 [&_.text-gray-400]:text-slate-400"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.44)',
+                  borderColor: 'rgba(255,255,255,0.7)',
+                  color: 'rgba(90,90,90,0.9)',
+                }}
+              >
+                {panelMode === 'log' && logDetail && (
+                  <LogDetailPanelContent data={logDetail} onClose={closePanel} />
+                )}
+                {panelMode === 'consult' && consultDetail && (
+                  <ConsultDetailPanelContent
+                    data={consultDetail}
+                    onDecide={handleConsultDecide}
+                    onClose={closePanel}
+                  />
+                )}
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>,
+        overlayRoot
+      )}
     </div>
   );
 }
