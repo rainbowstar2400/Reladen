@@ -46,7 +46,7 @@
 }
 
 body {
-  background-color: hsl(var(--background));
+  background-color: var(--app-bg, hsl(var(--background)));
   color: hsl(var(--foreground));
 }
 
@@ -55,11 +55,12 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background-color: var(--app-bg, hsl(var(--background)));
   }
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    --background: 38 28% 95%;
+    --foreground: 220 15% 12%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 3.9%;
     --popover: 0 0% 100%;
@@ -83,6 +84,27 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
+    --app-bg: hsl(var(--background));
+    --surface-bg: #EFE6D7;
+    --board-bg: #ECE3D4;
+    --board-border: #CBBCA6;
+    --paper-bg: #FAF3E6;
+    --paper-border: #D3C2AE;
+    --label-bg: #E7DAC8;
+    --label-border: #CBB79F;
+    --plaque-bg: #E5D1B6;
+    --plaque-border: #C4AC8A;
+    --ink: #1E232B;
+    --ink-muted: #5F5B54;
+    --ink-soft: #8A8171;
+    --shadow-soft: 0 10px 24px rgba(30, 35, 43, 0.14);
+    --shadow-paper: 0 6px 14px rgba(30, 35, 43, 0.18);
+    --board-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65),
+      0 26px 50px rgba(30, 35, 43, 0.18);
+    --plaque-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      0 10px 18px rgba(30, 35, 43, 0.2);
+    --plaque-shadow-pressed: inset 0 2px 6px rgba(30, 35, 43, 0.22),
+      0 4px 8px rgba(30, 35, 43, 0.18);
   }
   .dark {
     --background: 0 0% 3.9%;
@@ -115,3 +137,28 @@ body {
 /* Settings: font scale (小/中/大) */
 :root { --app-font-scale: 1; }
 html { font-size: calc(16px * var(--app-font-scale)); }
+
+@layer utilities {
+  .font-rounded {
+    font-family: "Hiragino Maru Gothic ProN", "Hiragino Maru Gothic Pro", "Yu Gothic",
+      "YuGothic", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+  }
+}
+
+/* DeskPanel scrollbars */
+.desk-panel-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+}
+.desk-panel-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.desk-panel-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.desk-panel-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}

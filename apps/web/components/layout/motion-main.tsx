@@ -6,7 +6,7 @@ import { ReactNode } from 'react';
 export function MotionMain({ children }: { children: ReactNode }) {
   return (
     <motion.main
-      className="flex-1 overflow-y-auto bg-background"
+      className="flex-1 overflow-y-auto bg-[color:var(--app-bg)]"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}

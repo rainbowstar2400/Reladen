@@ -1,9 +1,11 @@
-import { MotionMain } from '@/components/layout/motion-main';
+import { DeskPanel } from '@/components/room/desk-panel';
+import { OfficePanelShell } from '@/components/room/office-panel-shell';
 
 export default function PlayguidePage() {
     return (
-        <MotionMain>
-            <div className="space-y-10 pb-20">
+        <DeskPanel className="mx-auto mt-[clamp(24px,3vw,56px)] w-[min(100%,960px)]">
+            <OfficePanelShell showTitle={false}>
+                <div className="space-y-10 pb-20">
                 <div className="space-y-4">
                     <h1 className="text-3xl font-bold tracking-tight">遊び方</h1>
                     <p className="text-muted-foreground">このページでは、ゲームの基本的なプレイガイドを説明します。</p>
@@ -838,8 +840,8 @@ export default function PlayguidePage() {
 
                 </section>
 
-            </div>
-
-        </MotionMain>
+                </div>
+            </OfficePanelShell>
+        </DeskPanel>
     );
 }

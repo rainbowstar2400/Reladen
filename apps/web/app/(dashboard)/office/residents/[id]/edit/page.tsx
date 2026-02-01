@@ -6,6 +6,8 @@ import { SafeLink } from '@/components/layout/SafeLink';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { getLocal, listLocal } from '@/lib/db-local';
+import { DeskPanel } from '@/components/room/desk-panel';
+import { OfficePanelShell } from '@/components/room/office-panel-shell';
 import type {
   Resident,
   ResidentWithRelations,
@@ -52,34 +54,38 @@ export default function EditResidentPage({ params }: { params: { id: string } })
   });
 
   return (
-    <div className="space-y-6">
-      <Button variant="outline" asChild>
-        {/* 詳細ページに戻るリンク */}
-        <SafeLink href={`/office/residents/${residentId}`} className="flex items-center gap-2">
-          <ArrowLeft className="h-4 w-4" />
-          詳細に戻る
-        </SafeLink>
-      </Button>
+    <DeskPanel className="mx-auto mt-[clamp(24px,3vw,56px)] w-[min(100%,960px)]">
+      <OfficePanelShell showTitle={false}>
+        <div className="space-y-6">
+          <Button variant="outline" asChild>
+            {/* 詳細ページに戻るリンク */}
+            <SafeLink href={`/office/residents/${residentId}`} className="flex items-center gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              詳細に戻る
+            </SafeLink>
+          </Button>
 
-      <h1 className="text-2xl font-bold">住人情報の編集</h1>
+          <h1 className="text-2xl font-bold">住人情報の編集</h1>
 
-      {/* データ読み込み中にローダーを表示 */}
-      {isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          読み込み中…
+          {/* データ読み込み中にローダーを表示 */}
+          {isLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              読み込み中…
+            </div>
+          )}
+
+          {/* 読み込み完了後、フォームに defaultValues を渡して表示 */}
+          {residentData && (
+            <ResidentForm defaultValues={residentData} />
+          )}
+
+          {/* データが見つからない場合の表示 */}
+          {!residentData && !isLoading && (
+            <div>住人が見つかりません。</div>
+          )}
         </div>
-      )}
-
-      {/* 読み込み完了後、フォームに defaultValues を渡して表示 */}
-      {residentData && (
-        <ResidentForm defaultValues={residentData} />
-      )}
-
-      {/* データが見つからない場合の表示 */}
-      {!residentData && !isLoading && (
-        <div>住人が見つかりません。</div>
-      )}
-    </div>
+      </OfficePanelShell>
+    </DeskPanel>
   );
 }
