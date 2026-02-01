@@ -24,7 +24,7 @@ export function DeskPanel({ children, className = '', contentClassName = '' }: D
     >
       <div
         id="desk-panel-overlay"
-        className="pointer-events-auto absolute inset-0 z-30"
+        className="pointer-events-none absolute inset-0 z-30"
         aria-hidden="true"
       />
       <div
