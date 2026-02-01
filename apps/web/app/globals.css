@@ -144,3 +144,21 @@ html { font-size: calc(16px * var(--app-font-scale)); }
       "YuGothic", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
   }
 }
+
+/* DeskPanel scrollbars */
+.desk-panel-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+}
+.desk-panel-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.desk-panel-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.desk-panel-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}

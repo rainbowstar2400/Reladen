@@ -29,7 +29,7 @@ export function DeskPanel({ children, className = '', contentClassName = '' }: D
       />
       <div
         className={
-          'h-full overflow-y-auto px-6 py-9 transition-opacity duration-200 ' +
+          'desk-panel-scroll h-full overflow-y-auto px-6 py-9 transition-opacity duration-200 ' +
           visibilityClass +
           ' ' +
           contentClassName
