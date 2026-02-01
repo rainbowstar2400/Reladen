@@ -319,7 +319,10 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
         </div>
 
         {/* 新規追加フォーム */}
-        <div className="flex flex-col gap-2 rounded-md border border-white/55 bg-white/24 p-3">
+        <div
+          className="flex flex-col gap-2 rounded-md border border-white/55 bg-white/24 p-3"
+          style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
+        >
           <p className="text-sm font-medium">新規プリセットを追加</p>
           <Input
             placeholder={details.labelHelp}

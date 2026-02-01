@@ -17,6 +17,13 @@ const ROLLOVERS = ['00:00', '04:00', '05:00', '06:00', '07:00', '08:00'] as cons
 export default function SettingsPage() {
   const { s, setS } = useSettings()
   const { setTheme } = useTheme()
+  const cardStyle = { backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }
+  const cardButtonStyle = {
+    backgroundImage: 'none',
+    backgroundColor: 'rgba(255,255,255,0.44)',
+    border: '1px solid rgba(255,255,255,0.7)',
+    boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+  }
 
   const setThemeAll = (v: 'light' | 'dark' | 'system') => {
     setS(prev => ({ ...prev, theme: v }))
@@ -37,7 +44,7 @@ export default function SettingsPage() {
 
         <div className="space-y-4 max-w-3xl">
           {/* アカウント（ログイン/ログアウト） */}
-          <Card><CardContent className="flex items-center justify-between py-3">
+          <Card style={cardStyle}><CardContent className="flex items-center justify-between py-3">
             <div>
               <div className="font-medium">アカウント</div>
               <div className="text-xs text-muted-foreground">
@@ -50,7 +57,7 @@ export default function SettingsPage() {
           </CardContent></Card>
 
           {/* 同期設定 */}
-          <Card><CardContent className="flex items-center justify-between py-3">
+          <Card style={cardStyle}><CardContent className="flex items-center justify-between py-3">
             <div>
               <div className="font-medium">同期設定</div>
               <div className="text-xs text-muted-foreground">オンを推奨します</div>
@@ -62,7 +69,7 @@ export default function SettingsPage() {
           </CardContent></Card>
 
           {/* アカウント削除 */}
-          <Card><CardContent className="flex items-center justify-between py-3">
+          <Card style={cardStyle}><CardContent className="flex items-center justify-between py-3">
             <div>
               <div className="font-medium">アカウント削除</div>
               <div className="text-xs text-muted-foreground">アカウントと関連する全てのデータ（ローカルおよびクラウド）を削除します。</div>
@@ -101,30 +108,30 @@ export default function SettingsPage() {
 
         <div className="space-y-4 max-w-3xl">
           {/* カラーテーマ */}
-          <Card><CardContent className="flex items-center justify-between py-3">
+          <Card style={cardStyle}><CardContent className="flex items-center justify-between py-3">
             <div>
               <div className="font-medium">カラーテーマ</div>
               <div className="text-xs text-muted-foreground">デフォルトテーマを選択</div>
             </div>
             <div className="flex gap-2">
-              <Button variant={s.theme === 'light' ? 'secondary' : 'outline'} onClick={() => setThemeAll('light')}>ライト</Button>
-              <Button variant={s.theme === 'dark' ? 'secondary' : 'outline'} onClick={() => setThemeAll('dark')}>ダーク</Button>
-              <Button variant={s.theme === 'system' ? 'secondary' : 'outline'} onClick={() => setThemeAll('system')}>システム</Button>
+              <Button variant={s.theme === 'light' ? 'secondary' : 'outline'} onClick={() => setThemeAll('light')} style={cardButtonStyle}>ライト</Button>
+              <Button variant={s.theme === 'dark' ? 'secondary' : 'outline'} onClick={() => setThemeAll('dark')} style={cardButtonStyle}>ダーク</Button>
+              <Button variant={s.theme === 'system' ? 'secondary' : 'outline'} onClick={() => setThemeAll('system')} style={cardButtonStyle}>システム</Button>
             </div>
           </CardContent></Card>
 
           {/* フォントサイズ */}
-          <Card><CardContent className="flex items-center justify-between py-3">
+          <Card style={cardStyle}><CardContent className="flex items-center justify-between py-3">
             <div className="font-medium">フォントサイズ</div>
             <div className="flex gap-2">
-              <Button variant={s.fontSize === 'small' ? 'secondary' : 'outline'} onClick={() => setS(p => ({ ...p, fontSize: 'small' }))}>小</Button>
-              <Button variant={s.fontSize === 'medium' ? 'secondary' : 'outline'} onClick={() => setS(p => ({ ...p, fontSize: 'medium' }))}>中</Button>
-              <Button variant={s.fontSize === 'large' ? 'secondary' : 'outline'} onClick={() => setS(p => ({ ...p, fontSize: 'large' }))}>大</Button>
+              <Button variant={s.fontSize === 'small' ? 'secondary' : 'outline'} onClick={() => setS(p => ({ ...p, fontSize: 'small' }))} style={cardButtonStyle}>小</Button>
+              <Button variant={s.fontSize === 'medium' ? 'secondary' : 'outline'} onClick={() => setS(p => ({ ...p, fontSize: 'medium' }))} style={cardButtonStyle}>中</Button>
+              <Button variant={s.fontSize === 'large' ? 'secondary' : 'outline'} onClick={() => setS(p => ({ ...p, fontSize: 'large' }))} style={cardButtonStyle}>大</Button>
             </div>
           </CardContent></Card>
 
           {/* 軽量設定 */}
-          <Card><CardContent className="flex items-center justify-between py-3">
+          <Card style={cardStyle}><CardContent className="flex items-center justify-between py-3">
             <div>
               <div className="font-medium">軽量設定</div>
               <div className="text-xs text-muted-foreground">アニメーションを減らして動作を軽量化</div>
@@ -136,7 +143,7 @@ export default function SettingsPage() {
           </CardContent></Card>
 
           {/* 日付更新 */}
-          <Card><CardContent className="flex items-center justify-between py-3">
+          <Card style={cardStyle}><CardContent className="flex items-center justify-between py-3">
             <div>
               <div className="font-medium">日付更新</div>
               <div className="text-xs text-muted-foreground">1日の区切りの時刻を設定</div>
@@ -155,19 +162,19 @@ export default function SettingsPage() {
 
         <div className="space-y-4 max-w-3xl">
           {/* アプリ情報 */}
-          <Card><CardContent className="flex items-center justify-between py-3">
+          <Card style={cardStyle}><CardContent className="flex items-center justify-between py-3">
             <div className="font-medium">アプリ情報</div>
             <div className="text-sm text-muted-foreground">Reladen　ver.0.10　制作：優</div>
           </CardContent></Card>
 
           {/* プライバシーポリシー（内部遷移） */}
-          <Card><CardContent className="flex items-center justify-between py-3">
+          <Card style={cardStyle}><CardContent className="flex items-center justify-between py-3">
             <div className="font-medium">プライバシーポリシー</div>
-            <Button variant="outline" asChild><Link href="/legal/privacy">開く</Link></Button>
+            <Button variant="outline" asChild style={cardButtonStyle}><Link href="/legal/privacy">開く</Link></Button>
           </CardContent></Card>
 
           {/* 連絡フォーム（外部リンク可） */}
-          <Card><CardContent className="flex items-center justify-between py-3">
+          <Card style={cardStyle}><CardContent className="flex items-center justify-between py-3">
             <div className="font-medium">連絡フォーム</div>
             {/* 外部リンクが設定されている場合のみボタンを有効化 */}
             <Button
@@ -175,6 +182,7 @@ export default function SettingsPage() {
               asChild
               disabled={!contactUrl}
               title={!contactUrl ? '環境変数 NEXT_PUBLIC_CONTACT_URL を設定してください' : undefined}
+              style={cardButtonStyle}
             >
               {/* 変更箇所3: hrefをcontactUrlに固定し、外部リンクのためtarget="_blank"に固定 */}
               <a
@@ -197,12 +205,19 @@ export default function SettingsPage() {
 function AccountButtons(): JSX.Element {
   const { ready, user, signInWithGoogle, signOut, hasSupabase, linkWithGoogle } = useAuth();
 
-  if (!hasSupabase) return <Button variant="outline" disabled>ローカル動作中</Button>;
-  if (!ready) return <Button variant="outline" disabled>状態確認中…</Button>;
+  const cardButtonStyle = {
+    backgroundImage: 'none',
+    backgroundColor: 'rgba(255,255,255,0.44)',
+    border: '1px solid rgba(255,255,255,0.7)',
+    boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+  };
+
+  if (!hasSupabase) return <Button variant="outline" disabled style={cardButtonStyle}>ローカル動作中</Button>;
+  if (!ready) return <Button variant="outline" disabled style={cardButtonStyle}>状態確認中…</Button>;
   if (!user) {
     return (
       <div className="flex items-center gap-2">
-        <Button variant="outline" onClick={signInWithGoogle}>Googleでログイン</Button>
+        <Button variant="outline" onClick={signInWithGoogle} style={cardButtonStyle}>Googleでログイン</Button>
       </div>
     );
   }
@@ -220,9 +235,9 @@ function AccountButtons(): JSX.Element {
         )}
       </span>
       {!linked.has('google') && (
-        <Button variant="outline" onClick={linkWithGoogle}>Google を紐づけ</Button>
+        <Button variant="outline" onClick={linkWithGoogle} style={cardButtonStyle}>Google を紐づけ</Button>
       )}
-      <Button variant="outline" onClick={signOut}>ログアウト</Button>
+      <Button variant="outline" onClick={signOut} style={cardButtonStyle}>ログアウト</Button>
     </div>
   );
 }
