@@ -7,10 +7,11 @@ import { useRouter } from 'next/navigation';
 import { fetchEventById, useMarkNotificationRead, useNotifications } from '@/lib/data/notifications';
 import type { NotificationRecord } from '@repo/shared/types/conversation';
 import type { EventLogStrict } from '@repo/shared/types/conversation';
-import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
+import { replaceResidentIds, useResidentNameMap, useResidents } from '@/lib/data/residents';
 import { useWorldWeather } from '@/lib/data/use-world-weather';
 import type { WeatherKind } from '@repo/shared/types';
 import { listLocal } from '@/lib/db-local';
+import { useFeelings } from '@/lib/data/feelings';
 import { GlassPanel } from '@/components/ui-demo/glass-panel';
 import { PanelHeader } from '@/components/ui-demo/panel-header';
 import { useDeskTransition } from '@/components/room/room-transition-context';
@@ -100,12 +101,18 @@ export function HomeContent() {
   const { data: notifications = [], isLoading: isLoadingNotifications } = useNotifications();
   const markRead = useMarkNotificationRead();
   const { sync } = useSync();
+  const { data: residents = [] } = useResidents();
+  const { data: feelings = [] } = useFeelings();
   const [now, setNow] = useState(() => new Date());
   const [panelMode, setPanelMode] = useState<HomePanelMode>('none');
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeConsultId, setActiveConsultId] = useState<string | null>(null);
+  const [activePeekResidentId, setActivePeekResidentId] = useState<string | null>(null);
   const [logDetail, setLogDetail] = useState<LogDetail | null>(null);
   const [consultDetail, setConsultDetail] = useState<ConsultDetail | null>(null);
+  const [peekInteraction, setPeekInteraction] = useState<{ partnerName: string; kind: string } | null>(
+    null
+  );
   const [conversationLineMap, setConversationLineMap] = useState<
     Record<string, { speaker: string; text: string }[]>
   >({});
@@ -132,6 +139,15 @@ export function HomeContent() {
 
   const unreadConversation = conversationNotifications.filter((n) => n.status === 'unread').length;
   const unreadConsult = consultNotifications.filter((n) => n.status === 'unread').length;
+
+  const residentStatusList = useMemo<ResidentStatusItem[]>(() => {
+    if (residents.length === 0) return RESIDENT_STATUS_SAMPLE;
+    return residents.map((r) => ({
+      id: r.id,
+      name: r.name ?? '住人',
+      tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]',
+    }));
+  }, [residents]);
 
   const weatherLabel = weatherState ? WEATHER_LABELS[weatherState.current.kind as WeatherKind] : '---';
   const weatherComment = useMemo(() => {
@@ -257,6 +273,7 @@ export function HomeContent() {
     setPanelMode('none');
     setActiveConversationId(null);
     setActiveConsultId(null);
+    setActivePeekResidentId(null);
     setLogDetail(null);
     setConsultDetail(null);
   }, []);
@@ -474,6 +491,56 @@ export function HomeContent() {
       alive = false;
     };
   }, [activeConsultId]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!activePeekResidentId) {
+        if (alive) setPeekInteraction(null);
+        return;
+      }
+      try {
+        const events = (await listLocal<EventLogStrict>('events'))
+          .filter((item) => item && (item.kind === 'conversation' || item.kind === 'consult'))
+          .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''));
+        const found = events.find((ev) => {
+          const p = (ev as any)?.payload;
+          const participants = Array.isArray(p?.participants) ? p.participants : [];
+          return participants.includes(activePeekResidentId);
+        });
+        if (!found) {
+          if (alive) setPeekInteraction(null);
+          return;
+        }
+        const p = (found as any)?.payload;
+        const participants = Array.isArray(p?.participants) ? p.participants : [];
+        const otherId = participants.find((id: string) => id !== activePeekResidentId);
+        const partnerName = otherId ? residentNameMap[otherId] ?? otherId : '—';
+        const kindLabel = found.kind === 'conversation' ? '会話' : '相談';
+        if (alive) setPeekInteraction({ partnerName, kind: kindLabel });
+      } catch {
+        if (alive) setPeekInteraction(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [activePeekResidentId, residentNameMap]);
+
+  const peekResident = useMemo(
+    () => residents.find((r) => r.id === activePeekResidentId),
+    [residents, activePeekResidentId]
+  );
+  const peekTopFavor = useMemo(() => {
+    if (!activePeekResidentId) return null;
+    const byFrom = feelings
+      .filter((f) => f.from_id === activePeekResidentId && !f.deleted)
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    const top = byFrom[0];
+    if (!top) return null;
+    const name = residentNameMap[top.to_id] ?? top.to_id;
+    return { name, score: top.score ?? 0 };
+  }, [feelings, activePeekResidentId, residentNameMap]);
 
   const handleConsultDecide = useCallback(
     async (choiceId: string) => {
@@ -702,7 +769,7 @@ export function HomeContent() {
           />
 
           <div className="flex flex-col gap-3">
-            {RESIDENT_STATUS_SAMPLE.map((item) => (
+            {residentStatusList.map((item) => (
               <div
                 key={item.id}
                 className="grid grid-cols-[20px_1fr_auto] items-center gap-2 rounded-xl border border-white/55 bg-white/25 px-3 py-2"
@@ -712,6 +779,14 @@ export function HomeContent() {
                 <button
                   className="rounded-[10px] border border-black/10 bg-white/60 px-3 py-1 text-[12px] font-medium transition hover:-translate-y-0.5 hover:bg-white/75"
                   type="button"
+                  onClick={() => {
+                    setActivePeekResidentId(item.id);
+                    setActiveConversationId(null);
+                    setActiveConsultId(null);
+                    setLogDetail(null);
+                    setConsultDetail(null);
+                    setPanelMode('right-peek');
+                  }}
                 >
                   覗く
                 </button>
@@ -744,14 +819,23 @@ export function HomeContent() {
                   animate={{ x: 0, opacity: 1 }}
                   exit={{ x: 80, opacity: 0 }}
                   transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
-                  className="absolute z-40 rounded-[24px] border border-white/60 bg-white/34 text-slate-700 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md"
+                  className="absolute z-40 rounded-2xl border border-white/60 bg-white/20 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-8px_20px_rgba(4,18,30,0.14),0_8px_16px_rgba(4,18,30,0.18),0_26px_42px_rgba(4,18,30,0.22)] backdrop-blur-[18px] saturate-125"
                   style={{
                     ...floatingPanelStyle,
-                    backgroundColor: 'rgba(255,255,255,0.44)',
                     borderColor: 'rgba(255,255,255,0.7)',
                   }}
                 >
-                  <LogDetailPanelContent data={logDetail} onClose={closePanel} />
+                  <div
+                    className="pointer-events-none absolute inset-0 rounded-2xl bg-[linear-gradient(115deg,rgba(255,255,255,0.6),rgba(255,255,255,0.22)_32%,rgba(255,255,255,0.05)_60%,rgba(255,255,255,0.18))] opacity-55"
+                    aria-hidden="true"
+                  />
+                  <div
+                    className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(rgba(255,255,255,0.2)_0.6px,transparent_0.6px)] bg-[length:6px_6px] opacity-20 mix-blend-soft-light"
+                    aria-hidden="true"
+                  />
+                  <div className="relative z-10">
+                    <LogDetailPanelContent data={logDetail} onClose={closePanel} />
+                  </div>
                 </motion.aside>
               </>
             )}
@@ -776,16 +860,82 @@ export function HomeContent() {
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: 24, opacity: 0 }}
                     transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
-                    className="w-[min(520px,86vw)] rounded-[24px] border border-white/60 bg-white/30 text-slate-700 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.32)', borderColor: 'rgba(255,255,255,0.65)', marginTop: '15vh' }}
+                    className="w-[min(520px,86vw)] rounded-2xl border border-white/60 bg-white/20 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-8px_20px_rgba(4,18,30,0.14),0_8px_16px_rgba(4,18,30,0.18),0_26px_42px_rgba(4,18,30,0.22)] backdrop-blur-[18px] saturate-125"
+                    style={{ borderColor: 'rgba(255,255,255,0.7)', marginTop: '15vh' }}
                   >
+                    <div
+                      className="pointer-events-none absolute inset-0 rounded-2xl bg-[linear-gradient(115deg,rgba(255,255,255,0.6),rgba(255,255,255,0.22)_32%,rgba(255,255,255,0.05)_60%,rgba(255,255,255,0.18))] opacity-55"
+                      aria-hidden="true"
+                    />
+                    <div
+                      className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(rgba(255,255,255,0.2)_0.6px,transparent_0.6px)] bg-[length:6px_6px] opacity-20 mix-blend-soft-light"
+                      aria-hidden="true"
+                    />
+                    <div className="relative z-10">
                     <ConsultDetailPanelContent
                       data={consultDetail}
                       onDecide={handleConsultDecide}
                       onClose={closePanel}
                     />
+                    </div>
                   </motion.aside>
                 </motion.div>
+              </>
+            )}
+            {isRightPeek && (
+              <>
+                <motion.div
+                  className="absolute inset-0 z-30 rounded-[24px] bg-white/10 backdrop-blur-[6px]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, x: `calc(-1 * ${slideAmount})` }}
+                  exit={{ opacity: 0 }}
+                  onClick={closePanel}
+                />
+                <motion.aside
+                  initial={{ x: 80, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: 80, opacity: 0 }}
+                  transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+                  className="absolute z-40 rounded-2xl border border-white/60 bg-white/20 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-8px_20px_rgba(4,18,30,0.14),0_8px_16px_rgba(4,18,30,0.18),0_26px_42px_rgba(4,18,30,0.22)] backdrop-blur-[18px] saturate-125"
+                  style={{
+                    right: 0,
+                    width: 'calc(var(--panel-slide) - var(--panel-gap))',
+                    borderColor: 'rgba(255,255,255,0.7)',
+                  }}
+                >
+                  <div
+                    className="pointer-events-none absolute inset-0 rounded-2xl bg-[linear-gradient(115deg,rgba(255,255,255,0.6),rgba(255,255,255,0.22)_32%,rgba(255,255,255,0.05)_60%,rgba(255,255,255,0.18))] opacity-55"
+                    aria-hidden="true"
+                  />
+                  <div
+                    className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(rgba(255,255,255,0.2)_0.6px,transparent_0.6px)] bg-[length:6px_6px] opacity-20 mix-blend-soft-light"
+                    aria-hidden="true"
+                  />
+                  <div className="relative z-10">
+                  <div className="flex items-start justify-between border-b p-4">
+                    <div className="text-lg font-medium">
+                      {peekResident?.name ?? '住人'}の様子
+                    </div>
+                    <button
+                      onClick={closePanel}
+                      className="rounded-md p-1 hover:bg-muted"
+                      aria-label="閉じる"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="space-y-2 p-4 text-base text-slate-700">
+                    <div>信頼度：{peekResident?.trustToPlayer ?? '—'}</div>
+                    <div>仲良し：{peekTopFavor ? peekTopFavor.name : '—'}</div>
+                    <div>
+                      最近：
+                      {peekInteraction ? `${peekInteraction.partnerName}と${peekInteraction.kind}した` : '—'}
+                    </div>
+                    <div>今は（準備中）ようです。</div>
+                    <div>「（準備中）」</div>
+                  </div>
+                  </div>
+                </motion.aside>
               </>
             )}
           </AnimatePresence>
