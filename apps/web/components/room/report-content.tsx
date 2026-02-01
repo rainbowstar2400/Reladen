@@ -542,7 +542,7 @@ export function ReportContent() {
     return () => {
       alive = false;
     };
-  }, [activeConsultId]);
+  }, [activeConsultId, residentNameMap]);
   const ALL: ReportItem[] = useMemo(() => convItems, [convItems]);
 
   const filtered = useMemo(() => {

@@ -507,7 +507,7 @@ export function HomeContent() {
     return () => {
       alive = false;
     };
-  }, [activeConsultId]);
+  }, [activeConsultId, residentNameMap]);
 
   useEffect(() => {
     let alive = true;
