@@ -183,6 +183,10 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                 key={item.id}
                 className={`flex flex-col gap-1 rounded-md border border-white/55 bg-white/24 p-3 ${!item.isManaged ? 'border-dashed opacity-70' : ''
                   }`}
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.34)',
+                  borderColor: 'rgba(255,255,255,0.65)',
+                }}
               >
                 {isThisEditing ? (
                   // インライン編集中の表示
@@ -353,7 +357,13 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
               (category === 'speech' && !newDescription) ||
               uiDisabled
             }
-            className="mt-2 !border-white/60 !bg-white/32 !text-white/95 hover:!bg-white/36"
+            className="mt-2 !border-white/65 !bg-none !bg-white/34 !text-white/95 !shadow-none hover:!bg-white/38"
+            style={{
+              backgroundImage: 'none',
+              backgroundColor: 'rgba(255,255,255,0.44)',
+              border: '1px solid rgba(255,255,255,0.7)',
+              boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+            }}
           >
             {isMutating ? (
               <>

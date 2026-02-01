@@ -1550,7 +1550,13 @@ export function ResidentForm({
           <Button
             type="submit"
             disabled={upsert.isPending || upsertPreset.isPending}
-            className="!border-white/55 !bg-white/24 !text-white/95 hover:!bg-white/28"
+            className="!border-white/55 !bg-none !bg-white/24 !text-white/95 !shadow-none hover:!bg-white/28"
+            style={{
+              backgroundImage: 'none',
+              backgroundColor: 'rgba(255,255,255,0.34)',
+              border: '1px solid rgba(255,255,255,0.65)',
+              boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+            }}
           >
             {upsert.isPending ? '保存中…' : '保存'}
           </Button>

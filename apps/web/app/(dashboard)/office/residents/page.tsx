@@ -19,9 +19,18 @@ export default function ResidentsPage() {
           <div className="flex items-center justify-between">
             <Button
               asChild
-              className="!border-white/55 !bg-white/24 !text-white/95 hover:!bg-white/28"
+              className="!border-white/65 !bg-white/34 !text-white/95 !shadow-[0_10px_18px_rgba(6,18,32,0.16)] hover:!bg-white/38"
             >
-              <Link href="/office/new" className="flex items-center gap-2">
+              <Link
+                href="/office/new"
+                className="flex items-center gap-2"
+                style={{
+                  backgroundImage: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.34)',
+                  border: '1px solid rgba(255,255,255,0.65)',
+                  boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                }}
+              >
                 <Plus className="h-4 w-4" />
                 新規追加
               </Link>

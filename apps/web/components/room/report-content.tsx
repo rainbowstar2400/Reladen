@@ -548,7 +548,10 @@ export function ReportContent() {
           管理室へ
         </Button>
       </div>
-      <Card className="border-white/55 bg-white/24 shadow-[inset_0_0_18px_rgba(255,255,255,0.22)]">
+      <Card
+        className="border-white/55 bg-white/24 shadow-[inset_0_0_18px_rgba(255,255,255,0.22)]"
+        style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
+      >
         <CardContent className="flex flex-wrap items-center gap-3 py-3">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">日付：</span>
@@ -557,6 +560,7 @@ export function ReportContent() {
               value={date}
               onChange={(e) => setDate(e.target.value)}
               className="rounded-md border border-white/55 bg-white/24 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
+              style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -565,6 +569,7 @@ export function ReportContent() {
               value={charA}
               onChange={(e) => setCharA(e.target.value)}
               className="rounded-md border border-white/55 bg-white/24 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
+              style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
             >
               <option value="">—</option>
               {allCharacters.map((c) => (
@@ -577,6 +582,7 @@ export function ReportContent() {
               value={charB}
               onChange={(e) => setCharB(e.target.value)}
               className="rounded-md border border-white/55 bg-white/24 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
+              style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
             >
               <option value="">—</option>
               {allCharacters.map((c) => (
@@ -592,6 +598,7 @@ export function ReportContent() {
               value={kind}
               onChange={(e) => setKind(e.target.value as ChangeKindFilter)}
               className="rounded-md border border-white/55 bg-white/24 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
+              style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
             >
               <option value="">—</option>
               {KINDS.map((k) => (
@@ -606,7 +613,13 @@ export function ReportContent() {
               variant="outline"
               size="sm"
               onClick={resetFilters}
-              className="!border-white/60 !bg-white/32 !text-white/95 hover:!bg-white/36"
+              className="!border-white/65 !bg-none !bg-white/34 !text-white/95 !shadow-none hover:!bg-white/38"
+              style={{
+                backgroundImage: 'none',
+                backgroundColor: 'rgba(255,255,255,0.44)',
+                border: '1px solid rgba(255,255,255,0.7)',
+                boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+              }}
             >
               リセット
             </Button>
@@ -652,7 +665,10 @@ export function ReportContent() {
                       }
                     }}
                   >
-                    <div className="flex items-start justify-between rounded-2xl border border-white/60 bg-white/24 px-4 py-3 shadow-[inset_0_0_18px_rgba(255,255,255,0.22)] transition hover:bg-white/28">
+                    <div
+                      className="flex items-start justify-between rounded-2xl border border-white/55 bg-white/24 px-4 py-3 shadow-[inset_0_0_16px_rgba(255,255,255,0.18)] transition hover:bg-white/28"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
+                    >
                       <div className="space-y-2">
                         <p>{it.text}</p>
                         <div className="min-h-6 flex flex-wrap gap-2">
@@ -730,7 +746,8 @@ export function ReportContent() {
               animate={{ x: '-16px' }}
               exit={{ x: '100%' }}
               transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
-              className="absolute inset-y-0 right-0 z-30 w-full max-w-[560px] rounded-[24px] border border-white/65 bg-white/32 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md"
+              className="absolute inset-y-0 right-0 z-30 w-full max-w-[560px] rounded-[24px] border border-white/70 bg-white/34 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md"
+              style={{ backgroundColor: 'rgba(255,255,255,0.44)', borderColor: 'rgba(255,255,255,0.7)' }}
             >
               {panelMode === 'log' && logDetail && (
                 <LogDetailPanelContent data={logDetail} onClose={closePanel} />
