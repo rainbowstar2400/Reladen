@@ -1547,7 +1547,11 @@ export function ResidentForm({
 
         <div className="flex justify-end gap-2">
           {/* プリセット保存中もボタンを無効化 */}
-          <Button type="submit" disabled={upsert.isPending || upsertPreset.isPending}>
+          <Button
+            type="submit"
+            disabled={upsert.isPending || upsertPreset.isPending}
+            className="!border-white/55 !bg-white/24 !text-white/95 hover:!bg-white/28"
+          >
             {upsert.isPending ? '保存中…' : '保存'}
           </Button>
         </div>

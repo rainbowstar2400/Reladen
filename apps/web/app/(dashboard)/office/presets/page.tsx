@@ -181,8 +181,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
             return (
               <div
                 key={item.id}
-                className={`flex flex-col gap-1 rounded-md border p-3 ${!item.isManaged ? 'border-dashed opacity-70' : ''
-                  } ${isThisEditing ? 'bg-muted/50' : ''
+                className={`flex flex-col gap-1 rounded-md border border-white/55 bg-white/24 p-3 ${!item.isManaged ? 'border-dashed opacity-70' : ''
                   }`}
               >
                 {isThisEditing ? (
@@ -316,7 +315,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
         </div>
 
         {/* 新規追加フォーム */}
-        <div className="flex flex-col gap-2 rounded-md border border-dashed p-3">
+        <div className="flex flex-col gap-2 rounded-md border border-white/55 bg-white/24 p-3">
           <p className="text-sm font-medium">新規プリセットを追加</p>
           <Input
             placeholder={details.labelHelp}
@@ -354,7 +353,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
               (category === 'speech' && !newDescription) ||
               uiDisabled
             }
-            className="mt-2"
+            className="mt-2 !border-white/60 !bg-white/32 !text-white/95 hover:!bg-white/36"
           >
             {isMutating ? (
               <>

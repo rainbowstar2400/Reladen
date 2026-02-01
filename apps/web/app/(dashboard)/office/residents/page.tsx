@@ -17,7 +17,10 @@ export default function ResidentsPage() {
       <OfficePanelShell title="住人一覧">
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <Button asChild>
+            <Button
+              asChild
+              className="!border-white/55 !bg-white/24 !text-white/95 hover:!bg-white/28"
+            >
               <Link href="/office/new" className="flex items-center gap-2">
                 <Plus className="h-4 w-4" />
                 新規追加
