@@ -791,20 +791,20 @@ export function ResidentForm({
                       {/* ラベルは常に上段に出す */}
                       <FormLabel className="block">性別 <span className="text-red-500">*</span></FormLabel>
                       <FormControl>
-                        <select
-                          className="w-[150px] rounded border px-3 py-2"
-                          name={field.name}
-                          ref={field.ref}
+                        <Select
                           value={v}
-                          onChange={(e) => field.onChange(e.target.value)}
-                          onBlur={field.onBlur}
+                          onValueChange={(value) => field.onChange(value)}
                         >
-                          <option value="">（未設定）</option>
-                          <option value="male">男性</option>
-                          <option value="female">女性</option>
-                          <option value="nonbinary">なし</option>
-                          <option value="other">その他</option>
-                        </select>
+                          <SelectTrigger className="w-[150px]">
+                            <SelectValue placeholder="（未設定）" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="male">男性</SelectItem>
+                            <SelectItem value="female">女性</SelectItem>
+                            <SelectItem value="nonbinary">なし</SelectItem>
+                            <SelectItem value="other">その他</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1108,10 +1108,10 @@ export function ResidentForm({
                 <FormLabel className="text-sm text-muted-foreground">説明</FormLabel>
                 <FormControl>
                   <div className="space-y-2">
-                    <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
+                    <p className="min-h-[60px] w-full rounded-md border border-white/45 bg-white/10 px-3 py-2 text-sm text-white/70">
                       {form.watch('speechPresetDescription') || '（プリセットを選択すると説明が表示されます）'}
                     </p>
-                    <p className="min-h-[60px] w-full rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground">
+                    <p className="min-h-[60px] w-full rounded-md border border-white/45 bg-white/10 px-3 py-2 text-sm text-white/70">
                       {form.watch('speechPresetExample') || '（例文が設定されていません）'}
                     </p>
                   </div>
@@ -1289,7 +1289,7 @@ export function ResidentForm({
                         <Button
                           type="button"
                           onClick={() => setShowDiagnosis(true)}
-                          className="bg-black text-white hover:bg-black/90 px-5 py-2"
+                          className="border border-white/65 bg-white/30 text-white/95 shadow-[0_10px_18px_rgba(6,18,32,0.16)] hover:bg-white/36 px-5 py-2"
                         >
                           診断する
                         </Button>
@@ -1298,31 +1298,27 @@ export function ResidentForm({
                       <div className="mx-auto flex items-center gap-2">
                         <label
                           htmlFor="mbti-select"
-                          className="text-sm text-gray-700 whitespace-nowrap"
+                          className="text-sm text-white/70 whitespace-nowrap"
                         >
                           手動で選択：
                         </label>
-                        <select
-                          id="mbti-select"
-                          className="rounded border px-3 py-2 min-w-[140px]"
-                          name={field.name}
-                          ref={field.ref}
-                          value={v}
-                          onChange={(e) => field.onChange(e.target.value)}
-                          onBlur={field.onBlur}
-                        >
-                          <option value="">（未設定）</option>
-                          {[
-                            'INTJ', 'INTP', 'ENTJ', 'ENTP',
-                            'INFJ', 'INFP', 'ENFJ', 'ENFP',
-                            'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
-                            'ISTP', 'ISFP', 'ESTP', 'ESFP',
-                          ].map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
+                        <Select value={v} onValueChange={(value) => field.onChange(value)}>
+                          <SelectTrigger className="min-w-[140px]">
+                            <SelectValue placeholder="（未設定）" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[
+                              'INTJ', 'INTP', 'ENTJ', 'ENTP',
+                              'INFJ', 'INFP', 'ENFJ', 'ENFP',
+                              'ISTJ', 'ISFJ', 'ESTJ', 'ESFJ',
+                              'ISTP', 'ISFP', 'ESTP', 'ESFP',
+                            ].map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {t}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </FormControl>
@@ -1344,7 +1340,10 @@ export function ResidentForm({
 
             {/* 設定済みの関係の表示 */}
             {configuredRelations.length > 0 && (
-              <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+              <div
+                className="space-y-2 rounded-md border bg-white/10 p-3"
+                style={{ backgroundColor: 'rgba(255,255,255,0.14)', borderColor: 'rgba(255,255,255,0.4)' }}
+              >
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm font-semibold">既に登録済みの関係</p>
                 </div>
@@ -1357,7 +1356,8 @@ export function ResidentForm({
                     return (
                       <div
                         key={resident.id}
-                        className="flex flex-col gap-2 rounded border bg-background/60 px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                        className="flex flex-col gap-2 rounded-lg border bg-white/24 px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
                       >
                         <div className="space-y-1">
                           <p className="text-sm font-semibold">{resident.name}</p>
@@ -1372,6 +1372,14 @@ export function ResidentForm({
                             variant={editingRelationTargetId === resident.id ? 'default' : 'secondary'}
                             size="sm"
                             onClick={() => setEditingRelationTargetId(resident.id)}
+                            className="!border-white/65 !bg-none !bg-white/34 !text-slate-700 !shadow-none hover:!bg-white/38"
+                            style={{
+                              backgroundImage: 'none',
+                              backgroundColor: 'rgba(255,255,255,0.44)',
+                              border: '1px solid rgba(255,255,255,0.7)',
+                              boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                              color: 'rgba(90,90,90,0.9)',
+                            }}
                           >
                             {editingRelationTargetId === resident.id ? '編集中' : '編集'}
                           </Button>
@@ -1570,30 +1578,30 @@ export function ResidentForm({
           <>
             {/* Backdrop（背景クリックで閉じる） */}
             <div
-              className="fixed inset-0 z-40 bg-black/40"
+              className="fixed inset-0 z-40 bg-white/10 backdrop-blur-[6px]"
               onClick={() => setShowDiagnosis(false)}
               aria-hidden="true"
             />
 
             {/* 右側スライドのサイドパネル */}
             <aside
-              className="fixed right-0 top-0 z-50 h-svh w-[420px] max-w-[88vw] bg-white shadow-xl border-l outline-none
-                     animate-in slide-in-from-right duration-200"
+              className="fixed right-[32px] top-[clamp(24px,3vw,56px)] z-50 h-[min(78vh,860px)] w-[360px] max-w-[84vw] rounded-3xl border border-white/70 bg-white/34 text-slate-700 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md outline-none animate-in slide-in-from-right duration-200 [&_.text-muted-foreground]:text-slate-500 [&_.text-foreground]:text-slate-700 [&_*]:text-slate-700"
+              style={{ backgroundColor: 'rgba(255,255,255,0.44)', borderColor: 'rgba(255,255,255,0.7)' }}
               role="dialog"
               aria-modal="true"
             >
               {/* ... (パネルのヘッダー) ... */}
-              <div className="flex items-center justify-between border-b px-4 py-3">
+              <div className="flex items-center justify-between border-b border-white/40 px-4 py-3">
                 <h3 className="text-sm font-semibold">MBTI 診断</h3>
                 <button
                   type="button"
-                  className="text-sm text-muted-foreground hover:underline"
+                  className="text-sm text-slate-600 hover:underline"
                   onClick={() => setShowDiagnosis(false)}
                 >
                   閉じる（Esc）
                 </button>
               </div>
-              <div className="flex h-[calc(100svh-48px-64px)] flex-col gap-4 overflow-y-auto px-4 py-4">
+              <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-3">
                 {/* 質問リスト（スライダー） */}
                 {QUESTIONS.map((q) => (
                   <div key={q.id} className="grid grid-cols-5 items-center gap-3">
@@ -1609,7 +1617,7 @@ export function ResidentForm({
               </div>
 
               {/* フッター操作 */}
-              <div className="flex justify-end gap-2 border-t px-4 py-3">
+              <div className="flex justify-end gap-2 border-t border-white/40 px-4 py-2">
                 <Button
                   type="button"
                   onClick={() => {

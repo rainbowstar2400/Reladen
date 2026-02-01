@@ -360,12 +360,13 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
               (category === 'speech' && !newDescription) ||
               uiDisabled
             }
-            className="mt-2 !border-white/65 !bg-none !bg-white/34 !text-white/95 !shadow-none hover:!bg-white/38"
+            className="mt-2 !border-white/65 !bg-none !bg-white/34 !text-slate-700 !shadow-none hover:!bg-white/38"
             style={{
               backgroundImage: 'none',
               backgroundColor: 'rgba(255,255,255,0.44)',
               border: '1px solid rgba(255,255,255,0.7)',
               boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+              color: 'rgba(90,90,90,0.9)',
             }}
           >
             {isMutating ? (

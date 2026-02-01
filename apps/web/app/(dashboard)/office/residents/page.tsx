@@ -44,18 +44,45 @@ export default function ResidentsPage() {
           {/* レイアウトをグリッドからリスト（space-y）に変更 */}
           <div className="space-y-4">
             {data?.map((resident) => (
-              <Card key={resident.id}>
+              <Card
+                key={resident.id}
+                style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
+              >
                 {/* CardContent を flex レイアウトに変更 */}
                 <CardContent className="flex items-center justify-between p-4">
                   {/* 名前 */}
                   <div className="font-medium">{resident.name}</div>
                   {/* ボタン群（詳細、編集、削除） */}
                   <div className="flex gap-2">
-                    <Button asChild size="sm" variant="outline">
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className="!border-white/65 !bg-none !bg-white/34 !text-slate-700 !shadow-none hover:!bg-white/38"
+                      style={{
+                        backgroundImage: 'none',
+                        backgroundColor: 'rgba(255,255,255,0.44)',
+                        border: '1px solid rgba(255,255,255,0.7)',
+                        boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                        color: 'rgba(90,90,90,0.9)',
+                      }}
+                    >
                       <Link href={`/office/residents/${resident.id}`}>詳細</Link>
                     </Button>
                     {/* 編集ボタンを追加（リンク先は詳細ページ） */}
-                    <Button asChild size="sm" variant="outline">
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                      className="!border-white/65 !bg-none !bg-white/34 !text-slate-700 !shadow-none hover:!bg-white/38"
+                      style={{
+                        backgroundImage: 'none',
+                        backgroundColor: 'rgba(255,255,255,0.44)',
+                        border: '1px solid rgba(255,255,255,0.7)',
+                        boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                        color: 'rgba(90,90,90,0.9)',
+                      }}
+                    >
                       <Link href={`/office/residents/${resident.id}/edit`}>編集</Link>
                     </Button>
                     <Button

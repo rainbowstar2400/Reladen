@@ -22,6 +22,8 @@ export function LogDetailPanelContent({
   data: LogDetail;
   onClose?: () => void;
 }) {
+  const bubbleBg = 'rgba(255,255,255,0.6)';
+  const bubbleBorder = 'rgba(85,85,85,0.8)';
   return (
     <>
       <div className="flex items-start justify-between border-b p-4">
@@ -42,22 +44,37 @@ export function LogDetailPanelContent({
       </div>
 
       <div className="p-4">
-        <div className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-4 items-start p-4 pb-20">
+        <div className="space-y-4 p-4 pb-20">
           {data.lines.map((line, index) => (
-            <Fragment key={index}>
-              <div className="text-sm font-medium text-foreground text-center py-2 whitespace-nowrap">
+            <div key={index} className="flex items-center gap-3">
+              <div className="shrink-0 whitespace-nowrap text-right text-sm font-medium text-slate-600">
                 {line.speaker}
               </div>
               <div className="relative max-w-[400px]">
-                <div className="rounded-2xl rounded-tl-sm bg-muted px-4 py-2 text-sm leading-relaxed">
+                                <div
+                  className="rounded-[14px] px-[14px] py-[10px] text-sm leading-relaxed text-slate-700"
+                  style={{
+                    border: `2px solid ${bubbleBorder}`,
+                    boxSizing: 'border-box',
+                    backgroundColor: bubbleBg,
+                  }}
+                >
                   {line.text}
                 </div>
+                {/* 外側（三角：枠色） */}
                 <div
-                  className="absolute left-[-6px] top-3 h-0 w-0 border-y-[6px] border-r-[8px] border-y-transparent border-r-muted"
+                  className="absolute left-[-24px] top-1/2 h-0 w-0 -translate-y-1/2 border-[12px] border-transparent"
+                  style={{ borderRightColor: bubbleBorder, zIndex: 1 }}
+                  aria-hidden="true"
+                />
+                {/* 内側（三角：背景色） */}
+                <div
+                  className="absolute left-[-23px] top-1/2 h-0 w-0 -translate-y-1/2 border-[11px] border-transparent"
+                  style={{ borderRightColor: bubbleBg, zIndex: 2 }}
                   aria-hidden="true"
                 />
               </div>
-            </Fragment>
+            </div>
           ))}
         </div>
         <div className="mt-6 space-y-3 text-base leading-relaxed text-foreground">

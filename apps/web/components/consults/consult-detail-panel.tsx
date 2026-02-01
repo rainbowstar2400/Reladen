@@ -34,6 +34,8 @@ export function ConsultDetailPanelContent({
   onClose?: () => void
 }) {
   const router = useRouter()
+  const bubbleBg = 'rgba(255,255,255,0.6)'
+  const bubbleBorder = 'rgba(85,85,85,0.8)'
 
   // 一時選択（未確定）。クリックで何度でも変更可
   const [picked, setPicked] = useState<string | null>(null)
@@ -89,12 +91,15 @@ export function ConsultDetailPanelContent({
       {/* 本文 */}
       <div className="space-y-4 p-4">
         {/* 相談フキダシ */}
-        <div className="flex items-start gap-2">
-          <div className="w-6 shrink-0 text-sm text-muted-foreground">{data.prompt.speaker}</div>
+        <div className="flex items-center gap-3">
+          <div className="shrink-0 whitespace-nowrap text-right text-sm text-slate-600">{data.prompt.speaker}</div>
           <div className="relative max-w-[420px]">
-            <div className="rounded-lg border px-3 py-1.5">{data.prompt.text}</div>
-            <div className="absolute -left-2 top-3 h-0 w-0 border-y-8 border-y-transparent border-r-8 border-r-border" />
-            <div className="absolute -left-[7px] top-[13px] h-0 w-0 border-y-[7px] border-y-transparent border-r-[7px] border-r-background" />
+            <div
+              className="rounded-[14px] px-[14px] py-[10px] text-sm leading-relaxed text-slate-700"
+              style={{ border: `2px solid ${bubbleBorder}`, backgroundColor: bubbleBg }}
+            >
+              {data.prompt.text}
+            </div>
           </div>
         </div>
 
@@ -118,7 +123,7 @@ export function ConsultDetailPanelContent({
                 aria-pressed={!answered && isPicked}
                 aria-label={
                   isCommitted ? `${c.label}（あなたの回答）` :
-                  isPicked && !answered ? `${c.label}（選択中）` : c.label
+                    isPicked && !answered ? `${c.label}（選択中）` : c.label
                 }
               >
                 <div className="flex items-center justify-between">
@@ -146,12 +151,37 @@ export function ConsultDetailPanelContent({
 
         {/* 住人の返答（確定後） */}
         {reply && (
-          <div className="mt-4 flex items-start gap-2" aria-live="polite">
-            <div className="w-6 shrink-0 text-sm text-muted-foreground">{reply.speaker}</div>
+          <div className="mt-4 flex items-center gap-3" aria-live="polite">
+            <div className="shrink-0 whitespace-nowrap text-right text-sm text-slate-600">{reply.speaker}</div>
             <div className="relative max-w-[420px]">
-              <div className="rounded-md border px-3 py-1.5">{reply.text}</div>
-              <div className="absolute -left-2 top-3 h-0 w-0 border-y-8 border-y-transparent border-r-8 border-r-border" />
-              <div className="absolute -left-[7px] top-[13px] h-0 w-0 border-y-[7px] border-y-transparent border-r-[7px] border-r-background" />
+              {/* 外側（三角：枠色） */}
+              <div
+                className="absolute left-[-24px] top-1/2 h-0 w-0 -translate-y-1/2 border-[12px] border-transparent"
+                style={{ borderRightColor: bubbleBorder, zIndex: 1 }}
+              />
+              {/* 内側（三角：背景色） */}
+              <div
+                className="absolute left-[-23px] top-1/2 h-0 w-0 -translate-y-1/2 border-[11px] border-transparent"
+                style={{ borderRightColor: bubbleBg, zIndex: 2 }}
+              />
+            </div>
+            <div className="relative max-w-[420px]">
+              <div
+                className="rounded-[14px] px-[14px] py-[10px] text-sm leading-relaxed text-slate-700"
+                style={{ border: `2px solid ${bubbleBorder}`, backgroundColor: bubbleBg }}
+              >
+                {reply.text}
+              </div>
+              {/* 外側（三角：枠色） */}
+              <div
+                className="absolute left-[-24px] top-1/2 h-0 w-0 -translate-y-1/2 border-[12px] border-transparent"
+                style={{ borderRightColor: bubbleBorder, zIndex: 1 }}
+              />
+              {/* 内側（三角：背景色） */}
+              <div
+                className="absolute left-[-23px] top-1/2 h-0 w-0 -translate-y-1/2 border-[11px] border-transparent"
+                style={{ borderRightColor: bubbleBg, zIndex: 2 }}
+              />
             </div>
           </div>
         )}

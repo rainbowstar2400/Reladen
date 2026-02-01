@@ -28,7 +28,7 @@ const RatingBoxDisplay = ({ value }: { value: number }) => (
         key={index}
         className={`h-5 w-5 rounded
           ${index < value
-            ? 'bg-primary text-primary-foreground' // アクティブなボックス
+            ? 'bg-slate-600 text-white' // アクティブなボックス
             : 'bg-neutral-200 dark:bg-neutral-700' // 非アクティブなボックス
           }
         `}

@@ -4,6 +4,7 @@ import { useTheme } from 'next-themes'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSettings } from '@/lib/use-settings'
 import { useAuth } from '@/lib/auth/use-auth';
 import { clearLocalAll } from '@/lib/db-local';
@@ -23,6 +24,7 @@ export default function SettingsPage() {
     backgroundColor: 'rgba(255,255,255,0.44)',
     border: '1px solid rgba(255,255,255,0.7)',
     boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+    color: 'rgba(90,90,90,0.9)',
   }
 
   const setThemeAll = (v: 'light' | 'dark' | 'system') => {
@@ -148,9 +150,28 @@ export default function SettingsPage() {
               <div className="font-medium">日付更新</div>
               <div className="text-xs text-muted-foreground">1日の区切りの時刻を設定</div>
             </div>
-            <select value={s.dayRollover} onChange={e => setS(p => ({ ...p, dayRollover: e.target.value as any }))} className="rounded-md border px-2 py-1 text-sm bg-background">
-              {ROLLOVERS.map(x => <option key={x} value={x}>{x}</option>)}
-            </select>
+            <Select
+              value={s.dayRollover}
+              onValueChange={(value) => setS(p => ({ ...p, dayRollover: value as any }))}
+            >
+              <SelectTrigger
+                className="w-[140px] !border-white/65 !bg-none !bg-white/34 !text-slate-700 !shadow-none hover:!bg-white/38"
+                style={{
+                  backgroundImage: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.44)',
+                  border: '1px solid rgba(255,255,255,0.7)',
+                  boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                  color: 'rgba(90,90,90,0.9)',
+                }}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ROLLOVERS.map(x => (
+                  <SelectItem key={x} value={x}>{x}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </CardContent></Card>
         </div>
       </section>
@@ -210,6 +231,7 @@ function AccountButtons(): JSX.Element {
     backgroundColor: 'rgba(255,255,255,0.44)',
     border: '1px solid rgba(255,255,255,0.7)',
     boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+    color: 'rgba(90,90,90,0.9)',
   };
 
   if (!hasSupabase) return <Button variant="outline" disabled style={cardButtonStyle}>ローカル動作中</Button>;

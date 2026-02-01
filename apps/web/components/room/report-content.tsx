@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { bulkUpsert, listLocal } from '@/lib/db-local';
 import type { EventLogStrict } from '@repo/shared/types/conversation';
@@ -564,61 +565,98 @@ export function ReportContent() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">キャラクター：</span>
-            <select
-              value={charA}
-              onChange={(e) => setCharA(e.target.value)}
-              className="rounded-md border border-white/55 bg-white/24 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
-              style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
+            <span className="shrink-0 text-sm text-muted-foreground">キャラクター：</span>
+            <Select
+              value={charA || '__none__'}
+              onValueChange={(value) => setCharA(value === '__none__' ? '' : value)}
             >
-              <option value="">—</option>
-              {allCharacters.map((c) => (
-                <option key={c} value={c}>
-                  {residentNameMap[c] ?? c}
-                </option>
-              ))}
-            </select>
-            <select
-              value={charB}
-              onChange={(e) => setCharB(e.target.value)}
-              className="rounded-md border border-white/55 bg-white/24 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
-              style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
+            <SelectTrigger
+                className="w-[100px] !border-white/65 !bg-none !bg-white/34 !text-slate-700 !shadow-none hover:!bg-white/38"
+                style={{
+                  backgroundImage: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.44)',
+                  border: '1px solid rgba(255,255,255,0.7)',
+                  boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                  color: 'rgba(90,90,90,0.9)',
+                }}
+              >
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">—</SelectItem>
+                {allCharacters.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {residentNameMap[c] ?? c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={charB || '__none__'}
+              onValueChange={(value) => setCharB(value === '__none__' ? '' : value)}
             >
-              <option value="">—</option>
-              {allCharacters.map((c) => (
-                <option key={c} value={c}>
-                  {residentNameMap[c] ?? c}
-                </option>
-              ))}
-            </select>
+            <SelectTrigger
+                className="w-[100px] !border-white/65 !bg-none !bg-white/34 !text-slate-700 !shadow-none hover:!bg-white/38"
+                style={{
+                  backgroundImage: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.44)',
+                  border: '1px solid rgba(255,255,255,0.7)',
+                  boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                  color: 'rgba(90,90,90,0.9)',
+                }}
+              >
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">—</SelectItem>
+                {allCharacters.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {residentNameMap[c] ?? c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">変化種別：</span>
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as ChangeKindFilter)}
-              className="rounded-md border border-white/55 bg-white/24 px-2 py-1 text-sm text-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
-              style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
+            <span className="shrink-0 text-sm text-muted-foreground">変化種別：</span>
+            <Select
+              value={kind || '__none__'}
+              onValueChange={(value) => setKind((value === '__none__' ? '' : value) as ChangeKindFilter)}
             >
-              <option value="">—</option>
-              {KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
+            <SelectTrigger
+                className="w-[100px] !border-white/65 !bg-none !bg-white/34 !text-slate-700 !shadow-none hover:!bg-white/38"
+                style={{
+                  backgroundImage: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.44)',
+                  border: '1px solid rgba(255,255,255,0.7)',
+                  boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                  color: 'rgba(90,90,90,0.9)',
+                }}
+              >
+                <SelectValue placeholder="—" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">—</SelectItem>
+                {KINDS.map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {k}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="ml-auto flex items-center">
             <Button
               variant="outline"
               size="sm"
               onClick={resetFilters}
-              className="!border-white/65 !bg-none !bg-white/34 !text-white/95 !shadow-none hover:!bg-white/38"
+              className="!border-white/65 !bg-none !bg-white/34 !text-slate-700 !shadow-none hover:!bg-white/38"
               style={{
                 backgroundImage: 'none',
                 backgroundColor: 'rgba(255,255,255,0.44)',
                 border: '1px solid rgba(255,255,255,0.7)',
                 boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                color: 'rgba(90,90,90,0.9)',
               }}
             >
               リセット
@@ -700,7 +738,18 @@ export function ReportContent() {
 
           <div className="flex items-center justify-center gap-2 pt-4">
             {page > 1 && (
-              <Button variant="outline" size="icon" onClick={() => setPage(page - 1)}>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setPage(page - 1)}
+                className="!border-white/60 !bg-none !bg-white/24 !text-white/95 hover:!bg-white/28"
+                style={{
+                  backgroundImage: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.34)',
+                  border: '1px solid rgba(255,255,255,0.65)',
+                  boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                }}
+              >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
             )}
@@ -710,12 +759,30 @@ export function ReportContent() {
                 variant={page === i + 1 ? 'secondary' : 'outline'}
                 size="icon"
                 onClick={() => setPage(i + 1)}
+                className="!border-white/60 !bg-none !bg-white/24 !text-white/95 hover:!bg-white/28"
+                style={{
+                  backgroundImage: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.34)',
+                  border: '1px solid rgba(255,255,255,0.65)',
+                  boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                }}
               >
                 {i + 1}
               </Button>
             ))}
             {page < totalPages && (
-              <Button variant="outline" size="icon" onClick={() => setPage(page + 1)}>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setPage(page + 1)}
+                className="!border-white/60 !bg-none !bg-white/24 !text-white/95 hover:!bg-white/28"
+                style={{
+                  backgroundImage: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.34)',
+                  border: '1px solid rgba(255,255,255,0.65)',
+                  boxShadow: '0 10px 18px rgba(6,18,32,0.16)',
+                }}
+              >
                 <ChevronRight className="h-4 w-4" />
               </Button>
             )}
@@ -746,8 +813,12 @@ export function ReportContent() {
               animate={{ x: '-16px' }}
               exit={{ x: '100%' }}
               transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
-              className="absolute inset-y-0 right-0 z-30 w-full max-w-[560px] rounded-[24px] border border-white/70 bg-white/34 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md"
-              style={{ backgroundColor: 'rgba(255,255,255,0.44)', borderColor: 'rgba(255,255,255,0.7)' }}
+              className="absolute inset-y-0 right-0 z-30 w-full max-w-[560px] rounded-[24px] border border-white/70 bg-white/34 text-slate-700 shadow-[0_18px_40px_rgba(6,18,32,0.18)] backdrop-blur-md [&_*]:text-slate-700 [&_strong]:text-slate-800 [&_.text-white]:text-slate-700 [&_.text-muted-foreground]:text-slate-500 [&_.text-foreground]:text-slate-700 [&_.text-gray-700]:text-slate-600 [&_.text-gray-600]:text-slate-500 [&_.text-gray-500]:text-slate-500 [&_.text-gray-400]:text-slate-400"
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.44)',
+                borderColor: 'rgba(255,255,255,0.7)',
+                color: 'rgba(90,90,90,0.9)',
+              }}
             >
               {panelMode === 'log' && logDetail && (
                 <LogDetailPanelContent data={logDetail} onClose={closePanel} />

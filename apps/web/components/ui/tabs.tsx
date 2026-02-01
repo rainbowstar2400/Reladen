@@ -18,7 +18,7 @@ const TabsList = ({ className, ...props }: TabsPrimitive.TabsListProps) => (
 const TabsTrigger = ({ className, ...props }: TabsPrimitive.TabsTriggerProps) => (
   <TabsPrimitive.Trigger
     className={cn(
-      'inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium text-black/80 transition-all disabled:pointer-events-none disabled:opacity-50 hover:bg-white/16 data-[state=active]:bg-white/30 data-[state=active]:text-white/95 data-[state=active]:ring-1 data-[state=active]:ring-white/60 data-[state=active]:shadow-[0_6px_16px_rgba(6,18,32,0.2)]',
+      'inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium text-slate-700 transition-all disabled:pointer-events-none disabled:opacity-50 hover:bg-white/16 data-[state=active]:bg-white/30 data-[state=active]:text-white/95 data-[state=active]:ring-1 data-[state=active]:ring-white/60 data-[state=active]:shadow-[0_6px_16px_rgba(6,18,32,0.2)]',
       'border-r border-white/30 last:border-r-0',
       className
     )}

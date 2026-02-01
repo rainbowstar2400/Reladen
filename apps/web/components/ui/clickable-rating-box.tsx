@@ -58,8 +58,8 @@ export function ClickableRatingBox({ value, onChange }: Props) {
             'flex-1 select-none py-2 text-center text-sm font-medium',
             index > 0 && 'border-l border-white/40',
             value === num
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-white/12 text-black/80 hover:bg-white/20'
+              ? 'bg-slate-800 !text-white'
+              : 'bg-white/12 !text-black/80 hover:bg-white/20'
           )}
           onClick={(e) => handleClickOnBox(e, num)}
           role="radio"
