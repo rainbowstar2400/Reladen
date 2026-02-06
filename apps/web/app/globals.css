@@ -162,3 +162,30 @@ html { font-size: calc(16px * var(--app-font-scale)); }
   border: 2px solid transparent;
   background-clip: content-box;
 }
+
+.speech-bubble {
+  --bubble-bg: rgba(255, 255, 255, 0.82);
+  --bubble-stroke: rgba(51, 65, 85, 0.22);
+
+  position: relative;
+  padding: 10px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--bubble-stroke);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), var(--bubble-bg));
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  line-height: 1.65;
+}
+
+.speech-bubble::after {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translateY(-50%) rotate(45deg);
+  background: var(--bubble-bg);
+  border-left: 1px solid var(--bubble-stroke);
+  border-bottom: 1px solid var(--bubble-stroke);
+  border-radius: 2px;
+}
