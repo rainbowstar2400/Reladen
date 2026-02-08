@@ -618,7 +618,10 @@ export function HomeContent() {
             animate={{ x: isRightPeek ? `calc(-1 * ${slideAmount})` : 0 }}
             transition={{ type: 'spring', stiffness: 120, damping: 18 }}
           >
-            <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
+            <GlassPanel
+              className="desk-panel-scroll max-h-[55vh] overflow-y-auto px-5 py-4"
+              contentClassName="space-y-4"
+            >
           <PanelHeader
             icon="🗨️"
             title="会話"
@@ -722,7 +725,10 @@ export function HomeContent() {
             }}
             transition={{ type: 'spring', stiffness: 120, damping: 18 }}
           >
-            <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
+            <GlassPanel
+              className="desk-panel-scroll max-h-[55vh] overflow-y-auto px-5 py-4"
+              contentClassName="space-y-4"
+            >
           <PanelHeader
             icon="✉"
             title="相談"
@@ -779,7 +785,10 @@ export function HomeContent() {
           </div>
             </GlassPanel>
 
-            <GlassPanel className="px-5 py-4" contentClassName="space-y-4">
+            <GlassPanel
+              className="desk-panel-scroll max-h-[55vh] overflow-y-auto px-5 py-4"
+              contentClassName="space-y-4"
+            >
           <PanelHeader
             icon="🧑‍🤝‍🧑"
             title="みんなの様子"
