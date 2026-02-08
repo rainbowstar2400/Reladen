@@ -1,5 +1,5 @@
 'use client'
-import { Fragment, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -23,8 +23,8 @@ export function LogDetailPanelContent({
   onClose?: () => void;
 }) {
   return (
-    <>
-      <div className="flex items-start justify-between border-b p-4">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 flex items-start justify-between border-b p-4">
         <div className="text-lg font-medium">{data.title}</div>
         <div className="flex items-start gap-4">
           <div className="text-sm text-muted-foreground tabular-nums">
@@ -41,15 +41,15 @@ export function LogDetailPanelContent({
         </div>
       </div>
 
-      <div className="p-4">
-        <div className="space-y-4 p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4">
+        <div className="space-y-2 px-4 py-2">
           {data.lines.map((line, index) => (
             <div key={index} className="flex items-center gap-3">
               <div className="shrink-0 whitespace-nowrap text-right text-sm font-medium text-slate-600">
                 {line.speaker}
               </div>
-              <div className="max-w-[400px]">
-                <div className="speech-bubble text-base text-slate-700">
+              <div className="ml-3 max-w-[400px]">
+                <div className="speech-bubble text-sm text-slate-700">
                   {line.text}
                 </div>
               </div>
@@ -57,14 +57,14 @@ export function LogDetailPanelContent({
           ))}
         </div>
         {data.system.length > 0 && (
-          <div className="mt-3 space-y-2 px-4 pb-4 text-sm text-slate-700">
+          <div className="mt-1.5 space-y-0.5 px-4 pb-4 text-base text-slate-700">
             {data.system.map((line, index) => (
               <div key={index}>{line}</div>
             ))}
           </div>
         )}
       </div>
-    </>
+    </div>
   )
 }
 

@@ -39,7 +39,7 @@ function parseSystemLine(rawLine: string, nameMap: Record<string, string>): stri
     if (favorMatch) {
       const [, from, to, direction] = favorMatch;
       const change = direction === '↑' ? '上昇しました。' : '下降しました。';
-      messages.push(`${from}から${to}への好感度が${change}`);
+      messages.push(`${from} から ${to} への好感度が${change}`);
       return;
     }
 
@@ -47,7 +47,7 @@ function parseSystemLine(rawLine: string, nameMap: Record<string, string>): stri
     if (impressionMatch) {
       const [, from, to, next] = impressionMatch;
       const translated = translateImpressionLabel(next.trim());
-      messages.push(`${from}から${to}への印象が「${translated}」に変化しました。`);
+      messages.push(`${from} から ${to} への印象が「${translated}」に変化しました。`);
       return;
     }
 

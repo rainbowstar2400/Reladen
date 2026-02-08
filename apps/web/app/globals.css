@@ -168,24 +168,36 @@ html { font-size: calc(16px * var(--app-font-scale)); }
   --bubble-stroke: rgba(51, 65, 85, 0.22);
 
   position: relative;
-  padding: 10px 14px;
-  border-radius: 16px;
+  padding: 5px 7px;
+  border-radius: 8px;
   border: 1px solid var(--bubble-stroke);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), var(--bubble-bg));
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
   line-height: 1.65;
 }
 
+.speech-bubble::before,
 .speech-bubble::after {
   content: "";
   position: absolute;
-  left: -6px;
-  top: 50%;
-  width: 12px;
-  height: 12px;
-  transform: translateY(-50%) rotate(45deg);
-  background: var(--bubble-bg);
-  border-left: 1px solid var(--bubble-stroke);
-  border-bottom: 1px solid var(--bubble-stroke);
-  border-radius: 2px;
+  top: 60%;
+  width: 0;
+  height: 0;
+  transform-origin: right center;
+  transform: translateY(-50%) skewY(10deg);
+  pointer-events: none;
+}
+
+.speech-bubble::before {
+  left: -15px;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-right: 15px solid var(--bubble-stroke);
+}
+
+.speech-bubble::after {
+  left: -14px;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 14px solid var(--bubble-bg);
 }
