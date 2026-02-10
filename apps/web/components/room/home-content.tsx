@@ -20,6 +20,7 @@ import { ConsultDetailPanelContent, type ConsultDetail } from '@/components/cons
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage';
 import { useSync } from '@/lib/sync/use-sync';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { calcSituation, type Situation, type SleepProfile } from '../../../../packages/shared/logic/schedule';
 
 const notoSans = Noto_Sans_JP({
   weight: ['300', '400', '500', '600'],
@@ -32,6 +33,12 @@ const WEATHER_LABELS: Record<WeatherKind, string> = {
   cloudy: 'くもり',
   rain: '雨',
   storm: '雷雨',
+};
+
+const SITUATION_TONE_MAP: Record<Situation, string> = {
+  active: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]',
+  preparing: 'bg-[#f59e0b] shadow-[0_0_8px_rgba(245,158,11,0.6)]',
+  sleeping: 'bg-[#3a7bd5] shadow-[0_0_8px_rgba(58,123,213,0.6)]',
 };
 
 type ResidentStatusItem = {
@@ -144,15 +151,17 @@ export function HomeContent() {
   const unreadConversation = conversationNotifications.filter((n) => n.status === 'unread').length;
   const unreadConsult = consultNotifications.filter((n) => n.status === 'unread').length;
 
+  const nowMinute = now.getHours() * 60 + now.getMinutes();
   const residentStatusList = useMemo<ResidentStatusItem[]>(() => {
     if (residents.length === 0) return RESIDENT_STATUS_SAMPLE;
     return residents.map((r) => ({
+      // 状態 (active / preparing / sleeping) に応じてインジケータ色を切り替える
+      tone: SITUATION_TONE_MAP[calcSituation(now, (r.sleepProfile ?? {}) as SleepProfile)],
       id: r.id,
       name: r.name ?? '住人',
-      tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]',
       trustToPlayer: r.trustToPlayer ?? 0,
     }));
-  }, [residents]);
+  }, [residents, nowMinute]);
   const filteredResidentStatusList = useMemo(() => {
     const term = searchTerm.trim();
     let list = residentStatusList;
@@ -878,7 +887,7 @@ export function HomeContent() {
                     className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(rgba(255,255,255,0.2)_0.6px,transparent_0.6px)] bg-[length:6px_6px] opacity-20 mix-blend-soft-light"
                     aria-hidden="true"
                   />
-                  <div className="relative z-10">
+                  <div className="relative z-10 desk-panel-scroll max-h-[55vh] overflow-y-auto">
                     <LogDetailPanelContent data={logDetail} onClose={closePanel} />
                   </div>
                 </motion.aside>
@@ -956,7 +965,7 @@ export function HomeContent() {
                     className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(rgba(255,255,255,0.2)_0.6px,transparent_0.6px)] bg-[length:6px_6px] opacity-20 mix-blend-soft-light"
                     aria-hidden="true"
                   />
-                  <div className="relative z-10">
+                  <div className="relative z-10 desk-panel-scroll max-h-[55vh] overflow-y-auto">
                   <div className="flex items-start justify-between border-b p-4">
                     <div className="text-lg font-medium">
                       {peekResident?.name ?? '住人'}の様子

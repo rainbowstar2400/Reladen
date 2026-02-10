@@ -9,8 +9,8 @@ export async function callGptForWeatherComment(input: WeatherCommentInput): Prom
   const { system, user } = buildWeatherCommentPrompt(input);
   try {
     const res = await client.responses.create({
-      model: "gpt-5.2",
-      temperature: 0.7,
+      model: "gpt-5.1",
+      temperature: 0.8,
       max_output_tokens: 120,
       input: [
         { role: "system", content: [{ type: "input_text", text: system }] },

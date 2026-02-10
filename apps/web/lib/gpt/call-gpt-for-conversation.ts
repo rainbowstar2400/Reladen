@@ -152,7 +152,7 @@ export async function callGptForConversation(
 
   try {
     const res = await client.responses.create({
-      model: "gpt-5.2",
+      model: "gpt-5.1",
       temperature: 0.8,
       input: [
         {
