@@ -14,7 +14,10 @@ import { newId } from "@/lib/newId";
 import { listKV as listAny } from "@/lib/db/kv-server";
 import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
 import { beliefRowToRecord } from "@/lib/conversation/belief-mapper";
-import type { ConversationResidentProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
+import type {
+  ConversationResidentProfile,
+  ConversationPairContext,
+} from "@repo/shared/gpt/prompts/conversation-prompt";
 
 /** GPTに渡す thread 形状 */
 type ThreadForGpt = {
@@ -132,8 +135,69 @@ type RelationRow = {
   aId?: string;
   bId?: string;
   type?: string;
+  updated_at?: string;
+  updatedAt?: string;
   deleted?: boolean;
 };
+
+type FeelingRow = {
+  id?: string;
+  from_id?: string;
+  to_id?: string;
+  fromId?: string;
+  toId?: string;
+  label?: string;
+  score?: number;
+  updated_at?: string;
+  updatedAt?: string;
+  deleted?: boolean;
+};
+
+type EventRow = {
+  id?: string;
+  kind?: string;
+  payload?: unknown;
+  deleted?: boolean;
+};
+
+function toUpdatedAtMillis(row: { updated_at?: string; updatedAt?: string }): number {
+  const raw = typeof row.updated_at === "string"
+    ? row.updated_at
+    : typeof row.updatedAt === "string"
+      ? row.updatedAt
+      : undefined;
+  if (!raw) return 0;
+  const ts = Date.parse(raw);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function pickRelationPair(row: RelationRow): { aId?: string; bId?: string } {
+  const aId = typeof row.a_id === "string"
+    ? row.a_id
+    : typeof row.aId === "string"
+      ? row.aId
+      : undefined;
+  const bId = typeof row.b_id === "string"
+    ? row.b_id
+    : typeof row.bId === "string"
+      ? row.bId
+      : undefined;
+  return { aId, bId };
+}
+
+function pickFeelingPair(row: FeelingRow): { fromId?: string; toId?: string } {
+  const fromId = typeof row.from_id === "string"
+    ? row.from_id
+    : typeof row.fromId === "string"
+      ? row.fromId
+      : undefined;
+  const toId = typeof row.to_id === "string"
+    ? row.to_id
+    : typeof row.toId === "string"
+      ? row.toId
+      : undefined;
+  return { fromId, toId };
+}
 
 async function hasNoneRelationBetween(
   participants: [string, string],
@@ -145,16 +209,7 @@ async function hasNoneRelationBetween(
 
   return rows.some((rel) => {
     if (!rel || rel.deleted) return false;
-    const aId = typeof rel.a_id === "string"
-      ? rel.a_id
-      : typeof (rel as any).aId === "string"
-        ? (rel as any).aId
-        : undefined;
-    const bId = typeof rel.b_id === "string"
-      ? rel.b_id
-      : typeof (rel as any).bId === "string"
-        ? (rel as any).bId
-        : undefined;
+    const { aId, bId } = pickRelationPair(rel);
 
     if (!aId || !bId) return false;
     const isPair =
@@ -163,6 +218,80 @@ async function hasNoneRelationBetween(
 
     return isPair && rel.type === "none";
   });
+}
+
+async function loadRelationForPair(
+  participants: [string, string],
+): Promise<ConversationPairContext["relationType"]> {
+  const rows = (await listAny("relations")) as unknown as RelationRow[] | null;
+  if (!Array.isArray(rows)) return undefined;
+  const [a, b] = participants;
+
+  const matches = rows
+    .filter((rel) => {
+      if (!rel || rel.deleted || typeof rel.type !== "string") return false;
+      const { aId, bId } = pickRelationPair(rel);
+      if (!aId || !bId) return false;
+      return (aId === a && bId === b) || (aId === b && bId === a);
+    })
+    .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs));
+
+  if (matches.length === 0) return undefined;
+  return matches[0].type;
+}
+
+async function loadFeelingsForPair(
+  participants: [string, string],
+): Promise<NonNullable<ConversationPairContext["feelings"]> | undefined> {
+  const rows = (await listAny("feelings")) as unknown as FeelingRow[] | null;
+  if (!Array.isArray(rows)) return undefined;
+  const [a, b] = participants;
+
+  const pickLatest = (fromId: string, toId: string) => {
+    const found = rows
+      .filter((row) => {
+        if (!row || row.deleted) return false;
+        const pair = pickFeelingPair(row);
+        return pair.fromId === fromId && pair.toId === toId;
+      })
+      .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs))[0];
+    if (!found) return undefined;
+    return {
+      label: typeof found.label === "string" ? found.label : undefined,
+      score: typeof found.score === "number" && Number.isFinite(found.score)
+        ? found.score
+        : undefined,
+    };
+  };
+
+  const aToB = pickLatest(a, b);
+  const bToA = pickLatest(b, a);
+  if (!aToB && !bToA) return undefined;
+  return { aToB, bToA };
+}
+
+async function loadRecentLinesFromThread(
+  thread: ThreadForGpt,
+): Promise<Array<{ speaker: string; text: string }>> {
+  if (!thread.lastEventId) return [];
+  const rows = (await listAny("events")) as unknown as EventRow[] | null;
+  if (!Array.isArray(rows)) return [];
+
+  const event = rows.find((row) => row?.id === thread.lastEventId && !row?.deleted);
+  if (!event || event.kind !== "conversation") return [];
+
+  const payload = event.payload as { lines?: unknown } | undefined;
+  const sourceLines = Array.isArray(payload?.lines) ? payload.lines : [];
+
+  return sourceLines
+    .map((line) => {
+      const speaker = typeof (line as any)?.speaker === "string" ? (line as any).speaker : "";
+      const text = typeof (line as any)?.text === "string" ? (line as any).text.trim() : "";
+      if (!speaker || !text) return null;
+      return { speaker, text };
+    })
+    .filter((line): line is { speaker: string; text: string } => Boolean(line))
+    .slice(-4);
 }
 
 /** threadId と participants から GPT向けの thread オブジェクトを構築 */
@@ -265,6 +394,37 @@ export async function runConversation(
     }
   }
 
+  let pairContext: ConversationPairContext | undefined;
+  let relationType: ConversationPairContext["relationType"] | undefined;
+  let feelings: NonNullable<ConversationPairContext["feelings"]> | undefined;
+  let recentLines: Array<{ speaker: string; text: string }> = [];
+
+  try {
+    relationType = await loadRelationForPair(thread.participants);
+  } catch (error) {
+    console.warn("[runConversation] Failed to load pair relation context.", error);
+  }
+
+  try {
+    feelings = await loadFeelingsForPair(thread.participants);
+  } catch (error) {
+    console.warn("[runConversation] Failed to load pair feeling context.", error);
+  }
+
+  try {
+    recentLines = await loadRecentLinesFromThread(thread);
+  } catch (error) {
+    console.warn("[runConversation] Failed to load recent lines for prompt context.", error);
+  }
+
+  if (relationType || feelings || recentLines.length > 0) {
+    pairContext = {
+      relationType,
+      feelings,
+      recentLines: recentLines.length > 0 ? recentLines : undefined,
+    };
+  }
+
   // 2) GPT 生成
   // ✅ ここがポイント：`threadId` を渡さない。代わりに `thread` と `beliefs` を渡す。
   const gptOut: GptConversationOutput = await callGptForConversation({
@@ -273,6 +433,7 @@ export async function runConversation(
     topicHint,
     lastSummary,
     residents,
+    pairContext,
   });
 
   // gptOut 自体が null/undefined の場合、即時エラー
