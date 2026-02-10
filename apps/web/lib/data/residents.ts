@@ -12,6 +12,27 @@ import {
 import { loadWorldWeather, saveWorldWeather, DEFAULT_WORLD_ID } from '@/lib/data/world-weather';
 
 const KEY = ['residents'];
+
+function normalizeTrustToPlayer(value: unknown): number {
+  const numeric =
+    typeof value === 'number'
+      ? value
+      : Number.isFinite(Number(value))
+        ? Number(value)
+        : 50;
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function withNormalizedTrust<T extends Record<string, any>>(resident: T): T & Resident {
+  const trust = normalizeTrustToPlayer(
+    resident?.trustToPlayer ?? resident?.trust_to_player
+  );
+  return {
+    ...resident,
+    trustToPlayer: trust,
+  } as T & Resident;
+}
+
 // データをフェッチする関数にロジックを追加
 async function fetchResidents() {
   const items = await listLocal<Resident>('residents');
@@ -22,14 +43,15 @@ async function fetchResidents() {
 
   // 取得したデータをループし、スケジュールをチェック・更新
   const processedResidents = activeItems.map((res) => {
+    const normalized = withNormalizedTrust(res as unknown as Record<string, any>);
 
     // sleepProfile が未設定、または基準時刻がなければスキップ
-    if (!res.sleepProfile || typeof res.sleepProfile !== 'object' || !res.sleepProfile.baseBedtime) {
-      return res;
+    if (!normalized.sleepProfile || typeof normalized.sleepProfile !== 'object' || !normalized.sleepProfile.baseBedtime) {
+      return normalized;
     }
 
     // SleepProfile 型として解釈 (型エラーを回避するため)
-    const currentProfile = res.sleepProfile as unknown as SleepProfile;
+    const currentProfile = normalized.sleepProfile as unknown as SleepProfile;
 
     // スケジュールロジックの呼び出し
     const { profile: updatedProfile, needsUpdate } =
@@ -43,15 +65,15 @@ async function fetchResidents() {
       // (res オブジェクト全体を新しい sleepProfile で上書き)
       updatePromises.push(
         // @ts-ignore (putLocal が SleepProfile の更新に対応)
-        putLocal('residents', { ...res, sleepProfile: updatedProfile })
+        putLocal('residents', { ...normalized, sleepProfile: updatedProfile })
       );
 
       // 5b. UIには、DB更新後の「新しいプロファイル」を即時反映
-      return { ...res, sleepProfile: updatedProfile };
+      return { ...normalized, sleepProfile: updatedProfile };
     }
 
     // 更新が不要だった場合、そのままのデータを返す
-    return res;
+    return normalized;
   });
 
   // 溜まったDB更新処理をすべて実行 (非同期・並列)
@@ -230,9 +252,17 @@ export function useUpsertResident() {
       // 既存のレコードを取得（updated_at などのため）
       const existing = (await listLocal<Resident>('residents')).find(r => r.id === id);
 
+      const trustToPlayer = normalizeTrustToPlayer(
+        (residentInput as any)?.trustToPlayer ??
+        (residentInput as any)?.trust_to_player ??
+        (existing as any)?.trustToPlayer ??
+        (existing as any)?.trust_to_player
+      );
+
       const recordData = {
         ...existing, // 既存の値をベースに
         ...residentInput,   // 新しい入力で上書き
+        trustToPlayer,
         id,
         updated_at: new Date().toISOString(),
         deleted: false,

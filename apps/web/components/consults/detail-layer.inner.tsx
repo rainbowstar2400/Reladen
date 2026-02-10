@@ -5,6 +5,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ConsultDetailPanel, { ConsultDetail } from './consult-detail-panel'
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage'
+import { useQueryClient } from '@tanstack/react-query'
 
 // DB/APIから取得したデータを ConsultDetailPanel の型へ合わせて整形
 async function fetchConsultDetailForPanel(id: string): Promise<Omit<ConsultDetail, 'selectedChoiceId'>> {
@@ -47,6 +48,7 @@ async function fetchConsultDetailForPanel(id: string): Promise<Omit<ConsultDetai
 
 export default function ConsultDetailLayerInner() {
   const sp = useSearchParams()
+  const queryClient = useQueryClient()
   const consultId = sp.get('consult')
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null)
   const [detail, setDetail] = useState<Omit<ConsultDetail, 'selectedChoiceId'> | null>(null);
@@ -106,8 +108,11 @@ export default function ConsultDetailLayerInner() {
       data={data}
       onDecide={async (choiceId) => {
         if (!consultId) return
-        await saveConsultAnswer(consultId, choiceId)
-        setSelectedChoiceId(choiceId ?? null) // UIへ即反映
+        const result = await saveConsultAnswer(consultId, choiceId)
+        setSelectedChoiceId(result.selectedChoiceId ?? choiceId ?? null) // UIへ即反映
+        if (result.applied) {
+          await queryClient.invalidateQueries({ queryKey: ['residents'] })
+        }
         // 必要ならトーストやSentry送信などをここに
       }}
     />

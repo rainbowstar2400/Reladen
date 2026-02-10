@@ -41,7 +41,8 @@ function asHttpError(prefix: string, err: any) {
 const RESIDENTS_ALLOWED = new Set([
   'id', 'name', 'updated_at', 'deleted', 'owner_id',
   'mbti', 'traits', 'speech_preset', 'gender', 'age',
-  'birthday', 'occupation', 'first_person', 'interests', 'sleep_profile'
+  'birthday', 'occupation', 'first_person', 'interests', 'sleep_profile',
+  'trust_to_player'
 ]);
 
 // relations の許可カラム

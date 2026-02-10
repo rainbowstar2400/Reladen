@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import ConsultDetailPanel, { ConsultDetail } from '@/components/consults/consult-detail-panel'
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage'
 import { useSync } from '@/lib/sync/use-sync'
+import { useQueryClient } from '@tanstack/react-query'
 
 // API からの応答（/api/consults/[id]）を既存 UI が要求する ConsultDetail に正規化
 function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
@@ -71,6 +72,7 @@ export default function ConsultDetailPage() {
   const params = useParams<{ id: string }>()
   const id = params.id
   const { sync } = useSync();
+  const queryClient = useQueryClient();
 
   const [data, setData] = useState<ConsultDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -138,13 +140,16 @@ export default function ConsultDetailPage() {
           data={data}
           onDecide={async (choiceId) => {
             // 保存（IndexedDB）
-            await saveConsultAnswer(id, choiceId)
+            const result = await saveConsultAnswer(id, choiceId)
             // 直ちにUIへ反映
             setData((prev) =>
               prev
-                ? { ...prev, selectedChoiceId: choiceId ?? null }
+                ? { ...prev, selectedChoiceId: result.selectedChoiceId ?? choiceId ?? null }
                 : prev
             )
+            if (result.applied) {
+              await queryClient.invalidateQueries({ queryKey: ['residents'] })
+            }
             // 保存後に同期を起動（Service Role 環境なら Push→Pull）
             try { await sync(); } catch { }
           }}

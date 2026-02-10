@@ -20,6 +20,7 @@ import { ConsultDetailPanelContent, ConsultDetail } from '@/components/consults/
 import { motion, AnimatePresence } from 'framer-motion';
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage';
 import { useSync } from '@/lib/sync/use-sync';
+import { useQueryClient } from '@tanstack/react-query';
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度';
 type ChangeKindFilter = ChangeKind | '';
@@ -209,6 +210,7 @@ export function ReportContent() {
   const deskTransition = useDeskTransition();
   const residentNameMap = useResidentNameMap();
   const { sync } = useSync();
+  const queryClient = useQueryClient();
 
   const [panelMode, setPanelMode] = useState<ReportPanelMode>('none');
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
@@ -339,6 +341,11 @@ export function ReportContent() {
             if (impBA != null)
               chips.push({ kind: '印象', label: ` ${displayB}→${displayA}：${toLabel(impBA)}` });
           }
+        }
+        if (ev.kind === 'consult') {
+          const trustDelta = Number((ev as any)?.payload?.trustDeltaApplied ?? 0);
+          if (trustDelta > 0) chips.push({ kind: '信頼度', label: '：↑' });
+          if (trustDelta < 0) chips.push({ kind: '信頼度', label: '：↓' });
         }
 
         const systemLine =
@@ -581,15 +588,19 @@ export function ReportContent() {
   const handleConsultDecide = useCallback(
     async (choiceId: string) => {
       if (!activeConsultId) return;
-      await saveConsultAnswer(activeConsultId, choiceId);
-      setConsultDetail((prev) => (prev ? { ...prev, selectedChoiceId: choiceId } : prev));
+      const result = await saveConsultAnswer(activeConsultId, choiceId);
+      const selected = result.selectedChoiceId ?? choiceId;
+      setConsultDetail((prev) => (prev ? { ...prev, selectedChoiceId: selected } : prev));
+      if (result.applied) {
+        await queryClient.invalidateQueries({ queryKey: ['residents'] });
+      }
       try {
         await sync();
       } catch {
         // noop
       }
     },
-    [activeConsultId, sync]
+    [activeConsultId, queryClient, sync]
   );
 
   return (

@@ -280,6 +280,7 @@ export type Database = {
           owner_id: string | null;
           sleep_profile: Json | null;
           speech_preset: string | null;
+          trust_to_player: number;
           traits: Json | null;
           updated_at: string;
         };
@@ -297,6 +298,7 @@ export type Database = {
           owner_id?: string | null;
           sleep_profile?: Json | null;
           speech_preset?: string | null;
+          trust_to_player?: number;
           traits?: Json | null;
           updated_at?: string;
         };
@@ -314,6 +316,7 @@ export type Database = {
           owner_id?: string | null;
           sleep_profile?: Json | null;
           speech_preset?: string | null;
+          trust_to_player?: number;
           traits?: Json | null;
           updated_at?: string;
         };

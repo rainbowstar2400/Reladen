@@ -36,6 +36,13 @@
       "when": 1765020737295,
       "tag": "0004_concerned_skaar",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1770700800000,
+      "tag": "0005_trust_to_player",
+      "breakpoints": true
     }
   ]
 }

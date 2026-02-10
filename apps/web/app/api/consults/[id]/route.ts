@@ -24,9 +24,11 @@ function normalizeConsultRow(row: any) {
   // ダミーが { id, title, content, choices?, updated_at } を想定しているケース
   return {
     id: row.id,
+    kind: row.kind ?? 'consult',
+    payload: p,
     title: p.title ?? p.subject ?? '相談',
     content: p.content ?? p.body ?? '',
-    choices: Array.isArray(p.choices) ? p.choices : [],
+    choices: Array.isArray(p.choices) ? p.choices : (Array.isArray(p.options) ? p.options : []),
     // 相談詳細にタイムスタンプを見せるなら：
     updated_at: row.updated_at,
     // 将来の拡張（必要ならUIが拾えるように置いておく）

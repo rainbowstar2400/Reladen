@@ -21,6 +21,7 @@ import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-stora
 import { useSync } from '@/lib/sync/use-sync';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { calcSituation, type Situation, type SleepProfile } from '../../../../packages/shared/logic/schedule';
+import { useQueryClient } from '@tanstack/react-query';
 
 const notoSans = Noto_Sans_JP({
   weight: ['300', '400', '500', '600'],
@@ -110,6 +111,7 @@ export function HomeContent() {
   const { data: notifications = [], isLoading: isLoadingNotifications } = useNotifications();
   const markRead = useMarkNotificationRead();
   const { sync } = useSync();
+  const queryClient = useQueryClient();
   const { data: residents = [] } = useResidents();
   const { data: feelings = [] } = useFeelings();
   const [now, setNow] = useState(() => new Date());
@@ -571,8 +573,12 @@ export function HomeContent() {
   const handleConsultDecide = useCallback(
     async (choiceId: string) => {
       if (!activeConsultId) return;
-      await saveConsultAnswer(activeConsultId, choiceId);
-      setConsultDetail((prev) => (prev ? { ...prev, selectedChoiceId: choiceId } : prev));
+      const result = await saveConsultAnswer(activeConsultId, choiceId);
+      const selected = result.selectedChoiceId ?? choiceId;
+      setConsultDetail((prev) => (prev ? { ...prev, selectedChoiceId: selected } : prev));
+      if (result.applied) {
+        await queryClient.invalidateQueries({ queryKey: ['residents'] });
+      }
       try {
         await sync();
       } catch {
@@ -587,7 +593,7 @@ export function HomeContent() {
         markRead.mutate(notif.id);
       }
     },
-    [activeConsultId, consultNotifications, markRead, sync]
+    [activeConsultId, consultNotifications, markRead, queryClient, sync]
   );
 
   const navigateDesk = useCallback(

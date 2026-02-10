@@ -41,6 +41,7 @@ export const residents = pgTable('residents', {
   name: text('name').notNull(),
   mbti: text('mbti'),
   traits: jsonb('traits'),
+  trustToPlayer: integer('trust_to_player').notNull().default(50),
   speechPreset: uuid('speech_preset').references(() => presets.id, { onDelete: 'set null' }),
   gender: text('gender'),
   age: integer('age'),

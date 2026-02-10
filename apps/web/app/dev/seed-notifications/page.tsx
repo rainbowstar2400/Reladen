@@ -45,6 +45,12 @@ function buildConsultEvent(now: string, participant: Resident): EventLogStrict {
         { id: 'c2', label: '少し散歩してみる' },
         { id: 'c3', label: '今日は早めに休む' },
       ],
+      residentId: participant.id,
+      trustDeltaByChoice: {
+        c1: 2,
+        c2: 1,
+        c3: -1,
+      },
       occurredAt: now,
       participants: [participant.id],
     },
