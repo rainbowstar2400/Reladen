@@ -160,6 +160,15 @@ type EventRow = {
   deleted?: boolean;
 };
 
+const BRIDGE_PHRASES = [
+  "そういえば",
+  "ところで",
+  "その話で言うと",
+  "関連して",
+  "話は変わるけど",
+] as const;
+const SUMMARY_LINE_MAX = 42;
+
 function toUpdatedAtMillis(row: { updated_at?: string; updatedAt?: string }): number {
   const raw = typeof row.updated_at === "string"
     ? row.updated_at
@@ -197,6 +206,67 @@ function pickFeelingPair(row: FeelingRow): { fromId?: string; toId?: string } {
       ? row.toId
       : undefined;
   return { fromId, toId };
+}
+
+function truncateForSummary(text: string, max = SUMMARY_LINE_MAX): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, Math.max(0, max - 1))}…`;
+}
+
+function containsBridgePhrase(text: string): boolean {
+  const line = text.trim();
+  if (!line) return false;
+  return BRIDGE_PHRASES.some((phrase) => line.includes(phrase));
+}
+
+function buildLastSummaryFromRecentLines(input: {
+  recentLines: Array<{ speaker: string; text: string }>;
+  residents: Record<string, ConversationResidentProfile>;
+}): string | undefined {
+  const lines = Array.isArray(input.recentLines) ? input.recentLines.slice(-2) : [];
+  if (lines.length === 0) return undefined;
+  const chunks = lines.map((line) => {
+    const speaker = input.residents[line.speaker]?.name ?? line.speaker;
+    return `${speaker}: ${truncateForSummary(line.text)}`;
+  });
+  return `直近会話: ${chunks.join(" / ")}`;
+}
+
+export function shouldAllowTopicShift(input: {
+  previousTopic?: string;
+  nextTopic?: string;
+  tags?: string[];
+  lines: Array<{ speaker: string; text: string }>;
+}): boolean {
+  const previous = input.previousTopic?.trim();
+  const next = input.nextTopic?.trim();
+  if (!previous || !next) return false;
+  if (previous === next) return false;
+  const tags = Array.isArray(input.tags) ? input.tags : [];
+  if (!tags.includes("topic_shift")) return false;
+  const firstHalf = input.lines.slice(0, Math.max(1, Math.ceil(input.lines.length / 2)));
+  return firstHalf.some((line) => containsBridgePhrase(line.text));
+}
+
+function resolveEffectiveTopic(input: {
+  thread: ThreadForGpt;
+  gptOut: GptConversationOutput;
+  nextThreadState: EvaluationResult["threadNextState"];
+}): string {
+  const previousTopic = input.thread.topic?.trim();
+  const nextTopic = input.gptOut.topic?.trim() || previousTopic || "雑談";
+  if (!previousTopic) return nextTopic;
+  if (input.nextThreadState !== "ongoing") return nextTopic;
+  if (shouldAllowTopicShift({
+    previousTopic,
+    nextTopic,
+    tags: input.gptOut.meta?.tags,
+    lines: input.gptOut.lines,
+  })) {
+    return nextTopic;
+  }
+  return previousTopic;
 }
 
 async function hasNoneRelationBetween(
@@ -424,6 +494,12 @@ export async function runConversation(
       recentLines: recentLines.length > 0 ? recentLines : undefined,
     };
   }
+  const effectiveLastSummary = (typeof lastSummary === "string" && lastSummary.trim().length > 0)
+    ? lastSummary.trim()
+    : buildLastSummaryFromRecentLines({
+      recentLines,
+      residents,
+    });
 
   // 2) GPT 生成
   // ✅ ここがポイント：`threadId` を渡さない。代わりに `thread` と `beliefs` を渡す。
@@ -431,7 +507,7 @@ export async function runConversation(
     thread,
     beliefs,
     topicHint,
-    lastSummary,
+    lastSummary: effectiveLastSummary,
     residents,
     pairContext,
   });
@@ -456,16 +532,25 @@ export async function runConversation(
   };
   const evalResult = evaluateConversation(evalInput);
 
+  const effectiveTopic = resolveEffectiveTopic({
+    thread,
+    gptOut,
+    nextThreadState: evalResult.threadNextState,
+  });
+  const effectiveGptOut = effectiveTopic === gptOut.topic
+    ? gptOut
+    : { ...gptOut, topic: effectiveTopic };
+
   // 4) 永続化
   const { eventId } = await persistConversation({
-    gptOut,
+    gptOut: effectiveGptOut,
     evalResult,
   });
 
   return {
     eventId,
     threadId: ensuredThreadId,
-    gptOut,
+    gptOut: effectiveGptOut,
     evalResult,
   };
 }

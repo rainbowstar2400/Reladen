@@ -170,6 +170,7 @@ describe("runConversation", () => {
     expect(callArg.pairContext?.recentLines).toHaveLength(4);
     expect(callArg.pairContext?.recentLines?.[0]?.text).toBe("最近1");
     expect(callArg.pairContext?.recentLines?.[3]?.text).toBe("最近4");
+    expect(callArg.lastSummary).toBe("直近会話: 湊: 最近3 / 遥: 最近4");
   });
 
   it("relation が none の場合は中断し GPT 呼び出しを行わない", async () => {
@@ -237,5 +238,167 @@ describe("runConversation", () => {
     expect(callArg.pairContext).toBeUndefined();
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+
+  it("topic_shift がない継続会話では既存 topic を維持する", async () => {
+    mocks.callGptForConversation.mockResolvedValue({
+      ...gptOut,
+      topic: "散歩",
+      meta: {
+        ...gptOut.meta,
+        tags: [],
+      },
+      lines: [
+        { speaker: A_ID, text: "映画の話なんだけど、主演がよかった。" },
+        { speaker: B_ID, text: "明日は猫カフェに行く。" },
+      ],
+    });
+
+    setupListKv({
+      topic_threads: [
+        {
+          id: THREAD_ID,
+          participants: [A_ID, B_ID],
+          status: "ongoing",
+          topic: "映画",
+          updated_at: "2026-01-01T09:00:00.000Z",
+          deleted: false,
+        },
+      ],
+      relations: [
+        {
+          a_id: A_ID,
+          b_id: B_ID,
+          type: "friend",
+          updated_at: "2026-01-01T09:00:00.000Z",
+          deleted: false,
+        },
+      ],
+      beliefs: [],
+      presets: [],
+      residents: [
+        { id: A_ID, name: "遥", first_person: null, speech_preset: null, deleted: false },
+        { id: B_ID, name: "湊", first_person: null, speech_preset: null, deleted: false },
+      ],
+      feelings: [],
+      events: [],
+    });
+
+    const result = await runConversation({
+      threadId: THREAD_ID,
+      participants: [A_ID, B_ID],
+    });
+
+    expect(result.gptOut.topic).toBe("映画");
+    const persistArg = mocks.persistConversation.mock.calls[0][0];
+    expect(persistArg.gptOut.topic).toBe("映画");
+  });
+
+  it("topic_shift + 橋渡しありなら継続会話でも topic を更新する", async () => {
+    mocks.callGptForConversation.mockResolvedValue({
+      ...gptOut,
+      topic: "散歩",
+      meta: {
+        ...gptOut.meta,
+        tags: ["topic_shift"],
+      },
+      lines: [
+        { speaker: A_ID, text: "ところで、映画の話から少し広げて明日は散歩に行きたいんだ。" },
+        { speaker: B_ID, text: "いいね、散歩のあとでまた映画の話もしたい。" },
+      ],
+    });
+
+    setupListKv({
+      topic_threads: [
+        {
+          id: THREAD_ID,
+          participants: [A_ID, B_ID],
+          status: "ongoing",
+          topic: "映画",
+          updated_at: "2026-01-01T09:00:00.000Z",
+          deleted: false,
+        },
+      ],
+      relations: [
+        {
+          a_id: A_ID,
+          b_id: B_ID,
+          type: "friend",
+          updated_at: "2026-01-01T09:00:00.000Z",
+          deleted: false,
+        },
+      ],
+      beliefs: [],
+      presets: [],
+      residents: [
+        { id: A_ID, name: "遥", first_person: null, speech_preset: null, deleted: false },
+        { id: B_ID, name: "湊", first_person: null, speech_preset: null, deleted: false },
+      ],
+      feelings: [],
+      events: [],
+    });
+
+    const result = await runConversation({
+      threadId: THREAD_ID,
+      participants: [A_ID, B_ID],
+    });
+
+    expect(result.gptOut.topic).toBe("散歩");
+    const persistArg = mocks.persistConversation.mock.calls[0][0];
+    expect(persistArg.gptOut.topic).toBe("散歩");
+  });
+
+  it("topic_shift があっても橋渡しが無ければ topic を更新しない", async () => {
+    mocks.callGptForConversation.mockResolvedValue({
+      ...gptOut,
+      topic: "散歩",
+      meta: {
+        ...gptOut.meta,
+        tags: ["topic_shift"],
+      },
+      lines: [
+        { speaker: A_ID, text: "映画の話だけど、最後の場面が印象的だった。" },
+        { speaker: B_ID, text: "明日は散歩に行きたいんだ。" },
+      ],
+    });
+
+    setupListKv({
+      topic_threads: [
+        {
+          id: THREAD_ID,
+          participants: [A_ID, B_ID],
+          status: "ongoing",
+          topic: "映画",
+          updated_at: "2026-01-01T09:00:00.000Z",
+          deleted: false,
+        },
+      ],
+      relations: [
+        {
+          a_id: A_ID,
+          b_id: B_ID,
+          type: "friend",
+          updated_at: "2026-01-01T09:00:00.000Z",
+          deleted: false,
+        },
+      ],
+      beliefs: [],
+      presets: [],
+      residents: [
+        { id: A_ID, name: "遥", first_person: null, speech_preset: null, deleted: false },
+        { id: B_ID, name: "湊", first_person: null, speech_preset: null, deleted: false },
+      ],
+      feelings: [],
+      events: [],
+    });
+
+    const result = await runConversation({
+      threadId: THREAD_ID,
+      participants: [A_ID, B_ID],
+    });
+
+    expect(result.gptOut.topic).toBe("映画");
+    const persistArg = mocks.persistConversation.mock.calls[0][0];
+    expect(persistArg.gptOut.topic).toBe("映画");
   });
 });

@@ -105,6 +105,18 @@ type ResponseMessageOutput = {
   content: ResponseMessageContent[];
 };
 
+const BRIDGE_PHRASES = [
+  "そういえば",
+  "ところで",
+  "その話で言うと",
+  "関連して",
+  "話は変わるけど",
+] as const;
+
+const GENERIC_TOPICS = new Set(["雑談", "日常", "近況", "フリートーク", "会話"]);
+const CONTINUITY_THRESHOLD = 0.08;
+const MAX_RETRY_COUNT = 1;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -144,70 +156,225 @@ function extractTextFromResponse(res: ResponsesCreateReturn): string | null {
   return null;
 }
 
+function normalizeTextForSimilarity(text: string): string {
+  return text
+    .normalize("NFKC")
+    .replace(/\s+/g, "")
+    .replace(/[「」『』（）()【】\[\]、。,.!?！？:：;；"'`]/g, "")
+    .trim();
+}
+
+function toBigrams(text: string): Set<string> {
+  const normalized = normalizeTextForSimilarity(text);
+  const grams = new Set<string>();
+  for (let i = 0; i < normalized.length - 1; i += 1) {
+    grams.add(normalized.slice(i, i + 2));
+  }
+  return grams;
+}
+
+function bigramSimilarity(lhs: string, rhs: string): number {
+  const a = toBigrams(lhs);
+  const b = toBigrams(rhs);
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const gram of a) {
+    if (b.has(gram)) intersection += 1;
+  }
+  const union = new Set([...a, ...b]).size;
+  if (union === 0) return 0;
+  return intersection / union;
+}
+
+function extractTopicTerms(topic: string): string[] {
+  const raw = topic.match(/[A-Za-z0-9\u3040-\u30ff\u3400-\u9fff]+/g) ?? [];
+  const terms = raw
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 2)
+    .filter((term) => !GENERIC_TOPICS.has(term));
+  return Array.from(new Set(terms));
+}
+
+export function containsBridgePhrase(text: string): boolean {
+  const line = text.trim();
+  if (!line) return false;
+  return BRIDGE_PHRASES.some((phrase) => line.includes(phrase));
+}
+
+export function assessTopicContinuity(input: {
+  topic: string;
+  lines: Array<{ speaker: string; text: string }>;
+  tags?: string[];
+  recentLines?: Array<{ speaker: string; text: string }>;
+}): {
+  ok: boolean;
+  reasons: string[];
+  lowContinuityTurnIndexes: number[];
+  topicReferenceCount: number;
+} {
+  const lines = Array.isArray(input.lines) ? input.lines : [];
+  const tags = Array.isArray(input.tags) ? input.tags : [];
+  const recentLines = Array.isArray(input.recentLines) ? input.recentLines : [];
+  const hasTopicShift = tags.includes("topic_shift");
+  const reasons: string[] = [];
+  const lowContinuityTurnIndexes: number[] = [];
+
+  const pushLowIfNeeded = (index: number, previousText: string, currentText: string) => {
+    const sim = bigramSimilarity(previousText, currentText);
+    if (sim < CONTINUITY_THRESHOLD) lowContinuityTurnIndexes.push(index);
+  };
+
+  const prev = recentLines[recentLines.length - 1];
+  if (prev && lines[0]) {
+    pushLowIfNeeded(0, prev.text, lines[0].text);
+  }
+  for (let i = 1; i < lines.length; i += 1) {
+    pushLowIfNeeded(i, lines[i - 1].text, lines[i].text);
+  }
+
+  const lowTurnsWithoutBridge = lowContinuityTurnIndexes.filter((index) => {
+    const line = lines[index];
+    return !line || !containsBridgePhrase(line.text);
+  });
+
+  if (lowContinuityTurnIndexes.length > 0 && !hasTopicShift) {
+    reasons.push("低連続性ターンがあるが topic_shift タグがありません。");
+  }
+  if (lowTurnsWithoutBridge.length > 0) {
+    reasons.push("低連続性ターンに橋渡し表現がありません。");
+  }
+
+  const topicTerms = extractTopicTerms(input.topic);
+  let topicReferenceCount = 0;
+  if (topicTerms.length > 0) {
+    topicReferenceCount = lines.reduce((count, line) => {
+      const text = line?.text ?? "";
+      const hit = topicTerms.some((term) => {
+        return text.includes(term) || text.toLowerCase().includes(term.toLowerCase());
+      });
+      return hit ? count + 1 : count;
+    }, 0);
+    if (topicReferenceCount === 0) {
+      reasons.push("会話全体で話題語への参照がありません。");
+    }
+  }
+
+  return {
+    ok: reasons.length === 0,
+    reasons,
+    lowContinuityTurnIndexes,
+    topicReferenceCount,
+  };
+}
+
+function buildRetryPrompt(basePrompt: string, reasons: string[]): string {
+  if (reasons.length === 0) return basePrompt;
+  return `${basePrompt}
+
+【再生成指示】
+以下の理由で話題一貫性チェックに失敗しました。会話を作り直してください。
+${reasons.map((reason) => `- ${reason}`).join("\n")}
+- 主題は維持し、切り替える場合は橋渡し表現を入れ、meta.tags に "topic_shift" を含めてください。`;
+}
+
+async function requestConversationOutput(
+  systemPrompt: string,
+  userPrompt: string,
+  params: Parameters<typeof buildUserPromptConversation>[0],
+): Promise<GptConversationOutput> {
+  const res = await client.responses.create({
+    model: "gpt-5.1",
+    temperature: 0.8,
+    input: [
+      {
+        role: "system",
+        content: [
+          {
+            type: "input_text",
+            text: systemPrompt,
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: userPrompt,
+          },
+        ],
+      },
+    ],
+    text: {
+      format: {
+        name: conversationResponseSchema.name,
+        type: "json_schema",
+        schema: conversationResponseSchema.schema,
+        strict: conversationResponseSchema.strict,
+      },
+    },
+  } as ResponseCreateParamsWithFormat);
+
+  const content = extractTextFromResponse(res);
+  if (!content) {
+    throw new Error("GPT returned empty response.");
+  }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(content);
+  } catch (error) {
+    console.error("[callGptForConversation] JSON parse failed", { content });
+    throw error;
+  }
+  const sanitized = sanitizeGptConversationOutput(raw, {
+    threadId: params.thread.id,
+    participants: params.thread.participants,
+  });
+
+  const parsed = gptConversationOutputSchema.safeParse(sanitized);
+  if (!parsed.success) {
+    console.error("GPT出力が不正です:", parsed.error);
+    throw new Error("Invalid GPT output format.");
+  }
+
+  return parsed.data;
+}
+
 export async function callGptForConversation(
   params: Parameters<typeof buildUserPromptConversation>[0],
 ): Promise<GptConversationOutput> {
   const systemPrompt = systemPromptConversation;
-  const userPrompt = buildUserPromptConversation(params);
+  const baseUserPrompt = buildUserPromptConversation(params);
 
   try {
-    const res = await client.responses.create({
-      model: "gpt-5.1",
-      temperature: 0.8,
-      input: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "input_text",
-              text: systemPrompt,
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: userPrompt,
-            },
-          ],
-        },
-      ],
-      text: {
-        format: {
-          name: conversationResponseSchema.name,
-          type: "json_schema",
-          schema: conversationResponseSchema.schema,
-          strict: conversationResponseSchema.strict,
-        },
-      },
-    } as ResponseCreateParamsWithFormat);
-
-    const content = extractTextFromResponse(res);
-    if (!content) {
-      throw new Error("GPT returned empty response.");
-    }
-
-    let raw: unknown;
-    try {
-      raw = JSON.parse(content);
-    } catch (error) {
-      console.error("[callGptForConversation] JSON parse failed", { content });
-      throw error;
-    }
-    const sanitized = sanitizeGptConversationOutput(raw, {
-      threadId: params.thread.id,
-      participants: params.thread.participants,
+    let userPrompt = baseUserPrompt;
+    let out = await requestConversationOutput(systemPrompt, userPrompt, params);
+    let continuity = assessTopicContinuity({
+      topic: out.topic,
+      lines: out.lines,
+      tags: out.meta?.tags,
+      recentLines: params.pairContext?.recentLines,
     });
 
-    const parsed = gptConversationOutputSchema.safeParse(sanitized);
-    if (!parsed.success) {
-      console.error("GPT出力が不正です:", parsed.error);
-      throw new Error("Invalid GPT output format.");
+    for (let retry = 0; retry < MAX_RETRY_COUNT && !continuity.ok; retry += 1) {
+      userPrompt = buildRetryPrompt(baseUserPrompt, continuity.reasons);
+      out = await requestConversationOutput(systemPrompt, userPrompt, params);
+      continuity = assessTopicContinuity({
+        topic: out.topic,
+        lines: out.lines,
+        tags: out.meta?.tags,
+        recentLines: params.pairContext?.recentLines,
+      });
     }
 
-    return parsed.data;
+    if (!continuity.ok) {
+      console.warn("[callGptForConversation] Topic continuity check still failed after retry.", {
+        reasons: continuity.reasons,
+      });
+    }
+
+    return out;
   } catch (error) {
     console.error("[callGptForConversation] Failed to create conversation", {
       name: (error as any)?.name,

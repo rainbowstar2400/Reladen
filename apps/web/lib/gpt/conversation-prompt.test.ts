@@ -100,6 +100,9 @@ describe("buildUserPromptConversation", () => {
     expect(prompt).toContain("特筆なし");
 
     expect(prompt).toContain("発話数は6〜8発話");
+    expect(prompt).toContain("同一会話内では主題を原則1つに保つ");
+    expect(prompt).toContain("話題を切り替えた場合のみ meta.tags に \"topic_shift\" を含める");
+    expect(prompt).toContain("相手の直前発話を受けた返答を優先する");
     expect(prompt).toContain("一人称は「私」を厳守すること。");
     expect(prompt).toContain("一人称は「俺」を厳守すること。");
   });
