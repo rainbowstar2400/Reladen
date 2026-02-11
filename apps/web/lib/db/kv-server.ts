@@ -35,6 +35,7 @@ type OwnerColumnConfig =
   | { type: "candidates"; columns: string[] };
 
 const TABLE_OWNER_COLUMNS: Partial<Record<Table, OwnerColumnConfig>> = {
+  beliefs: { type: "fixed", column: "owner_id" },
   events: { type: "fixed", column: "owner_id" },
   feelings: { type: "fixed", column: "owner_id" },
   residents: { type: "fixed", column: "owner_id" },
@@ -124,3 +125,4 @@ export async function listKV<T = any>(table: Table): Promise<T[]> {
   }
   return (data as T[]) ?? [];
 }
+

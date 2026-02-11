@@ -1,4 +1,4 @@
-﻿// apps/web/lib/persist/persist-conversation.ts
+// apps/web/lib/persist/persist-conversation.ts
 import { putKV as putAny, listKV as listAny } from "@/lib/db/kv-server";
 import { newId } from "@/lib/newId";
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
@@ -266,7 +266,7 @@ export async function persistConversation(params: {
         rec = {
           id: newId(),
           residentId: target,       // ← 学習者のレコード
-          worldFacts: {},           // 使わないなら空でOK
+          worldFacts: [],           // 使わないなら空でOK
           personKnowledge: {},      // { [aboutId]: { keys: string[], learnedAt: string } }
           updated_at: nowIso,
           deleted: false,
@@ -315,7 +315,12 @@ export async function persistConversation(params: {
   try {
     await upsertBeliefsFromNewKnowledge(evalResult.newBeliefs, gptOut.participants);
   } catch (error) {
-    console.warn('[persistConversation] Failed to upsert beliefs from new knowledge.', error);
+    console.warn('[persistConversation] Failed to upsert beliefs from new knowledge.', {
+      threadId: gptOut.threadId,
+      participants: gptOut.participants,
+      newBeliefsCount: evalResult.newBeliefs.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   // 4) relations / feelings を更新（簡易版）
@@ -340,3 +345,4 @@ export async function persistConversation(params: {
 
   return { eventId };
 }
+

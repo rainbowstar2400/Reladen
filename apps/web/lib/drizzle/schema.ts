@@ -186,10 +186,12 @@ export const beliefs = pgTable('beliefs', {
   worldFacts: jsonb('world_facts').notNull().default([]),      // Array<{ eventId, learnedAt }>
   personKnowledge: jsonb('person_knowledge').notNull().default({}), // Record<targetId, { keys[], learnedAt }>
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  ownerId: uuid('owner_id'),
   deleted: boolean('deleted').notNull().default(false),
 }, (t) => ({
   residentIdx: index('beliefs_resident_idx').on(t.residentId),
   updatedIdx: index('beliefs_updated_idx').on(t.updatedAt),
+  ownerIdx: index('beliefs_owner_idx').on(t.ownerId),
 }));
 
 export const notifications = pgTable('notifications', {
@@ -221,3 +223,5 @@ export const worldStates = pgTable('world_states', {
 }, (t) => ({
   updatedIdx: index('world_states_updated_idx').on(t.updatedAt),
 }));
+
+

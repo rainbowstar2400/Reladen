@@ -43,6 +43,13 @@
       "when": 1770700800000,
       "tag": "0005_trust_to_player",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1770786518613,
+      "tag": "0006_great_infant_terrible",
+      "breakpoints": true
     }
   ]
 }
