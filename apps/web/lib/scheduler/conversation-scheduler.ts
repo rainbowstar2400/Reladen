@@ -158,6 +158,7 @@ const DEFAULTS: Required<SchedulerOptions> = {
 // window.localStorage は try/catch 必須（SSG/SSRやSafari InPrivate対策）
 const LOCK_KEY = "reladen:conv-scheduler:lock";
 const LOCK_TTL_MS = 60_000; // 1分で期限切れ扱い
+const LAST_RUN_KEY = "reladen:conv-scheduler:last-run";
 
 function nowTs() {
   return Date.now();
@@ -186,6 +187,23 @@ function clearLock() {
     // ignore
   }
 }
+function readLastRun(): number | null {
+  try {
+    const v = localStorage.getItem(LAST_RUN_KEY);
+    if (!v) return null;
+    const ts = Number(v);
+    return Number.isFinite(ts) ? ts : null;
+  } catch {
+    return null;
+  }
+}
+function writeLastRun(ts: number) {
+  try {
+    localStorage.setItem(LAST_RUN_KEY, String(ts));
+  } catch {
+    // ignore
+  }
+}
 function tryAcquireLock(): boolean {
   const ts = readLock();
   const t = nowTs();
@@ -198,6 +216,18 @@ function tryAcquireLock(): boolean {
 }
 function refreshLock() {
   writeLock(nowTs());
+}
+function minRunGapMs(baseIntervalMs: number) {
+  // 15分ベース時は最短でも約12分間隔を維持（±20%ジッターの下限）
+  return Math.max(60_000, Math.floor(baseIntervalMs * 0.8));
+}
+function hasRecentConversationRun(baseIntervalMs: number): boolean {
+  const last = readLastRun();
+  if (!last) return false;
+  return nowTs() - last < minRunGapMs(baseIntervalMs);
+}
+function markConversationRun() {
+  writeLastRun(nowTs());
 }
 
 // --- 実行対象の選定 ---------
@@ -275,12 +305,16 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
       */
       // 他タブが担当中ならスキップ
       if (!tryAcquireLock()) {
-        scheduleNext();
         return;
       }
 
       // ロック継続
       refreshLock();
+
+      if (hasRecentConversationRun(O.baseIntervalMs)) {
+        console.log("[Scheduler] Skipping: conversation ran recently.");
+        return;
+      }
 
       // 先に活動中の住人を選定
       const allResidents = (await listLocal("residents")) as Resident[];
@@ -298,8 +332,6 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
         console.log(
           "[Scheduler] Skipping: Not enough awake residents to start a conversation.",
         );
-        refreshLock();
-        scheduleNext();
         return;
       }
 
@@ -311,8 +343,6 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
         console.log(
           "[Scheduler] Skipping: No target thread or new pair found.",
         );
-        refreshLock();
-        scheduleNext();
         return;
       }
 
@@ -322,8 +352,6 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
         console.log(
           "[Scheduler] Skipping conversation: relation is 'none' between participants.",
         );
-        refreshLock();
-        scheduleNext();
         return;
       }
 
@@ -333,8 +361,6 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
         console.log(
           `[Scheduler] Skipping conversation: ${pA} or ${pB} is sleeping.`,
         );
-        refreshLock();
-        scheduleNext();
         return;
       }
 
@@ -346,6 +372,7 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
         activePresets,
       );
 
+      markConversationRun();
       await callConversationApi({
         threadId: target.threadId, // 既存スレッドがあれば継続
         participants: target.participants, // 必須
@@ -374,8 +401,15 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
   };
   const scheduleNext = () => {
     if (stopped) return;
+    if (timer !== null) {
+      window.clearTimeout(timer);
+      timer = null;
+    }
     const ms = jitter(O.baseIntervalMs);
-    timer = window.setTimeout(tick, ms);
+    timer = window.setTimeout(() => {
+      timer = null;
+      void tick();
+    }, ms);
   };
 
   // 初回起動

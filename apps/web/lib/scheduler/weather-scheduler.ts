@@ -13,6 +13,7 @@ import type { WeatherKind, WorldWeatherState } from '@repo/shared/types';
 
 const LOCK_KEY = 'reladen:weather-scheduler:lock';
 const LOCK_TTL_MS = 5 * 60 * 1000;
+const LAST_RUN_KEY = 'reladen:weather-scheduler:last-run';
 
 type SchedulerOptions = {
   enabled?: boolean;
@@ -53,6 +54,23 @@ function clearLock() {
     // ignore
   }
 }
+function readLastRun(): number | null {
+  try {
+    const v = localStorage.getItem(LAST_RUN_KEY);
+    if (!v) return null;
+    const ts = Number(v);
+    return Number.isFinite(ts) ? ts : null;
+  } catch {
+    return null;
+  }
+}
+function writeLastRun(ts: number) {
+  try {
+    localStorage.setItem(LAST_RUN_KEY, String(ts));
+  } catch {
+    // ignore
+  }
+}
 function tryAcquireLock(): boolean {
   const ts = readLock();
   const t = nowTs();
@@ -62,6 +80,18 @@ function tryAcquireLock(): boolean {
 }
 function refreshLock() {
   writeLock(nowTs());
+}
+function minRunGapMs(baseIntervalMs: number) {
+  // 1時間ベース時は最短でも約54分間隔を維持（±10%ジッターの下限）
+  return Math.max(60_000, Math.floor(baseIntervalMs * 0.9));
+}
+function hasRecentWeatherRun(baseIntervalMs: number): boolean {
+  const last = readLastRun();
+  if (!last) return false;
+  return nowTs() - last < minRunGapMs(baseIntervalMs);
+}
+function markWeatherRun() {
+  writeLastRun(nowTs());
 }
 
 function jitter(base: number) {
@@ -112,10 +142,14 @@ export function startWeatherScheduler(opts?: SchedulerOptions) {
   const tick = async () => {
     try {
       if (!tryAcquireLock()) {
-        scheduleNext();
         return;
       }
       refreshLock();
+
+      if (hasRecentWeatherRun(O.baseIntervalMs)) {
+        console.log('[weather-scheduler] skipping: weather ran recently');
+        return;
+      }
 
       const now = new Date();
       const residents = ((await listLocal<Resident>('residents')) ?? []).filter((r) => !r.deleted);
@@ -133,18 +167,16 @@ export function startWeatherScheduler(opts?: SchedulerOptions) {
       }
 
       if (isWithinQuietHours(now, world.quietHours)) {
-        refreshLock();
-        scheduleNext();
         return;
       }
 
       const currentKind = world.current.kind as WeatherKind;
       const nextKind = pickNextWeatherKind(currentKind);
       if (nextKind === currentKind) {
-        refreshLock();
-        scheduleNext();
         return;
       }
+
+      markWeatherRun();
 
       const resident = await pickWeatherCommentResident(now, residents);
       let newComment = null;
@@ -176,8 +208,6 @@ export function startWeatherScheduler(opts?: SchedulerOptions) {
           console.warn('[weather-scheduler] comment generation failed', error);
         }
         if (!newComment) {
-          refreshLock();
-          scheduleNext();
           return;
         }
       }
@@ -197,8 +227,15 @@ export function startWeatherScheduler(opts?: SchedulerOptions) {
 
   const scheduleNext = () => {
     if (stopped) return;
+    if (timer !== null) {
+      window.clearTimeout(timer);
+      timer = null;
+    }
     const ms = jitter(O.baseIntervalMs);
-    timer = window.setTimeout(tick, ms);
+    timer = window.setTimeout(() => {
+      timer = null;
+      void tick();
+    }, ms);
   };
 
   scheduleNext();
