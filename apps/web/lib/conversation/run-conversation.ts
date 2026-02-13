@@ -26,6 +26,7 @@ import {
   parseExperienceEventRow,
   parseResidentExperienceRow,
 } from "@/lib/conversation/experience-brief";
+import { generateAndPersistExperienceForParticipants } from "@/lib/conversation/experience-generator";
 import { assessConversationGrounding } from "@/lib/conversation/grounding";
 import type {
   ConversationResidentProfile,
@@ -399,6 +400,10 @@ function fallbackBrief(hasRecentConversation: boolean): ConversationBrief {
   };
 }
 
+function isExperienceModeEnabled(): boolean {
+  return (process.env.NEXT_PUBLIC_EXPERIENCE_MODE ?? "on").toLowerCase() !== "off";
+}
+
 async function loadExperienceBrief(input: {
   participants: [string, string];
   hasRecentConversation: boolean;
@@ -577,6 +582,17 @@ export async function runConversation(
     });
 
   const nowIso = new Date().toISOString();
+  if (isExperienceModeEnabled()) {
+    try {
+      await generateAndPersistExperienceForParticipants({
+        participants: thread.participants,
+        nowIso,
+      });
+    } catch (error) {
+      console.warn("[runConversation] Failed to generate experience events.", error);
+    }
+  }
+
   let brief = fallbackBrief(recentLines.length > 0);
   try {
     brief = await loadExperienceBrief({

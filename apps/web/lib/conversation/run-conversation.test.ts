@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   listKV: vi.fn(),
+  generateAndPersistExperienceForParticipants: vi.fn(),
   callGptForConversation: vi.fn(),
   evaluateConversation: vi.fn(),
   persistConversation: vi.fn(),
@@ -10,6 +11,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/db/kv-server", () => ({
   listKV: mocks.listKV,
+}));
+
+vi.mock("@/lib/conversation/experience-generator", () => ({
+  generateAndPersistExperienceForParticipants: mocks.generateAndPersistExperienceForParticipants,
 }));
 
 vi.mock("@/lib/gpt/call-gpt-for-conversation", () => ({
@@ -82,6 +87,7 @@ const evalResult = {
 describe("runConversation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.generateAndPersistExperienceForParticipants.mockResolvedValue({ created: false });
     mocks.newId.mockReturnValue(THREAD_ID);
     mocks.callGptForConversation.mockResolvedValue(gptOut);
     mocks.evaluateConversation.mockReturnValue(evalResult);
@@ -158,6 +164,9 @@ describe("runConversation", () => {
     });
 
     expect(result.eventId).toBe(EVENT_ID);
+    expect(mocks.generateAndPersistExperienceForParticipants).toHaveBeenCalledWith(
+      expect.objectContaining({ participants: [A_ID, B_ID] }),
+    );
     expect(mocks.callGptForConversation).toHaveBeenCalledTimes(1);
     const callArg = mocks.callGptForConversation.mock.calls[0][0];
     expect(callArg.pairContext).toMatchObject({
