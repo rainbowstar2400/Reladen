@@ -13,7 +13,7 @@ vi.mock("@/lib/conversation/candidates", () => ({
   selectConversationCandidates: mocks.selectConversationCandidates,
 }));
 
-import { startConversationScheduler } from "@/lib/scheduler/conversation-scheduler";
+import { startConversationScheduler, triggerConversationNow } from "@/lib/scheduler/conversation-scheduler";
 
 function createMemoryStorage() {
   const map = new Map<string, string>();
@@ -139,5 +139,31 @@ describe("conversation scheduler", () => {
 
     s1.stop();
     s2.stop();
+  });
+
+  it("手動発火(force)は最短間隔内でも会話生成を実行できる", async () => {
+    const now = Date.now();
+    (globalThis as any).localStorage.setItem("reladen:conv-scheduler:last-run", String(now));
+
+    const result = await triggerConversationNow({
+      force: true,
+      baseIntervalMs: 900_000,
+    });
+
+    expect(result.status).toBe("started");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("手動発火(forceなし)は最短間隔内だと skipped を返す", async () => {
+    const now = Date.now();
+    (globalThis as any).localStorage.setItem("reladen:conv-scheduler:last-run", String(now));
+
+    const result = await triggerConversationNow({
+      force: false,
+      baseIntervalMs: 900_000,
+    });
+
+    expect(result).toMatchObject({ status: "skipped", reason: "recently_ran" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

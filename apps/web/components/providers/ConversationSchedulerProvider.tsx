@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { startConversationScheduler } from "@/lib/scheduler/conversation-scheduler";
+import { startConversationScheduler, triggerConversationNow } from "@/lib/scheduler/conversation-scheduler";
 import { useAuth } from "@/lib/auth/use-auth";
 
 type Props = {
@@ -23,6 +23,23 @@ export default function ConversationSchedulerProvider(props: Props) {
   const stopRef = useRef<null | { stop: () => void }>(null);
   const { user, ready } = useAuth();
   const shouldRunScheduler = Boolean(enabled && ready && user);
+  const isDev = process.env.NODE_ENV !== "production";
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isDev) return;
+    const root = ((window as any).reladenDev ??= {});
+    const trigger = (force = true) =>
+      triggerConversationNow({
+        force,
+        baseIntervalMs,
+      });
+    root.triggerConversationNow = trigger;
+    return () => {
+      if (root.triggerConversationNow === trigger) {
+        delete root.triggerConversationNow;
+      }
+    };
+  }, [baseIntervalMs, isDev]);
 
   useEffect(() => {
     // 既存のスケジューラがあれば停止

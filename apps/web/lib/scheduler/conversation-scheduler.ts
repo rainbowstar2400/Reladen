@@ -285,6 +285,115 @@ function jitter(base: number) {
   return Math.max(10_000, Math.floor(base * r));
 }
 
+export type TriggerConversationSkipReason =
+  | "locked"
+  | "recently_ran"
+  | "not_enough_awake"
+  | "no_target"
+  | "relation_none"
+  | "participant_sleeping";
+
+export type TriggerConversationNowResult =
+  | {
+    status: "started";
+    threadId?: string;
+    participants: [string, string];
+  }
+  | {
+    status: "skipped";
+    reason: TriggerConversationSkipReason;
+    participants?: [string, string];
+  };
+
+export type TriggerConversationNowOptions = {
+  baseIntervalMs?: number;
+  force?: boolean;
+};
+
+export async function triggerConversationNow(
+  opts?: TriggerConversationNowOptions,
+): Promise<TriggerConversationNowResult> {
+  if (typeof window === "undefined") {
+    return { status: "skipped", reason: "locked" };
+  }
+
+  const baseIntervalMs = opts?.baseIntervalMs ?? DEFAULTS.baseIntervalMs;
+  const force = opts?.force === true;
+
+  if (!force && !tryAcquireLock()) {
+    return { status: "skipped", reason: "locked" };
+  }
+
+  if (!force) {
+    refreshLock();
+    if (hasRecentConversationRun(baseIntervalMs)) {
+      return { status: "skipped", reason: "recently_ran" };
+    }
+  }
+
+  try {
+    const allResidents = (await listLocal("residents")) as Resident[];
+    const allBeliefs = (await listLocal("beliefs")) as BeliefRecord[];
+    const allPresets = (await listLocal("presets")) as Preset[];
+    const allRelations = (await listLocal("relations")) as Relation[];
+    const activePresets = allPresets.filter((p) => !p.deleted);
+    const activeRelations = allRelations.filter((r) => !r.deleted);
+    const now = new Date();
+    const awakeCandidates = selectConversationCandidates(now, allResidents);
+    const awakeIds = new Set(awakeCandidates.map((r) => r.id));
+
+    if (awakeCandidates.length < 2) {
+      return { status: "skipped", reason: "not_enough_awake" };
+    }
+
+    const target = await pickThreadOrDefault(awakeCandidates, activeRelations);
+    if (!target) {
+      return { status: "skipped", reason: "no_target" };
+    }
+
+    if (hasNoneRelationBetween(target.participants, activeRelations)) {
+      return {
+        status: "skipped",
+        reason: "relation_none",
+        participants: target.participants,
+      };
+    }
+
+    const [pA, pB] = target.participants;
+    if (!awakeIds.has(pA) || !awakeIds.has(pB)) {
+      return {
+        status: "skipped",
+        reason: "participant_sleeping",
+        participants: target.participants,
+      };
+    }
+
+    const context = buildContextForParticipants(
+      target.participants,
+      allResidents,
+      allBeliefs,
+      activePresets,
+    );
+
+    await callConversationApi({
+      threadId: target.threadId,
+      participants: target.participants,
+      context: Object.keys(context).length ? context : undefined,
+    });
+
+    markConversationRun();
+    if (!force) refreshLock();
+    return {
+      status: "started",
+      threadId: target.threadId,
+      participants: target.participants,
+    };
+  } catch (error) {
+    if (!force) clearLock();
+    throw error;
+  }
+}
+
 export function startConversationScheduler(opts?: SchedulerOptions) {
   if (typeof window === "undefined") return { stop: () => { } }; // SSRでは何もしない
 
@@ -303,84 +412,40 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
         return;
       }
       */
-      // 他タブが担当中ならスキップ
-      if (!tryAcquireLock()) {
+      const result = await triggerConversationNow({ baseIntervalMs: O.baseIntervalMs });
+      if (result.status === "started") {
         return;
       }
 
-      // ロック継続
-      refreshLock();
-
-      if (hasRecentConversationRun(O.baseIntervalMs)) {
-        console.log("[Scheduler] Skipping: conversation ran recently.");
-        return;
+      switch (result.reason) {
+        case "locked":
+          return;
+        case "recently_ran":
+          console.log("[Scheduler] Skipping: conversation ran recently.");
+          return;
+        case "not_enough_awake":
+          console.log(
+            "[Scheduler] Skipping: Not enough awake residents to start a conversation.",
+          );
+          return;
+        case "no_target":
+          console.log(
+            "[Scheduler] Skipping: No target thread or new pair found.",
+          );
+          return;
+        case "relation_none":
+          console.log(
+            "[Scheduler] Skipping conversation: relation is 'none' between participants.",
+          );
+          return;
+        case "participant_sleeping": {
+          const [pA = "participant_A", pB = "participant_B"] = result.participants ?? [];
+          console.log(
+            `[Scheduler] Skipping conversation: ${pA} or ${pB} is sleeping.`,
+          );
+          return;
+        }
       }
-
-      // 先に活動中の住人を選定
-      const allResidents = (await listLocal("residents")) as Resident[];
-      const allBeliefs = (await listLocal("beliefs")) as BeliefRecord[];
-      const allPresets = (await listLocal("presets")) as Preset[];
-      const allRelations = (await listLocal("relations")) as Relation[];
-      const activePresets = allPresets.filter((p) => !p.deleted);
-      const activeRelations = allRelations.filter((r) => !r.deleted);
-      const now = new Date();
-      const awakeCandidates = selectConversationCandidates(now, allResidents);
-      const awakeIds = new Set(awakeCandidates.map((r) => r.id));
-
-      // 会話可能な住人が2人未満の場合はスキップ
-      if (awakeCandidates.length < 2) {
-        console.log(
-          "[Scheduler] Skipping: Not enough awake residents to start a conversation.",
-        );
-        return;
-      }
-
-      // 対象選定（既存スレッド or 新規ペア）
-      const target = await pickThreadOrDefault(awakeCandidates, activeRelations);
-
-      // 対象が見つからない場合（通常は発生しない）
-      if (!target) {
-        console.log(
-          "[Scheduler] Skipping: No target thread or new pair found.",
-        );
-        return;
-      }
-
-      // 選定された参加者が活動中か最終確認
-      // （主に既存スレッドが選ばれたが、その参加者が寝たケース）
-      if (hasNoneRelationBetween(target.participants, activeRelations)) {
-        console.log(
-          "[Scheduler] Skipping conversation: relation is 'none' between participants.",
-        );
-        return;
-      }
-
-      const [pA, pB] = target.participants;
-      if (!awakeIds.has(pA) || !awakeIds.has(pB)) {
-        // ログメッセージが実際のID（pA, pB）で表示される
-        console.log(
-          `[Scheduler] Skipping conversation: ${pA} or ${pB} is sleeping.`,
-        );
-        return;
-      }
-
-      // 会話開始
-      const context = buildContextForParticipants(
-        target.participants,
-        allResidents,
-        allBeliefs,
-        activePresets,
-      );
-
-      markConversationRun();
-      await callConversationApi({
-        threadId: target.threadId, // 既存スレッドがあれば継続
-        participants: target.participants, // 必須
-        context: Object.keys(context).length ? context : undefined,
-      });
-
-      // 成功 → ロック更新
-      refreshLock();
     } catch (e) {
       const msg = (e as any)?.message ?? String(e);
       clearLock();
