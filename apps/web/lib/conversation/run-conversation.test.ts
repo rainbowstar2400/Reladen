@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   listKV: vi.fn(),
@@ -40,6 +40,7 @@ const B_ID = "22222222-2222-4222-8222-222222222222";
 const THREAD_ID = "33333333-3333-4333-8333-333333333333";
 const LAST_EVENT_ID = "44444444-4444-4444-8444-444444444444";
 const EVENT_ID = "55555555-5555-4555-8555-555555555555";
+const ORIGINAL_EXPERIENCE_MODE = process.env.NEXT_PUBLIC_EXPERIENCE_MODE;
 
 function setupListKv(data: Record<string, unknown>) {
   mocks.listKV.mockImplementation(async (table: string) => {
@@ -87,11 +88,16 @@ const evalResult = {
 describe("runConversation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.NEXT_PUBLIC_EXPERIENCE_MODE = "on";
     mocks.generateAndPersistExperienceForParticipants.mockResolvedValue({ created: false });
     mocks.newId.mockReturnValue(THREAD_ID);
     mocks.callGptForConversation.mockResolvedValue(gptOut);
     mocks.evaluateConversation.mockReturnValue(evalResult);
     mocks.persistConversation.mockResolvedValue({ eventId: EVENT_ID });
+  });
+
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_EXPERIENCE_MODE = ORIGINAL_EXPERIENCE_MODE;
   });
 
   it("関係性・感情・直近台詞を収集して pairContext を渡す", async () => {
@@ -180,6 +186,52 @@ describe("runConversation", () => {
     expect(callArg.pairContext?.recentLines?.[0]?.text).toBe("最近1");
     expect(callArg.pairContext?.recentLines?.[3]?.text).toBe("最近4");
     expect(callArg.lastSummary).toBe("直近会話: 湊: 最近3 / 遥: 最近4");
+  });
+
+  it("EXPERIENCE_MODE=off の場合は Experience 生成/読込をスキップする", async () => {
+    process.env.NEXT_PUBLIC_EXPERIENCE_MODE = "off";
+    setupListKv({
+      topic_threads: [
+        {
+          id: THREAD_ID,
+          participants: [A_ID, B_ID],
+          status: "ongoing",
+          updated_at: "2026-01-01T09:00:00.000Z",
+          deleted: false,
+        },
+      ],
+      relations: [
+        {
+          a_id: A_ID,
+          b_id: B_ID,
+          type: "friend",
+          updated_at: "2026-01-01T09:00:00.000Z",
+          deleted: false,
+        },
+      ],
+      presets: [],
+      residents: [
+        { id: A_ID, name: "遥", first_person: null, speech_preset: null, deleted: false },
+        { id: B_ID, name: "湊", first_person: null, speech_preset: null, deleted: false },
+      ],
+      feelings: [],
+      events: [],
+    });
+
+    const result = await runConversation({
+      threadId: THREAD_ID,
+      participants: [A_ID, B_ID],
+    });
+
+    expect(result.threadId).toBe(THREAD_ID);
+    expect(mocks.generateAndPersistExperienceForParticipants).not.toHaveBeenCalled();
+    const callArg = mocks.callGptForConversation.mock.calls[0][0];
+    expect(callArg.brief.fallbackMode).toBe("free");
+    expect(callArg.brief.anchorExperienceId).toBeUndefined();
+
+    const listTables = mocks.listKV.mock.calls.map((call) => call[0]);
+    expect(listTables).not.toContain("experience_events");
+    expect(listTables).not.toContain("resident_experiences");
   });
 
   it("relation が none の場合は中断し GPT 呼び出しを行わない", async () => {

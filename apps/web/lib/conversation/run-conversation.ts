@@ -582,7 +582,8 @@ export async function runConversation(
     });
 
   const nowIso = new Date().toISOString();
-  if (isExperienceModeEnabled()) {
+  const experienceModeEnabled = isExperienceModeEnabled();
+  if (experienceModeEnabled) {
     try {
       await generateAndPersistExperienceForParticipants({
         participants: thread.participants,
@@ -594,14 +595,16 @@ export async function runConversation(
   }
 
   let brief = fallbackBrief(recentLines.length > 0);
-  try {
-    brief = await loadExperienceBrief({
-      participants: thread.participants,
-      hasRecentConversation: recentLines.length > 0,
-      nowIso,
-    });
-  } catch (error) {
-    console.warn("[runConversation] Failed to load experiences. Fallback to continuation/free mode.", error);
+  if (experienceModeEnabled) {
+    try {
+      brief = await loadExperienceBrief({
+        participants: thread.participants,
+        hasRecentConversation: recentLines.length > 0,
+        nowIso,
+      });
+    } catch (error) {
+      console.warn("[runConversation] Failed to load experiences. Fallback to continuation/free mode.", error);
+    }
   }
 
   const gptOutRaw: GptConversationOutput = await callGptForConversation({
