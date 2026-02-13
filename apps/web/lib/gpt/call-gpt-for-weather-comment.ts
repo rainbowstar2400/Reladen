@@ -32,14 +32,22 @@ function isResponseMessageOutput(item: unknown): item is ResponseMessageOutput {
   return isRecord(item) && item.type === "message" && isResponseMessageContentArray(item.content);
 }
 
+function hasOutputText(res: ResponsesCreateReturn): res is ResponsesCreateReturn & { output_text: string } {
+  return "output_text" in res;
+}
+
+function hasOutput(res: ResponsesCreateReturn): res is ResponsesCreateReturn & { output: unknown } {
+  return "output" in res;
+}
+
 function extractTextFromResponse(res: ResponsesCreateReturn): string | null {
-  if (typeof res.output_text === "string" && res.output_text.trim().length > 0) {
+  if (hasOutputText(res) && typeof res.output_text === "string" && res.output_text.trim().length > 0) {
     return res.output_text.trim();
   }
 
-  if (!Array.isArray((res as any).output)) return null;
+  if (!hasOutput(res) || !Array.isArray(res.output)) return null;
 
-  for (const item of (res as any).output) {
+  for (const item of res.output) {
     if (!isResponseMessageOutput(item)) continue;
     const textChunks = item.content
       .filter((c) => c.type === "output_text" && typeof c.text === "string")
@@ -55,7 +63,7 @@ export async function callGptForWeatherComment(input: WeatherCommentInput): Prom
   const { system, user } = buildWeatherCommentPrompt(input);
   try {
     const res = await client.responses.create({
-      model: "gpt-5.1",
+      model: "gpt-5-mini",
       temperature: 0.8,
       max_output_tokens: 120,
       input: [
