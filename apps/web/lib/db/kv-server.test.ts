@@ -33,17 +33,16 @@ describe("putKV", () => {
     });
   });
 
-  it("beliefs 保存時に owner_id を自動付与する", async () => {
-    await putKV("beliefs", {
+  it("events 保存時に owner_id を自動付与する", async () => {
+    await putKV("events", {
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      resident_id: "22222222-2222-4222-8222-222222222222",
-      world_facts: [],
-      person_knowledge: {},
+      kind: "system",
+      payload: { text: "hello" },
       updated_at: "2026-01-01T09:00:00.000Z",
       deleted: false,
     });
 
-    expect(mocks.from).toHaveBeenCalledWith("beliefs");
+    expect(mocks.from).toHaveBeenCalledWith("events");
     expect(mocks.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         owner_id: "11111111-1111-4111-8111-111111111111",
@@ -59,11 +58,10 @@ describe("putKV", () => {
     });
 
     await expect(
-      putKV("beliefs", {
+      putKV("events", {
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        resident_id: "22222222-2222-4222-8222-222222222222",
-        world_facts: [],
-        person_knowledge: {},
+        kind: "system",
+        payload: { text: "hello" },
         updated_at: "2026-01-01T09:00:00.000Z",
         deleted: false,
       }),
@@ -71,4 +69,3 @@ describe("putKV", () => {
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
 });
-

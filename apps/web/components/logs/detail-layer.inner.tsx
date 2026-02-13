@@ -33,8 +33,6 @@ function parseSystemLine(rawLine: string, nameMap: Record<string, string>): stri
   const messages: string[] = [];
 
   segments.forEach((segment) => {
-    if (segment.includes('Belief更新')) return;
-
     const favorMatch = segment.match(/^(.*?)→(.*?)\s*好感度:\s*(↑|↓)/);
     if (favorMatch) {
       const [, from, to, direction] = favorMatch;

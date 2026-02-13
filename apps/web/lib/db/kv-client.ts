@@ -8,7 +8,6 @@ type Table =
   | "events"
   | "topic_threads"
   | "notifications"
-  | "beliefs"
   | "experience_events"
   | "resident_experiences"
   | "feelings"

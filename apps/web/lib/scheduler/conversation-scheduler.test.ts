@@ -75,7 +75,6 @@ describe("conversation scheduler", () => {
             { id: "resident_A", name: "A", deleted: false },
             { id: "resident_B", name: "B", deleted: false },
           ];
-        case "beliefs":
         case "presets":
         case "relations":
         case "topic_threads":

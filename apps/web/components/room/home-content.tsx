@@ -335,7 +335,6 @@ export function HomeContent() {
     const segments = body.split(' / ').map((segment) => segment.trim()).filter(Boolean);
     const messages: string[] = [];
     segments.forEach((segment) => {
-      if (segment.includes('Belief更新')) return;
       const favorMatch = segment.match(/^(.*?)→(.*?)\s*好感度:\s*(↑|↓)/);
       if (favorMatch) {
         const [, from, to, direction] = favorMatch;

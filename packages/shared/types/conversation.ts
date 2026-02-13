@@ -122,7 +122,7 @@ export const eventSchemaStrict = baseEntitySchema.and(
 // 合成後の型
 export type EventLogStrict = z.infer<typeof eventSchemaStrict>;
 
-// --- 会話スレッド・Belief・通知の型 ---
+// --- 会話スレッド・通知の型 ---
 
 export const topicThreadSchema = baseEntitySchema.extend({
   topic: z.string().optional(),
@@ -175,22 +175,6 @@ export const conversationBriefSchema = z.object({
   fallbackMode: conversationFallbackModeEnum,
 });
 export type ConversationBrief = z.infer<typeof conversationBriefSchema>;
-
-export const beliefRecordSchema = z.object({
-  id: z.string().uuid(),
-  residentId: z.string().uuid(),
-  worldFacts: z.array(z.object({
-    eventId: z.string().uuid(),
-    learnedAt: z.string().datetime(),
-  })).default([]),
-  personKnowledge: z.record(z.object({
-    keys: z.array(z.string()),
-    learnedAt: z.string().datetime(),
-  })).default({}),
-  updated_at: z.string().datetime(),
-  deleted: z.boolean().default(false),
-});
-export type BeliefRecord = z.infer<typeof beliefRecordSchema>;
 
 export const notificationRecordSchema = z.object({
   id: z.string().uuid(),

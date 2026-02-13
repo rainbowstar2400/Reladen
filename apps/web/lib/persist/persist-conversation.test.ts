@@ -49,7 +49,6 @@ const baseGptOut: GptConversationOutput = {
 };
 
 function makeEvalResult(
-  newBeliefs: EvaluationResult["newBeliefs"],
 ): EvaluationResult {
   return {
     deltas: {
@@ -72,7 +71,6 @@ function makeEvalResult(
         },
       },
     },
-    newBeliefs,
     threadNextState: "ongoing",
     systemLine: "",
   };
@@ -97,7 +95,7 @@ describe("persistConversation", () => {
   it("events payload に grounding 用 meta を保持して保存する", async () => {
     const result = await persistConversation({
       gptOut: baseGptOut,
-      evalResult: makeEvalResult([]),
+      evalResult: makeEvalResult(),
     });
 
     expect(result.eventId).toBe("00000000-0000-4000-8000-000000000001");
@@ -111,17 +109,12 @@ describe("persistConversation", () => {
     expect(payload.payload?.meta?.fallbackMode).toBe("experience");
   });
 
-  it("newBeliefs が来ても beliefs テーブルには書き込まない", async () => {
+  it("会話保存時に notifications まで書き込む", async () => {
     await persistConversation({
       gptOut: baseGptOut,
-      evalResult: makeEvalResult([
-        { target: A_ID, key: "likes_coffee" },
-      ]),
+      evalResult: makeEvalResult(),
     });
 
-    expect(
-      mocks.putKV.mock.calls.some((call) => call[0] === "beliefs"),
-    ).toBe(false);
     expect(
       mocks.putKV.mock.calls.some((call) => call[0] === "notifications"),
     ).toBe(true);

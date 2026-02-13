@@ -10,36 +10,6 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      beliefs: {
-        Row: {
-          deleted: boolean;
-          id: string;
-          person_knowledge: Json;
-          resident_id: string;
-          owner_id: string | null;
-          updated_at: string;
-          world_facts: Json;
-        };
-        Insert: {
-          deleted?: boolean;
-          id?: string;
-          person_knowledge?: Json;
-          owner_id?: string | null;
-          resident_id: string;
-          updated_at: string;
-          world_facts?: Json;
-        };
-        Update: {
-          deleted?: boolean;
-          id?: string;
-          person_knowledge?: Json;
-          owner_id?: string | null;
-          resident_id?: string;
-          updated_at?: string;
-          world_facts?: Json;
-        };
-        Relationships: [];
-      };
       experience_events: {
         Row: {
           deleted: boolean;

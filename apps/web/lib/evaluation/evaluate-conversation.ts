@@ -3,7 +3,7 @@
 import { getWeightsCached, nextImpression, clipFavor, Impression, ImpressionBase } from './weights';
 
 // ------------------------------------------------------------
-// GPT応答（会話イベント）をローカルで評価し、Δ値・印象・スレッド進行・Belief更新を決定
+// GPT応答（会話イベント）をローカルで評価し、Δ値・印象・スレッド進行を決定
 // ------------------------------------------------------------
 
 export type ImpressionState = {
@@ -38,7 +38,6 @@ export type EvaluationResult = {
     aToB: { favor: number; impression: Impression; impressionState: ImpressionState };
     bToA: { favor: number; impression: Impression; impressionState: ImpressionState };
   };
-  newBeliefs: Array<{ target: string; key: string }>;
   threadNextState: 'ongoing' | 'paused' | 'done';
   /** ログ表示用の簡易SYSTEM行 */
   systemLine: string;
@@ -100,7 +99,6 @@ function toState(input: Impression | ImpressionState | undefined, fallback: Impr
 export function evaluateConversation(input: EvalInput): EvaluationResult {
   const meta = input.meta ?? {};
   const [a, b] = input.participants;
-  const now = new Date().toISOString(); // learnedAt などに使う場合ここから渡す
 
   // input.lines が null/undefined の場合、空配列 [] にフォールバックする
   const lines = Array.isArray(input.lines) ? input.lines : [];
@@ -143,20 +141,7 @@ export function evaluateConversation(input: EvalInput): EvaluationResult {
   const threadNextState: EvaluationResult['threadNextState'] =
     threadScore >= 0.2 ? 'done' : threadScore > 0 ? 'ongoing' : 'paused';
 
-  // 5) Belief 更新パッチを作成
-  const newBeliefs: Array<{ target: string; key: string }> = [];
-  const nkList: Array<{ target: string; key: string }> = meta.newKnowledge ?? [];
-  for (const nk of nkList) {
-    // nk 自体が null/undefined の場合、ループをスキップ
-    if (!nk) continue;
-
-    // これで安全にデストラクチャリングできる
-    const { target, key } = nk;
-    if (!target || !key) continue;
-    newBeliefs.push({ target, key });
-  }
-
-  // 6) クリップと印象1段階制御
+  // 5) クリップと印象1段階制御
   a2bFavor = clipFavor(a2bFavor);
   b2aFavor = clipFavor(b2aFavor);
 
@@ -225,22 +210,20 @@ export function evaluateConversation(input: EvalInput): EvaluationResult {
   const nextA2B = nextStateA2B.base;
   const nextB2A = nextStateB2A.base;
 
-  // 7) SYSTEM 行（UI用サマリ）
+  // 6) SYSTEM 行（UI用サマリ）
   const bits: string[] = [];
   if (a2bFavor !== 0) bits.push(`${a}→${b} 好感度: ${a2bFavor > 0 ? '↑' : '↓'}`);
   if (b2aFavor !== 0) bits.push(`${b}→${a} 好感度: ${b2aFavor > 0 ? '↑' : '↓'}`);
   if (nextA2B !== prevA2B) bits.push(`${a}→${b} 印象: ${prevA2B}→${nextA2B}`);
   if (nextB2A !== prevB2A) bits.push(`${b}→${a} 印象: ${prevB2A}→${nextB2A}`);
-  if (newBeliefs.length) bits.push(`Belief更新: ${newBeliefs.length}件`);
   const systemLine = bits.length ? `SYSTEM: ${bits.join(' / ')}` : '';
 
-  // 8) 最終 return
+  // 7) 最終 return
   return {
     deltas: {
       aToB: { favor: a2bFavor, impression: nextA2B, impressionState: nextStateA2B },
       bToA: { favor: b2aFavor, impression: nextB2A, impressionState: nextStateB2A },
     },
-    newBeliefs,
     threadNextState,
     systemLine,
   };

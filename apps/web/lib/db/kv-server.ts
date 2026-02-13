@@ -23,7 +23,6 @@ type Table =
   | "events"
   | "topic_threads"
   | "notifications"
-  | "beliefs"
   | "experience_events"
   | "resident_experiences"
   | "feelings"
@@ -37,7 +36,6 @@ type OwnerColumnConfig =
   | { type: "candidates"; columns: string[] };
 
 const TABLE_OWNER_COLUMNS: Partial<Record<Table, OwnerColumnConfig>> = {
-  beliefs: { type: "fixed", column: "owner_id" },
   experience_events: { type: "fixed", column: "owner_id" },
   resident_experiences: { type: "fixed", column: "owner_id" },
   events: { type: "fixed", column: "owner_id" },

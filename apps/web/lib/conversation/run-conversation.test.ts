@@ -80,7 +80,6 @@ const evalResult = {
       impressionState: { base: "none", special: null, baseBeforeSpecial: null },
     },
   },
-  newBeliefs: [],
   threadNextState: "ongoing" as const,
   systemLine: "",
 };
@@ -122,7 +121,6 @@ describe("runConversation", () => {
           deleted: false,
         },
       ],
-      beliefs: [],
       presets: [],
       residents: [
         { id: A_ID, name: "遥", first_person: null, speech_preset: null, deleted: false },
@@ -278,7 +276,6 @@ describe("runConversation", () => {
         },
       ],
       relations: new Error("relations unavailable"),
-      beliefs: [],
       presets: [],
       residents: [
         { id: A_ID, name: "遥", first_person: null, speech_preset: null, deleted: false },
@@ -335,7 +332,6 @@ describe("runConversation", () => {
           deleted: false,
         },
       ],
-      beliefs: [],
       presets: [],
       residents: [
         { id: A_ID, name: "遥", first_person: null, speech_preset: null, deleted: false },
@@ -389,7 +385,6 @@ describe("runConversation", () => {
           deleted: false,
         },
       ],
-      beliefs: [],
       presets: [],
       residents: [
         { id: A_ID, name: "遥", first_person: null, speech_preset: null, deleted: false },
@@ -443,7 +438,6 @@ describe("runConversation", () => {
           deleted: false,
         },
       ],
-      beliefs: [],
       presets: [],
       residents: [
         { id: A_ID, name: "遥", first_person: null, speech_preset: null, deleted: false },
