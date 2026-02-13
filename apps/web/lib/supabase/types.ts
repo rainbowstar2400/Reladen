@@ -40,6 +40,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      experience_events: {
+        Row: {
+          deleted: boolean;
+          fact_detail: Json | null;
+          fact_summary: string;
+          id: string;
+          occurred_at: string;
+          owner_id: string;
+          significance: number;
+          signature: string;
+          source_ref: string | null;
+          source_type: Database['public']['Enums']['experience_source_type'];
+          tags: Json;
+          updated_at: string;
+        };
+        Insert: {
+          deleted?: boolean;
+          fact_detail?: Json | null;
+          fact_summary: string;
+          id?: string;
+          occurred_at?: string;
+          owner_id?: string;
+          significance?: number;
+          signature: string;
+          source_ref?: string | null;
+          source_type: Database['public']['Enums']['experience_source_type'];
+          tags?: Json;
+          updated_at?: string;
+        };
+        Update: {
+          deleted?: boolean;
+          fact_detail?: Json | null;
+          fact_summary?: string;
+          id?: string;
+          occurred_at?: string;
+          owner_id?: string;
+          significance?: number;
+          signature?: string;
+          source_ref?: string | null;
+          source_type?: Database['public']['Enums']['experience_source_type'];
+          tags?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       consult_answers: {
         Row: {
           decided_at: string;
@@ -126,6 +171,61 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [];
+      };
+      resident_experiences: {
+        Row: {
+          appraisal: string;
+          awareness: Database['public']['Enums']['experience_awareness'];
+          confidence: number;
+          deleted: boolean;
+          experience_id: string;
+          expires_at: string | null;
+          hook_intent: Database['public']['Enums']['hook_intent'];
+          id: string;
+          learned_at: string;
+          owner_id: string;
+          resident_id: string;
+          salience: number;
+          updated_at: string;
+        };
+        Insert: {
+          appraisal: string;
+          awareness: Database['public']['Enums']['experience_awareness'];
+          confidence?: number;
+          deleted?: boolean;
+          experience_id: string;
+          expires_at?: string | null;
+          hook_intent: Database['public']['Enums']['hook_intent'];
+          id?: string;
+          learned_at?: string;
+          owner_id?: string;
+          resident_id: string;
+          salience?: number;
+          updated_at?: string;
+        };
+        Update: {
+          appraisal?: string;
+          awareness?: Database['public']['Enums']['experience_awareness'];
+          confidence?: number;
+          deleted?: boolean;
+          experience_id?: string;
+          expires_at?: string | null;
+          hook_intent?: Database['public']['Enums']['hook_intent'];
+          id?: string;
+          learned_at?: string;
+          owner_id?: string;
+          resident_id?: string;
+          salience?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            columns: ['experience_id'];
+            foreignKeyName: 'resident_experiences_experience_id_fkey';
+            referencedColumns: ['id'];
+            referencedRelation: 'experience_events';
+          }
+        ];
       };
       nicknames: {
         Row: {
@@ -412,6 +512,8 @@ export type Database = {
       [_ in never]: never;
     };
     Enums: {
+      experience_awareness: 'direct' | 'witnessed' | 'heard';
+      experience_source_type: 'lifestyle' | 'work' | 'interpersonal' | 'environment';
       feeling_label:
         | 'none'
         | 'dislike'
@@ -421,6 +523,7 @@ export type Database = {
         | 'like'
         | 'love'
         | 'awkward';
+      hook_intent: 'invite' | 'share' | 'complain' | 'consult' | 'reflect';
       preset_category: 'speech' | 'occupation' | 'first_person';
       relation_type: 'none' | 'acquaintance' | 'friend' | 'best_friend' | 'lover' | 'family';
     };

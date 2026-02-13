@@ -1,34 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { buildUserPromptConversation } from "@repo/shared/gpt/prompts/conversation-prompt";
-import type { BeliefRecord } from "@repo/shared/types/conversation";
 
 const A_ID = "11111111-1111-4111-8111-111111111111";
 const B_ID = "22222222-2222-4222-8222-222222222222";
-
-function makeBeliefFor(
-  residentId: string,
-  otherId: string,
-  keys: string[],
-): BeliefRecord {
-  return {
-    id: residentId === A_ID
-      ? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-      : "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    residentId,
-    worldFacts: [],
-    personKnowledge: {
-      [otherId]: {
-        keys,
-        learnedAt: "2026-01-01T09:00:00.000Z",
-      },
-    },
-    updated_at: "2026-01-01T09:00:00.000Z",
-    deleted: false,
-  };
-}
+const EXPERIENCE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 describe("buildUserPromptConversation", () => {
-  it("関係性・感情・直近台詞を含み、Belief生JSONを出さず品質ルールを含む", () => {
+  it("関係性・感情・直近台詞と ConversationBrief を含む", () => {
     const prompt = buildUserPromptConversation({
       thread: {
         id: "33333333-3333-4333-8333-333333333333",
@@ -38,14 +16,20 @@ describe("buildUserPromptConversation", () => {
         updated_at: "2026-01-01T09:00:00.000Z",
         deleted: false,
       },
-      beliefs: {
-        [A_ID]: makeBeliefFor(A_ID, B_ID, [
-          "memory-old",
-          "memory-two",
-          "memory-three",
-          "memory-four",
-        ]),
-        [B_ID]: makeBeliefFor(B_ID, A_ID, []),
+      brief: {
+        anchorExperienceId: EXPERIENCE_ID,
+        anchorFact: "遊園地に行った",
+        anchorSignature: "lifestyle:a:b:park:invite",
+        speakerAppraisal: [
+          { speakerId: A_ID, text: "思ったより楽しかった" },
+          { speakerId: B_ID, text: "人が多くて少し疲れた" },
+        ],
+        speakerHookIntent: [
+          { speakerId: A_ID, intent: "invite" },
+          { speakerId: B_ID, intent: "share" },
+        ],
+        expressionStyle: "mixed",
+        fallbackMode: "experience",
       },
       residents: {
         [A_ID]: {
@@ -92,15 +76,13 @@ describe("buildUserPromptConversation", () => {
     expect(prompt).toContain("最近の発話1");
     expect(prompt).toContain("最近の発話4");
 
-    expect(prompt).not.toContain("Belief = {");
-    expect(prompt).not.toContain("memory old");
-    expect(prompt).toContain("memory two");
-    expect(prompt).toContain("memory three");
-    expect(prompt).toContain("memory four");
-    expect(prompt).toContain("特筆なし");
+    expect(prompt).toContain("【ConversationBrief（最優先入力）】");
+    expect(prompt).toContain("anchorExperienceId: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(prompt).toContain("anchorFact: 遊園地に行った");
+    expect(prompt).toContain("思ったより楽しかった");
+    expect(prompt).toContain("invite");
 
-    expect(prompt).toContain("発話数は6〜8発話");
-    expect(prompt).toContain("同一会話内では主題を原則1つに保つ");
+    expect(prompt).toContain("fallbackMode が experience の場合、anchorFact の具体語を最低1つ本文に入れる");
     expect(prompt).toContain("話題を切り替えた場合のみ meta.tags に \"topic_shift\" を含める");
     expect(prompt).toContain("相手の直前発話を受けた返答を優先する");
     expect(prompt).toContain("一人称は「私」を厳守すること。");

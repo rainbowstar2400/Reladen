@@ -24,6 +24,8 @@ type Table =
   | "topic_threads"
   | "notifications"
   | "beliefs"
+  | "experience_events"
+  | "resident_experiences"
   | "feelings"
   | "residents"
   | "presets"
@@ -36,6 +38,8 @@ type OwnerColumnConfig =
 
 const TABLE_OWNER_COLUMNS: Partial<Record<Table, OwnerColumnConfig>> = {
   beliefs: { type: "fixed", column: "owner_id" },
+  experience_events: { type: "fixed", column: "owner_id" },
+  resident_experiences: { type: "fixed", column: "owner_id" },
   events: { type: "fixed", column: "owner_id" },
   feelings: { type: "fixed", column: "owner_id" },
   residents: { type: "fixed", column: "owner_id" },

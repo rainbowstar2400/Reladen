@@ -3,13 +3,11 @@ import { putKV as putAny, listKV as listAny } from "@/lib/db/kv-server";
 import { newId } from "@/lib/newId";
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
 import type {
-  BeliefRecord,
   NotificationRecord,
   TopicThread,
 } from "@repo/shared/types/conversation";
 import type { EvaluationResult } from "@/lib/evaluation/evaluate-conversation";
 import type { Feeling } from "@/types";
-import { beliefRowToRecord, recordToBeliefRow } from "@/lib/conversation/belief-mapper";
 
 
 async function updateRelationsAndFeelings(params: {
@@ -104,18 +102,6 @@ async function updateRelationsAndFeelings(params: {
 }
 
 /**
- * Belief の更新（冪等）
- */
-async function updateBeliefs(newBeliefs: Record<string, BeliefRecord>) {
-  const now = new Date().toISOString();
-  for (const [residentId, rec] of Object.entries(newBeliefs)) {
-    await putAny("beliefs", {
-      ...recordToBeliefRow({ ...rec, residentId, updated_at: now, deleted: false }),
-    });
-  }
-}
-
-/**
  * topic_threads の lastEventId / status を更新
  */
 async function updateThreadAfterEvent(params: {
@@ -190,7 +176,7 @@ async function createNotification(params: {
 }
 
 /**
- * 会話の永続化：events / topic_threads / notifications / beliefs / feelings
+ * 会話の永続化：events / topic_threads / notifications / feelings
  */
 export async function persistConversation(params: {
   gptOut: GptConversationOutput;
@@ -226,110 +212,13 @@ export async function persistConversation(params: {
     status: evalResult.threadNextState,
   });
 
-  // 3) beliefs を更新（冪等）
-  async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
-    // arr が null の可能性を考慮
-    const arr = (await listAny("beliefs")) as unknown as Array<Record<string, unknown>> | null;
-    const dict: Record<string, BeliefRecord> = {};
-
-    if (Array.isArray(arr)) {
-      for (const raw of arr) {
-        const rec = beliefRowToRecord(raw as any);
-        if (rec?.residentId) {
-          dict[rec.residentId] = rec;
-        }
-      }
-    }
-    return dict;
-  }
-
-  // 既存の loadBeliefsDict はそのまま利用
-  async function upsertBeliefsFromNewKnowledge(
-    items: Array<{ target: string; key: string }>,
-    participants: [string, string],
-  ) {
-    if (!items?.length) return;
-
-    const dict = await loadBeliefsDict();
-    const [a, b] = participants;
-    const nowIso = new Date().toISOString();
-
-    // 「target = 学習者ID（知識を得た側）」と解釈し、aboutId を相手にする
-    const resolveAboutId = (target: string): string => (target === a ? b : a);
-
-    for (const { target, key } of items) {
-      if (!target || !key) continue;
-
-      // 1) 学習者（residentId=target）のレコードを取得/生成
-      let rec: BeliefRecord | undefined = dict[target];
-      if (!rec) {
-        rec = {
-          id: newId(),
-          residentId: target,       // ← 学習者のレコード
-          worldFacts: [],           // 使わないなら空でOK
-          personKnowledge: {},      // { [aboutId]: { keys: string[], learnedAt: string } }
-          updated_at: nowIso,
-          deleted: false,
-        } as BeliefRecord;
-        dict[target] = rec;
-      }
-
-      // 2) 相手 aboutId のセクションを確保し、key を追加
-      const aboutId = resolveAboutId(target);
-
-      // 既存レコードの personKnowledge が null の場合、初期化する
-      if (!rec.personKnowledge) {
-        rec.personKnowledge = {};
-      }
-
-      if (!rec.personKnowledge[aboutId]) {
-        rec.personKnowledge[aboutId] = { keys: [], learnedAt: nowIso };
-      }
-      const keys = Array.isArray(rec.personKnowledge[aboutId].keys)
-        ? (rec.personKnowledge[aboutId].keys as string[])
-        : [];
-
-      if (!keys.includes(key)) keys.push(key);
-      rec.personKnowledge[aboutId].keys = keys;
-      rec.personKnowledge[aboutId].learnedAt = nowIso;
-      rec.updated_at = nowIso;
-
-      const FRESH_DAYS = 14;
-      function isStale(iso: string): boolean {
-        const t = new Date(iso).getTime();
-        return Number.isFinite(t) && (Date.now() - t) > FRESH_DAYS * 86400000;
-      }
-
-      // 追加例（keys が長い/古い場合に圧縮する）
-      if (isStale(rec.personKnowledge[aboutId].learnedAt) && rec.personKnowledge[aboutId].keys.length > 5) {
-        rec.personKnowledge[aboutId].keys = rec.personKnowledge[aboutId].keys.slice(-5);
-        // ここで "…(省略)" などの要約フラグを別フィールドに立てても良い
-      }
-
-      // 3) upsert（冪等）
-      await putAny("beliefs", recordToBeliefRow({ ...rec, deleted: false }));
-    }
-  }
-
-  // Belief の書き込みは GPT 生成後の付加処理なので、失敗しても会話自体が失敗しないようにする。
-  try {
-    await upsertBeliefsFromNewKnowledge(evalResult.newBeliefs, gptOut.participants);
-  } catch (error) {
-    console.warn('[persistConversation] Failed to upsert beliefs from new knowledge.', {
-      threadId: gptOut.threadId,
-      participants: gptOut.participants,
-      newBeliefsCount: evalResult.newBeliefs.length,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-
-  // 4) relations / feelings を更新（簡易版）
+  // 3) relations / feelings を更新（簡易版）
   await updateRelationsAndFeelings({
     participants: gptOut.participants,
     deltas: evalResult.deltas,
   });
 
-  // 5) 通知登録
+  // 4) 通知登録
   // gptOut.lines が null の場合を考慮
   const first = Array.isArray(gptOut.lines) ? gptOut.lines[0] : undefined;
   const snippet = first

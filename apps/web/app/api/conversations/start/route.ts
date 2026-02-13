@@ -4,7 +4,6 @@ import { runConversation } from '@/lib/conversation/run-conversation';
 import type {
   ConversationResidentProfile,
 } from '@repo/shared/gpt/prompts/conversation-prompt';
-import type { BeliefRecord } from '@repo/shared/types/conversation';
 import { KvUnauthenticatedError } from '@/lib/db/kv-server';
 
 const residentProfileSchema = z.object({
@@ -23,33 +22,9 @@ const residentProfileSchema = z.object({
   summary: z.string().optional().nullable(),
 });
 
-const beliefRecordSchema = z.object({
-  id: z.string().uuid(),
-  residentId: z.string().uuid(),
-  worldFacts: z
-    .array(
-      z.object({
-        eventId: z.string().uuid(),
-        learnedAt: z.string().datetime(),
-      }),
-    )
-    .optional(),
-  personKnowledge: z
-    .record(
-      z.object({
-        keys: z.array(z.string()),
-        learnedAt: z.string().datetime(),
-      }),
-    )
-    .optional(),
-  updated_at: z.string().datetime().optional(),
-  deleted: z.boolean().optional(),
-});
-
 const contextSchema = z
   .object({
     residents: z.record(z.string().uuid(), residentProfileSchema).optional(),
-    beliefs: z.record(z.string().uuid(), beliefRecordSchema).optional(),
   })
   .optional();
 
@@ -65,33 +40,15 @@ function normalizeContext(
   raw?: z.infer<typeof contextSchema>,
 ): {
   residents?: Record<string, ConversationResidentProfile>;
-  beliefs?: Record<string, BeliefRecord>;
 } {
   if (!raw) return {};
   const normalized: {
     residents?: Record<string, ConversationResidentProfile>;
-    beliefs?: Record<string, BeliefRecord>;
   } = {};
 
   if (raw.residents) {
     normalized.residents = Object.fromEntries(
       Object.entries(raw.residents).map(([id, profile]) => [id, profile]),
-    );
-  }
-
-  if (raw.beliefs) {
-    normalized.beliefs = Object.fromEntries(
-      Object.entries(raw.beliefs).map(([residentId, belief]) => [
-        residentId,
-        {
-          id: belief.id,
-          residentId: belief.residentId,
-          worldFacts: belief.worldFacts ?? [],
-          personKnowledge: belief.personKnowledge ?? {},
-          updated_at: belief.updated_at ?? new Date().toISOString(),
-          deleted: belief.deleted ?? false,
-        },
-      ]),
     );
   }
 
@@ -124,7 +81,6 @@ export async function POST(req: Request) {
       topicHint,
       lastSummary,
       residentProfilesOverride: overrides.residents,
-      beliefsOverride: overrides.beliefs,
     });
 
     return NextResponse.json({ eventId, threadId: ensuredThreadId });

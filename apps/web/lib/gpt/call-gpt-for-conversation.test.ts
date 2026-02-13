@@ -27,6 +27,7 @@ import {
 const A_ID = "11111111-1111-4111-8111-111111111111";
 const B_ID = "22222222-2222-4222-8222-222222222222";
 const THREAD_ID = "33333333-3333-4333-8333-333333333333";
+const EXPERIENCE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 function makeResponse(payload: unknown) {
   return {
@@ -66,7 +67,21 @@ const baseParams = {
     deleted: false,
     topic: "映画",
   },
-  beliefs: {},
+  brief: {
+    anchorExperienceId: EXPERIENCE_ID,
+    anchorFact: "映画を見た",
+    anchorSignature: "interpersonal:a:b:cinema:share",
+    speakerAppraisal: [
+      { speakerId: A_ID, text: "主演がよかった" },
+      { speakerId: B_ID, text: "音楽が印象的だった" },
+    ],
+    speakerHookIntent: [
+      { speakerId: A_ID, intent: "share" as const },
+      { speakerId: B_ID, intent: "share" as const },
+    ],
+    expressionStyle: "mixed" as const,
+    fallbackMode: "experience" as const,
+  },
   residents: {
     [A_ID]: { id: A_ID, name: "遥", firstPerson: "私" },
     [B_ID]: { id: B_ID, name: "湊", firstPerson: "俺" },
@@ -100,7 +115,7 @@ describe("callGptForConversation continuity gate", () => {
           makePayload({
             topic: "映画",
             lines: [
-              { speaker: A_ID, text: "映画の話の続きだけど、あの場面が印象的だった。" },
+              { speaker: A_ID, text: "映画の話の続きだけど、あの場面が印象的だった。聞いてくれる？" },
               { speaker: B_ID, text: "ところで映画の余韻もあるし、次は散歩の話をしてもいい？" },
             ],
             tags: ["topic_shift"],
@@ -123,8 +138,8 @@ describe("callGptForConversation continuity gate", () => {
         makePayload({
           topic: "映画",
           lines: [
-            { speaker: A_ID, text: "映画の話の続きだけど、音楽が良かったよね。" },
-            { speaker: B_ID, text: "映画の話の続きで、雰囲気にもすごく合ってた。" },
+            { speaker: A_ID, text: "映画の話の続きだけど、音楽が良かったよね。聞いてほしい。" },
+            { speaker: B_ID, text: "映画の話の続きで、雰囲気にもすごく合ってた。共有したくなる。" },
           ],
           tags: [],
         }),

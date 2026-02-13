@@ -9,6 +9,8 @@ type Table =
   | "topic_threads"
   | "notifications"
   | "beliefs"
+  | "experience_events"
+  | "resident_experiences"
   | "feelings"
   | "relations"
   | "world_states";

@@ -1,9 +1,10 @@
 // packages/shared/gpt/prompts/conversation-prompt.ts
 import type {
   TopicThread,
-  BeliefRecord,
   RelationType,
   FeelingLabel,
+  ConversationBrief,
+  HookIntent,
 } from "@repo/shared/types";
 
 export type ConversationResidentProfile = {
@@ -36,7 +37,6 @@ export type ConversationPairContext = {
   recentLines?: Array<{ speaker: string; text: string }>;
 };
 
-const MAX_BELIEF_ITEMS = 3;
 const MAX_RECENT_LINES = 4;
 const MAX_TEXT_CHARS = 80;
 
@@ -62,7 +62,11 @@ export const systemPromptConversation = `
       "turnBalance": "balanced"|"skewed",
       "tone": string
     },
-    "debug": string[]
+    "debug": string[],
+    "anchorExperienceId": string,
+    "grounded": boolean,
+    "groundingEvidence": string[],
+    "fallbackMode": "experience"|"continuation"|"free"
   }
 }
 
@@ -85,30 +89,6 @@ function safeStringify(value: unknown, max = MAX_TEXT_CHARS): string {
   } catch {
     return "未設定";
   }
-}
-
-function normalizeBeliefKey(key: string): string {
-  const cleaned = key
-    .replace(/[_/.:|\\-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return truncateText(cleaned || key, MAX_TEXT_CHARS);
-}
-
-function summarizeBeliefForOther(
-  belief: BeliefRecord | undefined,
-  aboutId: string,
-): string[] {
-  const raw = belief?.personKnowledge?.[aboutId]?.keys;
-  if (!Array.isArray(raw) || raw.length === 0) return [];
-  const deduped = Array.from(
-    new Set(
-      raw
-        .map((key) => (typeof key === "string" ? key.trim() : ""))
-        .filter((key) => key.length > 0),
-    ),
-  );
-  return deduped.slice(-MAX_BELIEF_ITEMS).map(normalizeBeliefKey);
 }
 
 function relationLabel(relationType?: RelationType | string | null): string {
@@ -166,11 +146,26 @@ function formatFeelingScore(score?: number | null): string {
   return String(Math.round(Number(score)));
 }
 
+function formatHookIntent(intent: HookIntent): string {
+  switch (intent) {
+    case "invite":
+      return "誘う";
+    case "share":
+      return "共有する";
+    case "complain":
+      return "愚痴る";
+    case "consult":
+      return "相談する";
+    case "reflect":
+      return "振り返る";
+    default:
+      return intent;
+  }
+}
+
 function formatProfileLine(
   id: string,
-  otherId: string,
   profile: ConversationResidentProfile | undefined,
-  belief: BeliefRecord | undefined,
 ) {
   const displayName = profile?.name ?? id;
   const parts: string[] = [];
@@ -187,11 +182,6 @@ function formatProfileLine(
   const interestLine = `趣味・関心: ${safeStringify(profile?.interests)}`;
   const summaryLine = profile?.summary ? `要約: ${truncateText(profile.summary, 120)}` : undefined;
 
-  const knownItems = summarizeBeliefForOther(belief, otherId);
-  const beliefLine = knownItems.length
-    ? `${displayName}が相手について覚えていること: ${knownItems.join(" / ")}`
-    : `${displayName}が相手について覚えていること: 特筆なし`;
-
   return [
     `- ${displayName} (ID: ${id})`,
     `  ${identityLine}`,
@@ -205,7 +195,6 @@ function formatProfileLine(
       ? `  口調の例: 「${truncateText(profile.speechExample, 120)}」`
       : "  口調の例: 未設定",
     summaryLine ? `  ${summaryLine}` : undefined,
-    `  ${beliefLine}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -270,22 +259,53 @@ function formatRecentLines(
     .join("\n") || "(なし)";
 }
 
+function formatBriefBlock(
+  brief: ConversationBrief,
+  residents?: Record<string, ConversationResidentProfile>,
+) {
+  const appraisalLines = brief.speakerAppraisal.length
+    ? brief.speakerAppraisal.map((entry) => {
+      const speakerName = residents?.[entry.speakerId]?.name ?? entry.speakerId;
+      return `- ${speakerName}: ${truncateText(entry.text, 120)}`;
+    }).join("\n")
+    : "- (なし)";
+
+  const hookLines = brief.speakerHookIntent.length
+    ? brief.speakerHookIntent.map((entry) => {
+      const speakerName = residents?.[entry.speakerId]?.name ?? entry.speakerId;
+      return `- ${speakerName}: ${formatHookIntent(entry.intent)} (${entry.intent})`;
+    }).join("\n")
+    : "- (なし)";
+
+  return [
+    `- fallbackMode: ${brief.fallbackMode}`,
+    `- expressionStyle: ${brief.expressionStyle}`,
+    `- anchorExperienceId: ${brief.anchorExperienceId ?? "(none)"}`,
+    `- anchorSignature: ${brief.anchorSignature ?? "(none)"}`,
+    `- anchorFact: ${brief.anchorFact}`,
+    "- speakerAppraisal:",
+    appraisalLines,
+    "- speakerHookIntent:",
+    hookLines,
+  ].join("\n");
+}
+
 export function buildUserPromptConversation(opts: {
   thread: TopicThread;
-  beliefs: Record<string, BeliefRecord>;
+  brief: ConversationBrief;
   topicHint?: string;
   lastSummary?: string;
   residents?: Record<string, ConversationResidentProfile>;
   pairContext?: ConversationPairContext;
 }) {
-  const { thread, beliefs, topicHint, lastSummary, residents, pairContext } = opts;
+  const { thread, brief, topicHint, lastSummary, residents, pairContext } = opts;
   const topic = topicHint ?? thread.topic ?? "雑談";
   const [a, b] = thread.participants;
   const timeContext = formatTimeOfDayJst(new Date());
 
   const participantBlock = [
-    formatProfileLine(a, b, residents?.[a], beliefs[a]),
-    formatProfileLine(b, a, residents?.[b], beliefs[b]),
+    formatProfileLine(a, residents?.[a]),
+    formatProfileLine(b, residents?.[b]),
   ].join("\n");
 
   const relationBlock = formatPairContext({
@@ -295,6 +315,7 @@ export function buildUserPromptConversation(opts: {
     pairContext,
   });
   const recentLinesBlock = formatRecentLines(pairContext?.recentLines, residents);
+  const briefBlock = formatBriefBlock(brief, residents);
 
   return `
 【登場人物プロフィール】
@@ -315,7 +336,13 @@ ${lastSummary ?? "(なし)"}
 【今回の話題】
 ${topic}
 
+【ConversationBrief（最優先入力）】
+${briefBlock}
+
 【会話生成ルール】
+- fallbackMode が experience の場合、anchorFact の具体語を最低1つ本文に入れる
+- fallbackMode が experience の場合、少なくとも1人の appraisal を自然に反映する
+- fallbackMode が experience の場合、hookIntent に対応する会話行動（誘う/共有/愚痴/相談/振り返り）を1つ入れる
 - 同一会話内では主題を原則1つに保つ
 - 最近の会話まとめに主題がある場合は、その主題を優先して継続する
 - 話題を切り替える場合は橋渡し表現（例: そういえば / ところで / その話で言うと / 関連して）を必ず入れる
@@ -325,9 +352,15 @@ ${topic}
 - 相手の直前発話を受けた返答を優先する
 - 話し方（テンプレート名・説明・例文）を口調に反映する
 - 一人称はプロフィールで指定された表記を厳守する（表記揺れ禁止）
-- プロフィールや記憶由来の具体語を最低1つ入れる
 - 関連のない新話題を唐突に導入しない
 - 汎用テンプレ台詞の連発は避ける
+
+【meta の設定ルール】
+- meta.anchorExperienceId は brief.anchorExperienceId をそのまま設定する（無ければ空文字）
+- meta.anchorSignature は brief.anchorSignature を設定する（無ければ空文字）
+- meta.fallbackMode は brief.fallbackMode を設定する
+- meta.grounded は本文が brief に接地していれば true、そうでなければ false
+- meta.groundingEvidence には anchorFact と appraisal の証拠語を短文で入れる（最大3件）
 
 【出力仕様】
 - 出力は必ず上記スキーマに厳密一致するJSONのみ

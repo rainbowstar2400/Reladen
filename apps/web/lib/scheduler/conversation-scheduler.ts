@@ -6,7 +6,7 @@
 // ------------------------------------------------------------
 
 import { listLocal } from "@/lib/db-local";
-import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
+import type { TopicThread } from "@repo/shared/types/conversation";
 import { selectConversationCandidates } from "@/lib/conversation/candidates";
 import type { Resident, Preset, Relation } from "@/types";
 import type { ConversationResidentProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
@@ -18,7 +18,6 @@ type StartConversationPayload = {
   lastSummary?: string;
   context?: {
     residents?: Record<string, ConversationResidentProfile>;
-    beliefs?: Record<string, BeliefRecord>;
   };
 };
 
@@ -71,11 +70,9 @@ function toConversationProfile(resident: Resident): ConversationResidentProfile 
 function buildContextForParticipants(
   participantIds: [string, string],
   residents: Resident[],
-  beliefs: BeliefRecord[],
   presets: Preset[],
 ): NonNullable<StartConversationPayload["context"]> {
   const residentMap = new Map(residents.map((r) => [r.id, r]));
-  const beliefMap = new Map(beliefs.map((b) => [b.residentId, b]));
   const presetMap = new Map(presets.filter((p) => !p.deleted).map((p) => [p.id, p]));
 
   const context: NonNullable<StartConversationPayload["context"]> = {};
@@ -94,11 +91,6 @@ function buildContextForParticipants(
         speechExample: typeof speechExample === "string" || speechExample === null ? speechExample : null,
         firstPerson: firstPersonPreset?.label ?? null,
       };
-    }
-    const belief = beliefMap.get(id);
-    if (belief) {
-      context.beliefs = context.beliefs ?? {};
-      context.beliefs[id] = belief;
     }
   }
 
@@ -333,7 +325,6 @@ export async function triggerConversationNow(
 
   try {
     const allResidents = (await listLocal("residents")) as Resident[];
-    const allBeliefs = (await listLocal("beliefs")) as BeliefRecord[];
     const allPresets = (await listLocal("presets")) as Preset[];
     const allRelations = (await listLocal("relations")) as Relation[];
     const activePresets = allPresets.filter((p) => !p.deleted);
@@ -371,7 +362,6 @@ export async function triggerConversationNow(
     const context = buildContextForParticipants(
       target.participants,
       allResidents,
-      allBeliefs,
       activePresets,
     );
 

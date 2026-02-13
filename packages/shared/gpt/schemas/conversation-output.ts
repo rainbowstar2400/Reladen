@@ -1,5 +1,6 @@
 // packages/shared/gpt/schemas/conversation-output.ts
 import { z } from 'zod';
+import { conversationFallbackModeEnum } from '@repo/shared/types/conversation';
 
 // 会話行（GPTの出力）
 export const gptConversationLineSchema = z.object({
@@ -20,6 +21,11 @@ export const gptConversationMetaSchema = z.object({
     tone: z.string(),
   }),
   debug: z.array(z.string()),
+  anchorExperienceId: z.string().uuid().optional(),
+  anchorSignature: z.string().optional(),
+  grounded: z.boolean().optional(),
+  groundingEvidence: z.array(z.string()).optional(),
+  fallbackMode: conversationFallbackModeEnum.optional(),
 });
 
 // GPT出力本体

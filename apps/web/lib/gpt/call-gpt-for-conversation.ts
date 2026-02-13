@@ -4,6 +4,7 @@ import type { ResponseCreateParamsNonStreaming } from "openai/resources/response
 import { gptConversationOutputSchema, type GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
 import { systemPromptConversation, buildUserPromptConversation } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { env } from "@/env";
+import { assessConversationGrounding } from "@/lib/conversation/grounding";
 
 const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
 
@@ -72,6 +73,14 @@ const conversationResponseSchema = {
             type: "array",
             items: { type: "string" },
           },
+          anchorExperienceId: { type: "string" },
+          anchorSignature: { type: "string" },
+          grounded: { type: "boolean" },
+          groundingEvidence: {
+            type: "array",
+            items: { type: "string" },
+          },
+          fallbackMode: { enum: ["experience", "continuation", "free"] },
         },
         required: ["tags", "newKnowledge", "signals", "qualityHints", "debug"],
       },
@@ -132,15 +141,16 @@ function isResponseMessageOutput(item: unknown): item is ResponseMessageOutput {
   return isRecord(item) && item.type === "message" && isResponseMessageContentArray(item.content);
 }
 
-function hasOutputText(res: ResponsesCreateReturn): res is ResponsesCreateReturn & { output_text: string[] } {
-  return "output_text" in res;
+function hasOutputText(res: unknown): res is ResponsesCreateReturn & { output_text: string[] } {
+  return typeof res === "object" && res !== null && "output_text" in res;
 }
 
-function hasOutput(res: ResponsesCreateReturn): res is ResponsesCreateReturn & { output: unknown } {
-  return "output" in res;
+function hasOutput(res: unknown): res is ResponsesCreateReturn & { output: unknown } {
+  return typeof res === "object" && res !== null && "output" in res;
 }
 
-function extractTextFromResponse(res: ResponsesCreateReturn): string | null {
+function extractTextFromResponse(res: unknown): string | null {
+  if (!res) return null;
   if (hasOutputText(res) && Array.isArray(res.output_text) && res.output_text.length > 0) {
     return res.output_text.join("\n").trim();
   }
@@ -272,9 +282,10 @@ function buildRetryPrompt(basePrompt: string, reasons: string[]): string {
   return `${basePrompt}
 
 【再生成指示】
-以下の理由で話題一貫性チェックに失敗しました。会話を作り直してください。
+以下の理由で品質チェックに失敗しました。会話を作り直してください。
 ${reasons.map((reason) => `- ${reason}`).join("\n")}
-- 主題は維持し、切り替える場合は橋渡し表現を入れ、meta.tags に "topic_shift" を含めてください。`;
+- 主題は維持し、切り替える場合は橋渡し表現を入れ、meta.tags に "topic_shift" を含めてください。
+- fallbackMode が experience の場合は anchorFact / appraisal / hookIntent に接地してください。`;
 }
 
 async function requestConversationOutput(
@@ -330,6 +341,8 @@ async function requestConversationOutput(
   const sanitized = sanitizeGptConversationOutput(raw, {
     threadId: params.thread.id,
     participants: params.thread.participants,
+    fallbackMode: params.brief.fallbackMode,
+    anchorExperienceId: params.brief.anchorExperienceId,
   });
 
   const parsed = gptConversationOutputSchema.safeParse(sanitized);
@@ -356,9 +369,20 @@ export async function callGptForConversation(
       tags: out.meta?.tags,
       recentLines: params.pairContext?.recentLines,
     });
+    let grounding = assessConversationGrounding({
+      brief: params.brief,
+      lines: out.lines,
+    });
+    const collectRetryReasons = () => {
+      const reasons = [...continuity.reasons];
+      if (!grounding.ok) reasons.push(...grounding.reasons);
+      return Array.from(new Set(reasons));
+    };
 
-    for (let retry = 0; retry < MAX_RETRY_COUNT && !continuity.ok; retry += 1) {
-      userPrompt = buildRetryPrompt(baseUserPrompt, continuity.reasons);
+    for (let retry = 0; retry < MAX_RETRY_COUNT; retry += 1) {
+      const retryReasons = collectRetryReasons();
+      if (retryReasons.length === 0) break;
+      userPrompt = buildRetryPrompt(baseUserPrompt, retryReasons);
       out = await requestConversationOutput(systemPrompt, userPrompt, params);
       continuity = assessTopicContinuity({
         topic: out.topic,
@@ -366,11 +390,16 @@ export async function callGptForConversation(
         tags: out.meta?.tags,
         recentLines: params.pairContext?.recentLines,
       });
+      grounding = assessConversationGrounding({
+        brief: params.brief,
+        lines: out.lines,
+      });
     }
 
-    if (!continuity.ok) {
-      console.warn("[callGptForConversation] Topic continuity check still failed after retry.", {
-        reasons: continuity.reasons,
+    const finalReasons = collectRetryReasons();
+    if (finalReasons.length > 0) {
+      console.warn("[callGptForConversation] Quality checks still failed after retry.", {
+        reasons: finalReasons,
       });
     }
 
@@ -386,7 +415,12 @@ export async function callGptForConversation(
 
 function sanitizeGptConversationOutput(
   raw: unknown,
-  ctx: { threadId: string; participants: [string, string] },
+  ctx: {
+    threadId: string;
+    participants: [string, string];
+    fallbackMode: "experience" | "continuation" | "free";
+    anchorExperienceId?: string;
+  },
 ) {
   const safeObject = isRecord(raw) ? { ...raw } : {};
   const participants = ctx.participants;
@@ -470,6 +504,32 @@ function sanitizeGptConversationOutput(
     ? (metaInput as any).debug.filter((item: unknown): item is string => typeof item === "string" && item.length > 0)
     : [];
 
+  const anchorExperienceId = typeof (metaInput as any).anchorExperienceId === "string"
+    && (metaInput as any).anchorExperienceId.trim().length > 0
+    ? (metaInput as any).anchorExperienceId
+    : ctx.anchorExperienceId;
+
+  const anchorSignature = typeof (metaInput as any).anchorSignature === "string"
+    && (metaInput as any).anchorSignature.trim().length > 0
+    ? (metaInput as any).anchorSignature
+    : undefined;
+
+  const grounded = typeof (metaInput as any).grounded === "boolean"
+    ? (metaInput as any).grounded
+    : undefined;
+
+  const groundingEvidence = Array.isArray((metaInput as any).groundingEvidence)
+    ? (metaInput as any).groundingEvidence
+        .filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
+        .slice(0, 3)
+    : [];
+
+  const fallbackMode = (metaInput as any).fallbackMode === "experience"
+    || (metaInput as any).fallbackMode === "continuation"
+    || (metaInput as any).fallbackMode === "free"
+    ? (metaInput as any).fallbackMode
+    : ctx.fallbackMode;
+
   return {
     threadId: ctx.threadId,
     participants,
@@ -481,6 +541,11 @@ function sanitizeGptConversationOutput(
       signals,
       qualityHints,
       debug,
+      anchorExperienceId,
+      anchorSignature,
+      grounded,
+      groundingEvidence,
+      fallbackMode,
     },
   } satisfies Partial<GptConversationOutput>;
 }

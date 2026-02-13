@@ -50,6 +50,13 @@
       "when": 1770786518613,
       "tag": "0006_great_infant_terrible",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1770969600000,
+      "tag": "0007_experience_mode",
+      "breakpoints": true
     }
   ]
 }

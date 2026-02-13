@@ -1,7 +1,10 @@
 // apps/web/lib/conversation/run-conversation.ts
 // ------------------------------------------------------------
 // 会話エンジンのオーケストレータ。
-// 1) GPT生成（callGptForConversation）→ 2) ローカル評価 → 3) 永続化
+// 1) Experience Brief 生成（決定的）
+// 2) GPT生成（callGptForConversation）
+// 3) ローカル評価
+// 4) 永続化
 // ------------------------------------------------------------
 
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
@@ -12,8 +15,18 @@ import { callGptForConversation } from "@/lib/gpt/call-gpt-for-conversation";
 import { newId } from "@/lib/newId";
 
 import { listKV as listAny } from "@/lib/db/kv-server";
-import type { BeliefRecord, TopicThread } from "@repo/shared/types/conversation";
-import { beliefRowToRecord } from "@/lib/conversation/belief-mapper";
+import type {
+  ConversationBrief,
+  ExperienceEvent,
+  ResidentExperience,
+  TopicThread,
+} from "@repo/shared/types/conversation";
+import {
+  buildConversationBrief,
+  parseExperienceEventRow,
+  parseResidentExperienceRow,
+} from "@/lib/conversation/experience-brief";
+import { assessConversationGrounding } from "@/lib/conversation/grounding";
 import type {
   ConversationResidentProfile,
   ConversationPairContext,
@@ -41,8 +54,6 @@ export type RunConversationArgs = {
   lastSummary?: string;
   /** クライアント側で把握している住人プロフィール */
   residentProfilesOverride?: Record<string, ConversationResidentProfile>;
-  /** クライアント側で把握している Belief */
-  beliefsOverride?: Record<string, BeliefRecord>;
 };
 
 export type RunConversationResult = {
@@ -51,23 +62,6 @@ export type RunConversationResult = {
   gptOut: GptConversationOutput;
   evalResult: EvaluationResult;
 };
-
-/** beliefs を Record<residentId, BeliefRecord> でロード */
-async function loadBeliefsDict(): Promise<Record<string, BeliefRecord>> {
-  // arr が null の可能性を考慮
-  const arr = (await listAny("beliefs")) as unknown as Array<Record<string, unknown>> | null;
-  const dict: Record<string, BeliefRecord> = {};
-
-  if (Array.isArray(arr)) {
-    for (const raw of arr) {
-      const rec = beliefRowToRecord(raw as any);
-      if (rec?.residentId) {
-        dict[rec.residentId] = rec;
-      }
-    }
-  }
-  return dict;
-}
 
 async function loadResidentProfiles(
   participantIds: [string, string],
@@ -158,6 +152,7 @@ type EventRow = {
   kind?: string;
   payload?: unknown;
   deleted?: boolean;
+  updated_at?: string;
 };
 
 const BRIDGE_PHRASES = [
@@ -364,6 +359,104 @@ async function loadRecentLinesFromThread(
     .slice(-4);
 }
 
+async function loadRecentAnchorSignaturesForPair(
+  participants: [string, string],
+): Promise<string[]> {
+  const rows = (await listAny("events")) as unknown as EventRow[] | null;
+  if (!Array.isArray(rows)) return [];
+  const [a, b] = participants;
+
+  return rows
+    .filter((row) => row?.kind === "conversation" && !row?.deleted)
+    .sort((lhs, rhs) => {
+      const l = typeof lhs?.updated_at === "string" ? Date.parse(lhs.updated_at) : 0;
+      const r = typeof rhs?.updated_at === "string" ? Date.parse(rhs.updated_at) : 0;
+      return (Number.isFinite(r) ? r : 0) - (Number.isFinite(l) ? l : 0);
+    })
+    .map((row) => row.payload as {
+      participants?: unknown;
+      meta?: { anchorSignature?: unknown } | null;
+    } | undefined)
+    .filter((payload) => {
+      const ps = payload?.participants;
+      return Array.isArray(ps)
+        && ps.length === 2
+        && ((ps[0] === a && ps[1] === b) || (ps[0] === b && ps[1] === a));
+    })
+    .map((payload) => payload?.meta?.anchorSignature)
+    .filter((signature): signature is string => typeof signature === "string" && signature.length > 0)
+    .slice(0, 30);
+}
+
+function fallbackBrief(hasRecentConversation: boolean): ConversationBrief {
+  const fallbackMode = hasRecentConversation ? "continuation" : "free";
+  return {
+    anchorFact: fallbackMode === "continuation" ? "直近の会話の続き" : "日常の雑談",
+    speakerAppraisal: [],
+    speakerHookIntent: [],
+    expressionStyle: "mixed",
+    fallbackMode,
+  };
+}
+
+async function loadExperienceBrief(input: {
+  participants: [string, string];
+  hasRecentConversation: boolean;
+  nowIso: string;
+}): Promise<ConversationBrief> {
+  const [eventRows, residentRows, recentAnchorSignatures] = await Promise.all([
+    listAny("experience_events") as Promise<Array<Record<string, unknown>>>,
+    listAny("resident_experiences") as Promise<Array<Record<string, unknown>>>,
+    loadRecentAnchorSignaturesForPair(input.participants),
+  ]);
+
+  const events: ExperienceEvent[] = Array.isArray(eventRows)
+    ? eventRows
+        .map((row) => parseExperienceEventRow(row))
+        .filter((row): row is ExperienceEvent => Boolean(row))
+    : [];
+  const residentExperiences: ResidentExperience[] = Array.isArray(residentRows)
+    ? residentRows
+        .map((row) => parseResidentExperienceRow(row))
+        .filter((row): row is ResidentExperience => Boolean(row))
+    : [];
+
+  if (events.length === 0 || residentExperiences.length === 0) {
+    return fallbackBrief(input.hasRecentConversation);
+  }
+
+  return buildConversationBrief({
+    participants: input.participants,
+    experienceEvents: events,
+    residentExperiences,
+    nowIso: input.nowIso,
+    recentAnchorSignatures,
+    hasRecentConversation: input.hasRecentConversation,
+  });
+}
+
+function withGroundingMeta(
+  gptOut: GptConversationOutput,
+  brief: ConversationBrief,
+): GptConversationOutput {
+  const grounding = assessConversationGrounding({
+    brief,
+    lines: gptOut.lines,
+  });
+
+  return {
+    ...gptOut,
+    meta: {
+      ...gptOut.meta,
+      anchorExperienceId: brief.anchorExperienceId,
+      anchorSignature: brief.anchorSignature,
+      fallbackMode: brief.fallbackMode,
+      grounded: grounding.ok,
+      groundingEvidence: grounding.evidence,
+    },
+  };
+}
+
 /** threadId と participants から GPT向けの thread オブジェクトを構築 */
 async function ensureThreadForGpt(input: {
   threadId?: string;
@@ -372,12 +465,10 @@ async function ensureThreadForGpt(input: {
   const now = new Date().toISOString();
 
   if (input.threadId) {
-    // allThreads が null の可能性を考慮
     const allThreads = (await listAny("topic_threads")) as unknown as
       | TopicThread[]
       | null;
 
-    // allThreads が配列であることを確認
     if (Array.isArray(allThreads)) {
       const found = allThreads.find((t) => t.id === input.threadId);
 
@@ -399,7 +490,6 @@ async function ensureThreadForGpt(input: {
     }
   }
 
-  // 新規スレッド相当（最低限の形）
   return {
     id: input.threadId ?? newId(),
     participants: input.participants,
@@ -418,10 +508,8 @@ export async function runConversation(
     topicHint,
     lastSummary,
     residentProfilesOverride,
-    beliefsOverride,
   } = args;
 
-  // 1) thread / beliefs を用意
   const thread: ThreadForGpt = await ensureThreadForGpt({
     threadId,
     participants,
@@ -436,19 +524,6 @@ export async function runConversation(
   }
   if (relationBlocked) {
     throw new Error("[runConversation] Conversation aborted because relation is 'none'.");
-  }
-
-  let beliefs: Record<string, BeliefRecord> = {};
-  try {
-    beliefs = await loadBeliefsDict();
-  } catch (error) {
-    console.warn('[runConversation] Failed to load beliefs from server, fallback to overrides.', error);
-  }
-  if (beliefsOverride) {
-    for (const [residentId, rec] of Object.entries(beliefsOverride)) {
-      if (!participantSet.has(residentId) || !rec?.residentId) continue;
-      beliefs[residentId] = rec;
-    }
   }
 
   let residents: Record<string, ConversationResidentProfile> = {};
@@ -501,29 +576,36 @@ export async function runConversation(
       residents,
     });
 
-  // 2) GPT 生成
-  // ✅ ここがポイント：`threadId` を渡さない。代わりに `thread` と `beliefs` を渡す。
-  const gptOut: GptConversationOutput = await callGptForConversation({
+  const nowIso = new Date().toISOString();
+  let brief = fallbackBrief(recentLines.length > 0);
+  try {
+    brief = await loadExperienceBrief({
+      participants: thread.participants,
+      hasRecentConversation: recentLines.length > 0,
+      nowIso,
+    });
+  } catch (error) {
+    console.warn("[runConversation] Failed to load experiences. Fallback to continuation/free mode.", error);
+  }
+
+  const gptOutRaw: GptConversationOutput = await callGptForConversation({
     thread,
-    beliefs,
+    brief,
     topicHint,
     lastSummary: effectiveLastSummary,
     residents,
     pairContext,
   });
 
-  // gptOut 自体が null/undefined の場合、即時エラー
-  // (APIエラーやZodパース失敗の可能性があるため)
-  if (!gptOut) {
+  if (!gptOutRaw) {
     throw new Error(
       "[runConversation] gptOut is null or undefined. callGptForConversation likely failed.",
     );
   }
 
-  // 念のため threadId を GPT の返却値から確定
+  const gptOut = withGroundingMeta(gptOutRaw, brief);
   const ensuredThreadId = gptOut.threadId;
 
-  // 3) ローカル評価
   const evalInput: EvalInput = {
     threadId: ensuredThreadId,
     participants,
@@ -541,7 +623,6 @@ export async function runConversation(
     ? gptOut
     : { ...gptOut, topic: effectiveTopic };
 
-  // 4) 永続化
   const { eventId } = await persistConversation({
     gptOut: effectiveGptOut,
     evalResult,

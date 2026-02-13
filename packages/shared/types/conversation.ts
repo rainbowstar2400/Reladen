@@ -16,6 +16,26 @@ export const impressionStateSchema = z.object({
 });
 export type ImpressionState = z.infer<typeof impressionStateSchema>;
 
+export const experienceSourceTypeEnum = z.enum([
+  'lifestyle',
+  'work',
+  'interpersonal',
+  'environment',
+]);
+export type ExperienceSourceType = z.infer<typeof experienceSourceTypeEnum>;
+
+export const experienceAwarenessEnum = z.enum(['direct', 'witnessed', 'heard']);
+export type ExperienceAwareness = z.infer<typeof experienceAwarenessEnum>;
+
+export const hookIntentEnum = z.enum(['invite', 'share', 'complain', 'consult', 'reflect']);
+export type HookIntent = z.infer<typeof hookIntentEnum>;
+
+export const conversationExpressionStyleEnum = z.enum(['explicit', 'implicit', 'mixed']);
+export type ConversationExpressionStyle = z.infer<typeof conversationExpressionStyleEnum>;
+
+export const conversationFallbackModeEnum = z.enum(['experience', 'continuation', 'free']);
+export type ConversationFallbackMode = z.infer<typeof conversationFallbackModeEnum>;
+
 export const conversationLineSchema = z.object({
   speaker: z.string().uuid(),
   text: z.string().min(1),
@@ -32,6 +52,11 @@ export const conversationMetaSchema = z.object({
     turnBalance: z.enum(['balanced', 'skewed']).optional(),
     tone: z.string().optional(),
   }).optional(),
+  anchorExperienceId: z.string().uuid().optional(),
+  anchorSignature: z.string().optional(),
+  grounded: z.boolean().optional(),
+  groundingEvidence: z.array(z.string()).optional(),
+  fallbackMode: conversationFallbackModeEnum.optional(),
 });
 
 export const conversationEventPayloadSchema = z.object({
@@ -106,6 +131,50 @@ export const topicThreadSchema = baseEntitySchema.extend({
   lastEventId: z.string().uuid().optional(),
 });
 export type TopicThread = z.infer<typeof topicThreadSchema>;
+
+export const experienceEventSchema = baseEntitySchema.extend({
+  ownerId: z.string().uuid().nullable().optional(),
+  sourceType: experienceSourceTypeEnum,
+  sourceRef: z.string().optional().nullable(),
+  factSummary: z.string().min(1),
+  factDetail: z.record(z.any()).optional().nullable(),
+  tags: z.array(z.string()).default([]),
+  significance: z.number().int().min(0).max(100),
+  signature: z.string().min(1),
+  occurredAt: z.string().datetime(),
+});
+export type ExperienceEvent = z.infer<typeof experienceEventSchema>;
+
+export const residentExperienceSchema = baseEntitySchema.extend({
+  ownerId: z.string().uuid().nullable().optional(),
+  experienceId: z.string().uuid(),
+  residentId: z.string().uuid(),
+  awareness: experienceAwarenessEnum,
+  appraisal: z.string().min(1),
+  hookIntent: hookIntentEnum,
+  confidence: z.number().int().min(0).max(100),
+  salience: z.number().int().min(0).max(100),
+  learnedAt: z.string().datetime(),
+  expiresAt: z.string().datetime().optional().nullable(),
+});
+export type ResidentExperience = z.infer<typeof residentExperienceSchema>;
+
+export const conversationBriefSchema = z.object({
+  anchorExperienceId: z.string().uuid().optional(),
+  anchorFact: z.string().min(1),
+  anchorSignature: z.string().optional(),
+  speakerAppraisal: z.array(z.object({
+    speakerId: z.string().uuid(),
+    text: z.string().min(1),
+  })),
+  speakerHookIntent: z.array(z.object({
+    speakerId: z.string().uuid(),
+    intent: hookIntentEnum,
+  })),
+  expressionStyle: conversationExpressionStyleEnum,
+  fallbackMode: conversationFallbackModeEnum,
+});
+export type ConversationBrief = z.infer<typeof conversationBriefSchema>;
 
 export const beliefRecordSchema = z.object({
   id: z.string().uuid(),
