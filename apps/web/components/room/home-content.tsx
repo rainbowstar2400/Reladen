@@ -114,7 +114,7 @@ export function HomeContent() {
   const queryClient = useQueryClient();
   const { data: residents = [] } = useResidents();
   const { data: feelings = [] } = useFeelings();
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState<Date | null>(null);
   const [panelMode, setPanelMode] = useState<HomePanelMode>('none');
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeConsultId, setActiveConsultId] = useState<string | null>(null);
@@ -131,6 +131,7 @@ export function HomeContent() {
   >({});
 
   useEffect(() => {
+    setNow(new Date());
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
@@ -153,16 +154,21 @@ export function HomeContent() {
   const unreadConversation = conversationNotifications.filter((n) => n.status === 'unread').length;
   const unreadConsult = consultNotifications.filter((n) => n.status === 'unread').length;
 
-  const nowMinute = now.getHours() * 60 + now.getMinutes();
+  const nowMinute = now ? now.getHours() * 60 + now.getMinutes() : 0;
   const residentStatusList = useMemo<ResidentStatusItem[]>(() => {
     if (residents.length === 0) return RESIDENT_STATUS_SAMPLE;
-    return residents.map((r) => ({
-      // 状態 (active / preparing / sleeping) に応じてインジケータ色を切り替える
-      tone: SITUATION_TONE_MAP[calcSituation(now, (r.sleepProfile ?? {}) as SleepProfile)],
-      id: r.id,
-      name: r.name ?? '住人',
-      trustToPlayer: r.trustToPlayer ?? 0,
-    }));
+    return residents.map((r) => {
+      const situation = now
+        ? calcSituation(now, (r.sleepProfile ?? {}) as SleepProfile)
+        : 'preparing';
+      return {
+        // 状態 (active / preparing / sleeping) に応じてインジケータ色を切り替える
+        tone: SITUATION_TONE_MAP[situation],
+        id: r.id,
+        name: r.name ?? '住人',
+        trustToPlayer: r.trustToPlayer ?? 0,
+      };
+    });
   }, [residents, nowMinute]);
   const filteredResidentStatusList = useMemo(() => {
     const term = searchTerm.trim();
@@ -1011,8 +1017,12 @@ export function HomeContent() {
         </button>
 
         <GlassPanel className="min-w-[220px] px-9 py-5 text-center text-[#243749]">
-          <div className="text-xl tracking-[0.5px]">{now.toLocaleDateString()}</div>
-          <div className="text-[32px] font-semibold">{now.toLocaleTimeString()}</div>
+          <div className="text-xl tracking-[0.5px]">
+            {now ? now.toLocaleDateString() : '----/--/--'}
+          </div>
+          <div className="text-[32px] font-semibold">
+            {now ? now.toLocaleTimeString() : '--:--:--'}
+          </div>
         </GlassPanel>
 
         <button
