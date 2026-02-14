@@ -23,10 +23,15 @@ export default function ConversationSchedulerProvider(props: Props) {
   const stopRef = useRef<null | { stop: () => void }>(null);
   const { user, ready } = useAuth();
   const shouldRunScheduler = Boolean(enabled && ready && user);
-  const isDev = process.env.NODE_ENV !== "production";
+  const manualTriggerFlag = (process.env.NEXT_PUBLIC_ENABLE_CONV_MANUAL_TRIGGER ?? "").toLowerCase();
+  const canExposeManualTrigger =
+    process.env.NODE_ENV !== "production" ||
+    manualTriggerFlag === "on" ||
+    manualTriggerFlag === "true" ||
+    manualTriggerFlag === "1";
 
   useEffect(() => {
-    if (typeof window === "undefined" || !isDev) return;
+    if (typeof window === "undefined" || !canExposeManualTrigger) return;
     const root = ((window as any).reladenDev ??= {});
     const trigger = (force = true) =>
       triggerConversationNow({
@@ -39,7 +44,7 @@ export default function ConversationSchedulerProvider(props: Props) {
         delete root.triggerConversationNow;
       }
     };
-  }, [baseIntervalMs, isDev]);
+  }, [baseIntervalMs, canExposeManualTrigger]);
 
   useEffect(() => {
     // 既存のスケジューラがあれば停止
