@@ -1,3 +1,9 @@
+/**
+ * @deprecated v2パイプラインでは使用しない。
+ * 代替: packages/shared/logic/conversation-structure.ts (会話構造決定)
+ *       packages/shared/gpt/prompts/conversation-prompt-v2.ts (プロンプト構築)
+ * v2パイプラインが本番導入された後に削除予定。
+ */
 import type {
   ConversationBrief,
   ConversationExpressionStyle,

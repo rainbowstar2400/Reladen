@@ -1,3 +1,10 @@
+/**
+ * @deprecated v2パイプラインでは使用しない。
+ * 代替: packages/shared/logic/topic-selection.ts (話題選定)
+ *       packages/shared/logic/snippet-generator.ts (共有スニペット)
+ *       packages/shared/logic/knowledge-propagation.ts (知識伝播)
+ * v2パイプラインが本番導入された後に削除予定。
+ */
 import { listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
 import { newId } from "@/lib/newId";
 import type {

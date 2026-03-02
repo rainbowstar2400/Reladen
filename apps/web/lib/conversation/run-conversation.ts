@@ -1,4 +1,8 @@
 // apps/web/lib/conversation/run-conversation.ts
+/**
+ * @deprecated v1パイプライン。体験イベントシステムに依存。
+ * 代替: run-conversation-v2.ts
+ */
 // ------------------------------------------------------------
 // 会話エンジンのオーケストレータ。
 // 1) Experience Brief 生成（決定的）

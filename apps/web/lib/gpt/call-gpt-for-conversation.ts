@@ -1,4 +1,8 @@
 // apps/web/lib/gpt/call-gpt-for-conversation.ts
+/**
+ * @deprecated v1 GPT呼び出し。体験システム依存のグラウンディング検証を含む。
+ * 代替: call-gpt-for-conversation-v2.ts
+ */
 import OpenAI from "openai";
 import type { ResponseCreateParamsNonStreaming } from "openai/resources/responses/responses";
 import { gptConversationOutputSchema, type GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";

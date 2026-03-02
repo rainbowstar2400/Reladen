@@ -1,3 +1,7 @@
+/**
+ * @deprecated v2パイプラインでは使用しない。
+ * v2パイプラインが本番導入された後に削除予定。
+ */
 import type { EventLogStrict } from "@repo/shared/types/conversation";
 
 type ConversationMetricRow = {

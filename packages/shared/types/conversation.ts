@@ -1,4 +1,15 @@
 // packages/shared/types/conversation.ts
+/**
+ * v1会話型定義。体験イベントシステム関連の型を含む。
+ * 以下の型は v2 パイプラインでは不要（@deprecated）:
+ *   - ExperienceEvent, ResidentExperience
+ *   - ConversationBrief (anchorFact, speakerAppraisal, hookIntent等)
+ *   - ConversationFallbackMode, HookIntent, ExperienceSourceType, ExperienceAwareness
+ *   - conversationMetaSchema の anchorExperienceId, grounded, groundingEvidence, fallbackMode
+ *
+ * v2代替型: packages/shared/types/conversation-v2.ts
+ * 残す型: ImpressionState, ConversationEventPayload, TopicThread, NotificationRecord 等
+ */
 import { z } from 'zod';
 import { baseEntitySchema, BaseEntity } from './base';
 

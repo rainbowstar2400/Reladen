@@ -1,4 +1,8 @@
 // packages/shared/gpt/prompts/conversation-prompt.ts
+/**
+ * @deprecated v1プロンプトビルダー。
+ * 代替: conversation-prompt-v2.ts
+ */
 import type {
   TopicThread,
   RelationType,
