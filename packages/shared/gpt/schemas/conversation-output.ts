@@ -1,8 +1,6 @@
 // packages/shared/gpt/schemas/conversation-output.ts
-/**
- * @deprecated v1出力スキーマ。
- * 代替: conversation-output-v2.ts
- */
+// GPT出力スキーマ（persist-conversationが依存）
+// TODO: v2リネーム完了時に conversation-output-v2.ts と統合予定
 import { z } from 'zod';
 import { conversationFallbackModeEnum } from '@repo/shared/types/conversation';
 

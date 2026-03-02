@@ -1,7 +1,5 @@
-/**
- * @deprecated v2パイプラインでは使用しない。
- * v2パイプラインが本番導入された後に削除予定。
- */
+// 会話品質メトリクス（レポート画面で使用）
+// TODO: v2パイプラインの指標体系に合わせて刷新予定
 import type { EventLogStrict } from "@repo/shared/types/conversation";
 
 type ConversationMetricRow = {
