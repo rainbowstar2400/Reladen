@@ -4,7 +4,7 @@
 // 会話とは独立した定期バッチで生成する。
 // テンプレート全文ではなく、場所×状況×修飾語のパーツを組み合わせてバリエーションを出す。
 
-import type { SharedSnippet, SnippetSource } from "@repo/shared/types/conversation-v2";
+import type { SharedSnippet, SnippetSource } from "@repo/shared/types/conversation-generation";
 
 // ---------------------------------------------------------------------------
 // パーツ定義

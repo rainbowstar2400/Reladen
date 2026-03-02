@@ -10,7 +10,7 @@ import type {
   OffscreenKnowledge,
   ConversationMemory,
   Traits,
-} from "@repo/shared/types/conversation-v2";
+} from "@repo/shared/types/conversation-generation";
 
 // ---------------------------------------------------------------------------
 // 入力コンテキスト

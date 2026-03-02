@@ -3,9 +3,9 @@
 
 import type {
   ConversationStructure,
-  ConversationOutputV2,
+  ConversationOutput,
   EmotionalStance,
-} from "@repo/shared/types/conversation-v2";
+} from "@repo/shared/types/conversation-generation";
 
 // ---------------------------------------------------------------------------
 // 検証結果
@@ -27,7 +27,7 @@ export type ValidationResult = {
 // ---------------------------------------------------------------------------
 
 export type ValidationInput = {
-  output: ConversationOutputV2;
+  output: ConversationOutput;
   structure: ConversationStructure;
   /** 各キャラの一人称。{ [characterId]: "私" } 形式 */
   firstPersonMap: Record<string, string>;
@@ -60,7 +60,7 @@ const FIRST_PERSON_VARIANTS: Record<string, string[]> = {
 // ---------------------------------------------------------------------------
 
 function validateInitiator(
-  output: ConversationOutputV2,
+  output: ConversationOutput,
   structure: ConversationStructure,
 ): ValidationViolation | null {
   if (output.lines.length === 0) return null;
@@ -75,7 +75,7 @@ function validateInitiator(
 }
 
 function validateTurnCount(
-  output: ConversationOutputV2,
+  output: ConversationOutput,
 ): ValidationViolation | null {
   const count = output.lines.length;
   if (count < 6 || count > 8) {
@@ -89,7 +89,7 @@ function validateTurnCount(
 }
 
 function validateFirstPerson(
-  output: ConversationOutputV2,
+  output: ConversationOutput,
   firstPersonMap: Record<string, string>,
 ): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
@@ -115,7 +115,7 @@ function validateFirstPerson(
 }
 
 function validateParticipants(
-  output: ConversationOutputV2,
+  output: ConversationOutput,
 ): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
   const validSpeakers = new Set(output.participants);
@@ -134,7 +134,7 @@ function validateParticipants(
 }
 
 function validateMemory(
-  output: ConversationOutputV2,
+  output: ConversationOutput,
 ): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
   const mem = output.meta.memory;
@@ -163,7 +163,7 @@ function validateMemory(
 // ---------------------------------------------------------------------------
 
 function heuristicCheckStance(
-  output: ConversationOutputV2,
+  output: ConversationOutput,
   structure: ConversationStructure,
 ): ValidationViolation[] {
   const violations: ValidationViolation[] = [];

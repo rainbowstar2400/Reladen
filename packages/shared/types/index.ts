@@ -171,7 +171,7 @@ export type EventLog = z.infer<typeof eventSchema>;
 export type SyncPayload = z.infer<typeof syncPayloadSchema>;
 export type Preset = z.infer<typeof presetSchema>;
 export * from './conversation';
-export * from './conversation-v2';
+export * from './conversation-generation';
 export * from './base';
 
 export type RelationType = z.infer<typeof relationSchema>['type'];

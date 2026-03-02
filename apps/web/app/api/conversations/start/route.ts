@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { runConversationFromApi } from '@/lib/conversation/run-conversation-v2';
+import { runConversationFromApi } from '@/lib/conversation/run-conversation';
 import { KvUnauthenticatedError } from '@/lib/db/kv-server';
 
 const startConversationSchema = z.object({

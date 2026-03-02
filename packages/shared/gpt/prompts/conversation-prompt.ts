@@ -1,5 +1,5 @@
-// packages/shared/gpt/prompts/conversation-prompt-v2.ts
-// 会話生成 v2 プロンプトビルダー
+// packages/shared/gpt/prompts/conversation-prompt.ts
+// 会話生成プロンプトビルダー
 // 「コードが"何を"、LLMが"どう言うか"」の原則に基づく
 
 import type {
@@ -9,7 +9,7 @@ import type {
   ConversationMemory,
   SharedSnippet,
   Traits,
-} from "@repo/shared/types/conversation-v2";
+} from "@repo/shared/types/conversation-generation";
 
 import {
   formatTraitDescriptions,
@@ -20,8 +20,8 @@ import {
 // 入力型定義
 // ---------------------------------------------------------------------------
 
-/** v2 プロンプトに必要なキャラクター情報 */
-export type CharacterProfileV2 = {
+/** プロンプトに必要なキャラクター情報 */
+export type CharacterProfile = {
   id: string;
   name: string;
   gender?: string | null;
@@ -34,9 +34,9 @@ export type CharacterProfileV2 = {
   speechProfile?: SpeechProfile | null;
 };
 
-/** v2 プロンプト構築の全入力 */
-export type PromptInputV2 = {
-  characters: [CharacterProfileV2, CharacterProfileV2];
+/** プロンプト構築の全入力 */
+export type PromptInput = {
+  characters: [CharacterProfile, CharacterProfile];
   relation: {
     type: string;
     feelingAtoB: { label: string; score: number };
@@ -54,7 +54,7 @@ export type PromptInputV2 = {
 // システムプロンプト
 // ---------------------------------------------------------------------------
 
-export const systemPromptConversationV2 = `
+export const systemPromptConversation = `
 あなたはキャラクター2人の自然な会話を生成するAIです。
 出力は必ず「正しいJSONのみ」を返し、説明文や補足を付けないでください。
 
@@ -161,7 +161,7 @@ function topicSourceLabel(source: string): string {
 // キャラクターブロック
 // ---------------------------------------------------------------------------
 
-function formatCharacterBlock(char: CharacterProfileV2): string {
+function formatCharacterBlock(char: CharacterProfile): string {
   const lines: string[] = [];
 
   // 基本属性行
@@ -219,7 +219,7 @@ function formatCharacterBlock(char: CharacterProfileV2): string {
 // ユーザープロンプト構築
 // ---------------------------------------------------------------------------
 
-export function buildUserPromptV2(input: PromptInputV2): string {
+export function buildUserPrompt(input: PromptInput): string {
   const [charA, charB] = input.characters;
   const { structure, topic, relation, environment } = input;
 

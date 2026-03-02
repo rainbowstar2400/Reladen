@@ -1,7 +1,7 @@
 // packages/shared/gpt/prompts/trait-descriptions.ts
 // 性格特性の行動翻訳マップ + MBTI性格傾向マップ
 
-import type { TraitKey, TraitTier } from "@repo/shared/types/conversation-v2";
+import type { TraitKey, TraitTier } from "@repo/shared/types/conversation-generation";
 
 // ---------------------------------------------------------------------------
 // 特性 → 行動記述マップ

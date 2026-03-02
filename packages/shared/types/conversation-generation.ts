@@ -1,5 +1,5 @@
-// packages/shared/types/conversation-v2.ts
-// 会話生成ロジック v2 — 「らしさ」を保証する新設計の型定義
+// packages/shared/types/conversation-generation.ts
+// 会話生成パイプライン固有の型定義
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -135,10 +135,10 @@ export const conversationMemorySchema = z.object({
 export type ConversationMemory = z.infer<typeof conversationMemorySchema>;
 
 // ---------------------------------------------------------------------------
-// 出力スキーマ v2（LLMが返すJSON構造）
+// 出力スキーマ（LLMが返すJSON構造）
 // ---------------------------------------------------------------------------
 
-export const conversationMetaV2Schema = z.object({
+export const conversationMetaSchema = z.object({
   tags: z.array(z.string()).max(12),
   signals: z.array(z.enum(["continue", "close", "park"])),
   qualityHints: z.object({
@@ -148,9 +148,9 @@ export const conversationMetaV2Schema = z.object({
   debug: z.array(z.string()),
   memory: conversationMemorySchema,
 });
-export type ConversationMetaV2 = z.infer<typeof conversationMetaV2Schema>;
+export type ConversationMeta = z.infer<typeof conversationMetaSchema>;
 
-export const conversationOutputV2Schema = z.object({
+export const conversationOutputSchema = z.object({
   threadId: z.string().uuid(),
   participants: z.tuple([z.string().uuid(), z.string().uuid()]),
   topic: z.string().min(1),
@@ -158,9 +158,9 @@ export const conversationOutputV2Schema = z.object({
     speaker: z.string().uuid(),
     text: z.string().min(1),
   })).min(1),
-  meta: conversationMetaV2Schema,
+  meta: conversationMetaSchema,
 });
-export type ConversationOutputV2 = z.infer<typeof conversationOutputV2Schema>;
+export type ConversationOutput = z.infer<typeof conversationOutputSchema>;
 
 // ---------------------------------------------------------------------------
 // 共有スニペット

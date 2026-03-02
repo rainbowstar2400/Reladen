@@ -1,15 +1,6 @@
 // packages/shared/types/conversation.ts
-/**
- * v1会話型定義。体験イベントシステム関連の型を含む。
- * 以下の型は v2 パイプラインでは不要（@deprecated）:
- *   - ExperienceEvent, ResidentExperience
- *   - ConversationBrief (anchorFact, speakerAppraisal, hookIntent等)
- *   - ConversationFallbackMode, HookIntent, ExperienceSourceType, ExperienceAwareness
- *   - conversationMetaSchema の anchorExperienceId, grounded, groundingEvidence, fallbackMode
- *
- * v2代替型: packages/shared/types/conversation-v2.ts
- * 残す型: ImpressionState, ConversationEventPayload, TopicThread, NotificationRecord 等
- */
+// 会話イベント・スレッド・通知など、アプリ共通の型定義。
+// 会話生成パイプライン固有の型は conversation-generation.ts を参照。
 import { z } from 'zod';
 import { baseEntitySchema, BaseEntity } from './base';
 
@@ -52,7 +43,7 @@ export const conversationLineSchema = z.object({
   text: z.string().min(1),
 });
 
-export const conversationMetaSchema = z.object({
+const eventMetaSchema = z.object({
   tags: z.array(z.string()).max(12), // タグ辞書は最初10〜12程度
   newKnowledge: z.array(z.object({
     target: z.string().uuid(),
@@ -75,7 +66,7 @@ export const conversationEventPayloadSchema = z.object({
   participants: z.tuple([z.string().uuid(), z.string().uuid()]),
   topic: z.string().optional(),
   lines: z.array(conversationLineSchema).min(1),
-  meta: conversationMetaSchema,
+  meta: eventMetaSchema,
   deltas: z.object({
     // impression は互換のため number/string 両方を許容しつつ、
     // 新設の impressionState で base/special を運ぶ

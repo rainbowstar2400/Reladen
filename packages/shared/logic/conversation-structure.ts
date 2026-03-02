@@ -7,7 +7,7 @@ import type {
   ConversationTemperature,
   ConversationStructure,
   SelectedTopic,
-} from "@repo/shared/types/conversation-v2";
+} from "@repo/shared/types/conversation-generation";
 
 import type { CharacterContext, RelationContext } from "./topic-selection";
 

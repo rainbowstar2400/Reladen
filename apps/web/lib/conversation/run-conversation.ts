@@ -1,5 +1,5 @@
-// apps/web/lib/conversation/run-conversation-v2.ts
-// v2 会話生成パイプライン オーケストレータ
+// apps/web/lib/conversation/run-conversation.ts
+// 会話生成パイプライン オーケストレータ
 //
 // 1. 入力データ収集（キャラ、関係性、スニペット、記憶等）
 // 2. 動機生成（話題選定）
@@ -9,17 +9,17 @@
 // 6. 結果返却
 
 import type {
-  ConversationOutputV2,
+  ConversationOutput,
   ConversationMemory,
   SharedSnippet,
   OffscreenKnowledge,
   SpeechProfile,
   Traits,
-} from "@repo/shared/types/conversation-v2";
+} from "@repo/shared/types/conversation-generation";
 import { selectTopic, type TopicSelectionInput, type CharacterContext } from "@repo/shared/logic/topic-selection";
 import { buildConversationStructure, type StructureInput } from "@repo/shared/logic/conversation-structure";
-import { callGptForConversationV2, type CallGptV2Result } from "@/lib/gpt/call-gpt-for-conversation-v2";
-import type { PromptInputV2, CharacterProfileV2 } from "@repo/shared/gpt/prompts/conversation-prompt-v2";
+import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
+import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
 import { listKV as listAny } from "@/lib/db/kv-server";
 import { persistConversation } from "@/lib/persist/persist-conversation";
@@ -30,8 +30,8 @@ import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversatio
 // 入力型
 // ---------------------------------------------------------------------------
 
-/** v2パイプラインの入力（データが既に解決済みの場合） */
-export type RunConversationV2Args = {
+/** パイプラインの入力（データが既に解決済みの場合） */
+export type RunConversationArgs = {
   participants: [string, string];
   /** キャラプロフィール */
   characters: Record<string, RunCharacterProfile>;
@@ -70,10 +70,10 @@ export type RunCharacterProfile = {
   speechProfile?: SpeechProfile | null;
 };
 
-/** v2パイプラインの結果 */
-export type RunConversationV2Result = {
+/** パイプラインの結果 */
+export type RunConversationResult = {
   threadId: string;
-  output: ConversationOutputV2;
+  output: ConversationOutput;
   retried: boolean;
   violations: string[];
   debug: {
@@ -114,7 +114,7 @@ function toCharacterContext(profile: RunCharacterProfile): CharacterContext {
   };
 }
 
-function toCharacterProfileV2(profile: RunCharacterProfile): CharacterProfileV2 {
+function toCharacterProfile(profile: RunCharacterProfile): CharacterProfile {
   return {
     id: profile.id,
     name: profile.name,
@@ -130,7 +130,7 @@ function toCharacterProfileV2(profile: RunCharacterProfile): CharacterProfileV2 
 }
 
 // ---------------------------------------------------------------------------
-// KV データ読み込み（v1からの移植・簡素化）
+// KV データ読み込み
 // ---------------------------------------------------------------------------
 
 type RelationRow = {
@@ -326,20 +326,20 @@ function determineEnvironment(): { place: string; timeOfDay: string } {
 // パイプライン（データ解決済み版）
 // ---------------------------------------------------------------------------
 
-export async function runConversationV2(
-  args: RunConversationV2Args,
-): Promise<RunConversationV2Result> {
+export async function runConversation(
+  args: RunConversationArgs,
+): Promise<RunConversationResult> {
   const [aId, bId] = args.participants;
   const charA = args.characters[aId];
   const charB = args.characters[bId];
 
   if (!charA || !charB) {
-    throw new Error(`[runConversationV2] Missing character profile for participants.`);
+    throw new Error(`[runConversation] Missing character profile for participants.`);
   }
 
   // 関係性が "none" なら会話しない
   if (args.relation.type === "none") {
-    throw new Error("[runConversationV2] Conversation aborted because relation is 'none'.");
+    throw new Error("[runConversation] Conversation aborted because relation is 'none'.");
   }
 
   const threadId = args.threadId ?? newId();
@@ -372,8 +372,8 @@ export async function runConversationV2(
   const structure = buildConversationStructure(structureInput);
 
   // --- 3. プロンプト構築 + GPT呼び出し ---
-  const promptInput: PromptInputV2 = {
-    characters: [toCharacterProfileV2(charA), toCharacterProfileV2(charB)],
+  const promptInput: PromptInput = {
+    characters: [toCharacterProfile(charA), toCharacterProfile(charB)],
     relation: args.relation,
     structure,
     topic,
@@ -388,7 +388,7 @@ export async function runConversationV2(
   if (charA.firstPerson) firstPersonMap[charA.id] = charA.firstPerson;
   if (charB.firstPerson) firstPersonMap[charB.id] = charB.firstPerson;
 
-  const gptResult: CallGptV2Result = await callGptForConversationV2(
+  const gptResult: CallGptResult = await callGptForConversation(
     promptInput,
     structure,
     firstPersonMap,
@@ -427,7 +427,7 @@ export async function runConversationV2(
 /**
  * APIルートから呼ばれるメインエントリポイント。
  * KVストアからプロフィール・関係性・好感度を読み込み、
- * v2パイプラインを実行し、結果を永続化して返す。
+ * パイプラインを実行し、結果を永続化して返す。
  */
 export async function runConversationFromApi(
   args: RunConversationApiArgs,
@@ -462,12 +462,12 @@ export async function runConversationFromApi(
   // 4) 環境決定
   const environment = determineEnvironment();
 
-  // 5) v2パイプライン実行
-  const result = await runConversationV2({
+  // 5) パイプライン実行
+  const result = await runConversation({
     participants,
     characters,
     relation: {
-      type: (relationType ?? "acquaintance") as RunConversationV2Args["relation"]["type"],
+      type: (relationType ?? "acquaintance") as RunConversationArgs["relation"]["type"],
       feelingAtoB: feelings.aToB,
       feelingBtoA: feelings.bToA,
     },
@@ -491,7 +491,7 @@ export async function runConversationFromApi(
   const evalResult = evaluateConversation(evalInput);
 
   // 7) 永続化
-  // v2出力はv1の GptConversationOutput と構造的に互換
+  // 新出力はv1の GptConversationOutput と構造的に互換
   const { eventId } = await persistConversation({
     gptOut: result.output as unknown as GptConversationOutput,
     evalResult,

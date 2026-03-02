@@ -8,7 +8,7 @@ import type {
   RecentEvent,
   OffscreenKnowledge,
   Traits,
-} from "@repo/shared/types/conversation-v2";
+} from "@repo/shared/types/conversation-generation";
 
 // ---------------------------------------------------------------------------
 // 入力型

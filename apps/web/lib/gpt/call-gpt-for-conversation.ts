@@ -1,21 +1,21 @@
-// apps/web/lib/gpt/call-gpt-for-conversation-v2.ts
-// v2 会話生成 GPT呼び出し + 検証 + リトライ
+// apps/web/lib/gpt/call-gpt-for-conversation.ts
+// 会話生成 GPT呼び出し + 検証 + リトライ
 
 import OpenAI from "openai";
 import type { ResponseCreateParamsNonStreaming } from "openai/resources/responses/responses";
-import { conversationOutputV2Schema, type ConversationOutputV2 } from "@repo/shared/types/conversation-v2";
-import { conversationResponseSchemaV2 } from "@repo/shared/gpt/schemas/conversation-output-v2";
+import { conversationOutputSchema, type ConversationOutput } from "@repo/shared/types/conversation-generation";
+import { conversationResponseSchema } from "@repo/shared/gpt/schemas/conversation-output";
 import {
-  systemPromptConversationV2,
-  buildUserPromptV2,
-  type PromptInputV2,
-} from "@repo/shared/gpt/prompts/conversation-prompt-v2";
+  systemPromptConversation,
+  buildUserPrompt,
+  type PromptInput,
+} from "@repo/shared/gpt/prompts/conversation-prompt";
 import {
   validateConversationOutput,
   buildRetryFeedback,
   type ValidationInput,
 } from "@repo/shared/logic/conversation-validator";
-import type { ConversationStructure } from "@repo/shared/types/conversation-v2";
+import type { ConversationStructure } from "@repo/shared/types/conversation-generation";
 import { env } from "@/env";
 
 const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
@@ -44,7 +44,7 @@ type ResponseCreateParamsWithFormat =
       format?: {
         name: string;
         type: "json_schema";
-        schema: typeof conversationResponseSchemaV2.schema;
+        schema: typeof conversationResponseSchema.schema;
         strict?: boolean;
       };
     };
@@ -139,11 +139,11 @@ function sanitizeOutput(
 // GPTリクエスト
 // ---------------------------------------------------------------------------
 
-async function requestConversationOutputV2(
+async function requestConversationOutput(
   systemPrompt: string,
   userPrompt: string,
   ctx: { threadId: string; participants: [string, string] },
-): Promise<ConversationOutputV2> {
+): Promise<ConversationOutput> {
   const res = await client.responses.create({
     model: "gpt-5.1",
     temperature: 0.8,
@@ -159,32 +159,32 @@ async function requestConversationOutputV2(
     ],
     text: {
       format: {
-        name: conversationResponseSchemaV2.name,
+        name: conversationResponseSchema.name,
         type: "json_schema",
-        schema: conversationResponseSchemaV2.schema,
-        strict: conversationResponseSchemaV2.strict,
+        schema: conversationResponseSchema.schema,
+        strict: conversationResponseSchema.strict,
       },
     },
   } as ResponseCreateParamsWithFormat);
 
   const content = extractTextFromResponse(res);
   if (!content) {
-    throw new Error("[callGptV2] GPT returned empty response.");
+    throw new Error("[callGpt] GPT returned empty response.");
   }
 
   let raw: unknown;
   try {
     raw = JSON.parse(content);
   } catch (error) {
-    console.error("[callGptV2] JSON parse failed", { content });
+    console.error("[callGpt] JSON parse failed", { content });
     throw error;
   }
 
   const sanitized = sanitizeOutput(raw, ctx);
-  const parsed = conversationOutputV2Schema.safeParse(sanitized);
+  const parsed = conversationOutputSchema.safeParse(sanitized);
   if (!parsed.success) {
-    console.error("[callGptV2] GPT出力が不正です:", parsed.error);
-    throw new Error("Invalid GPT output format (v2).");
+    console.error("[callGpt] GPT出力が不正です:", parsed.error);
+    throw new Error("Invalid GPT output format.");
   }
 
   return parsed.data;
@@ -194,29 +194,29 @@ async function requestConversationOutputV2(
 // メインエントリポイント
 // ---------------------------------------------------------------------------
 
-export type CallGptV2Result = {
-  output: ConversationOutputV2;
+export type CallGptResult = {
+  output: ConversationOutput;
   retried: boolean;
   violations: string[];
 };
 
 /**
- * v2会話生成: プロンプト構築 → GPT呼び出し → 検証 → リトライ(1回) → 結果返却
+ * 会話生成: プロンプト構築 → GPT呼び出し → 検証 → リトライ(1回) → 結果返却
  */
-export async function callGptForConversationV2(
-  promptInput: PromptInputV2,
+export async function callGptForConversation(
+  promptInput: PromptInput,
   structure: ConversationStructure,
   firstPersonMap: Record<string, string>,
-): Promise<CallGptV2Result> {
-  const systemPrompt = systemPromptConversationV2;
-  const baseUserPrompt = buildUserPromptV2(promptInput);
+): Promise<CallGptResult> {
+  const sysPrompt = systemPromptConversation;
+  const baseUserPrompt = buildUserPrompt(promptInput);
   const ctx = {
     threadId: promptInput.threadId,
     participants: [promptInput.characters[0].id, promptInput.characters[1].id] as [string, string],
   };
 
   try {
-    let output = await requestConversationOutputV2(systemPrompt, baseUserPrompt, ctx);
+    let output = await requestConversationOutput(sysPrompt, baseUserPrompt, ctx);
 
     const validationInput: ValidationInput = {
       output,
@@ -229,7 +229,7 @@ export async function callGptForConversationV2(
     if (!result.valid) {
       const feedback = buildRetryFeedback(result);
       const retryPrompt = `${baseUserPrompt}\n\n【再生成指示】\n${feedback}`;
-      output = await requestConversationOutputV2(systemPrompt, retryPrompt, ctx);
+      output = await requestConversationOutput(sysPrompt, retryPrompt, ctx);
 
       const retryValidation = validateConversationOutput({
         output,
@@ -238,7 +238,7 @@ export async function callGptForConversationV2(
       });
 
       if (!retryValidation.valid) {
-        console.warn("[callGptV2] Quality checks still failed after retry.", {
+        console.warn("[callGpt] Quality checks still failed after retry.", {
           violations: retryValidation.violations.map((v) => v.message),
         });
       }
@@ -256,7 +256,7 @@ export async function callGptForConversationV2(
       violations: result.violations.map((v) => `[${v.severity}] ${v.message}`),
     };
   } catch (error) {
-    console.error("[callGptV2] Failed to create conversation", {
+    console.error("[callGpt] Failed to create conversation", {
       name: (error as Error)?.name,
       message: (error as Error)?.message,
     });
