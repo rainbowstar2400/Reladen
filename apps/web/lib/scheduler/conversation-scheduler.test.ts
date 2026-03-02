@@ -310,7 +310,7 @@ describe("conversation scheduler", () => {
       .mockResolvedValueOnce(
         createFetchResponse({
           ok: false,
-          status: 400,
+          status: 422,
           body: { error: "invalid_thread_participants" },
         }),
       )

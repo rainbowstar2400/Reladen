@@ -30,7 +30,10 @@ function isThreadResolutionError(error: unknown): error is ConversationApiError 
   if (!(error instanceof ConversationApiError)) return false;
   return (
     (error.status === 404 && error.reason === "thread_not_found")
-    || (error.status === 400 && error.reason === "invalid_thread_participants")
+    || (
+      (error.status === 400 || error.status === 422)
+      && error.reason === "invalid_thread_participants"
+    )
   );
 }
 
