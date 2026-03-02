@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit -p packages/shared/tsconfig.json)",
+      "Bash(npx -p typescript tsc --noEmit -p packages/shared/tsconfig.json)",
+      "Bash(node -e \"require\\(''typescript''\\)\")",
+      "Bash(node_modules/.pnpm/typescript@5.4.4/node_modules/.bin/tsc --noEmit -p packages/shared/tsconfig.json)",
+      "Bash(\"C:/Users/cs24035/Documents/develop/Reladen/apps/web/node_modules/.bin/tsc\" --noEmit -p packages/shared/tsconfig.json)",
+      "Bash(\"C:/Users/cs24035/Documents/develop/Reladen/apps/web/node_modules/.bin/vitest\" run --reporter=verbose)",
+      "Bash(\"C:/Users/cs24035/Documents/develop/Reladen/apps/web/node_modules/.bin/tsc\" --noEmit -p apps/web/tsconfig.json)",
+      "Bash(git add packages/shared/types/index.ts packages/shared/types/conversation-v2.ts packages/shared/gpt/prompts/trait-descriptions.ts packages/shared/gpt/prompts/conversation-prompt-v2.ts packages/shared/gpt/schemas/conversation-output-v2.ts packages/shared/logic/topic-selection.ts packages/shared/logic/conversation-structure.ts packages/shared/logic/conversation-validator.ts apps/web/lib/gpt/call-gpt-for-conversation-v2.ts apps/web/lib/conversation/run-conversation-v2.ts)",
+      "Bash(git commit:*)",
+      "Bash(git add packages/shared/logic/snippet-generator.ts packages/shared/gpt/prompts/recent-events-prompt.ts packages/shared/logic/knowledge-propagation.ts)",
+      "Bash(git add apps/web/lib/conversation/experience-brief.ts apps/web/lib/conversation/experience-generator.ts apps/web/lib/conversation/experience-metrics.ts apps/web/lib/conversation/grounding.ts apps/web/lib/conversation/run-conversation.ts apps/web/lib/gpt/call-gpt-for-conversation.ts packages/shared/gpt/prompts/conversation-prompt.ts packages/shared/gpt/schemas/conversation-output.ts packages/shared/types/conversation.ts)",
+      "Bash(C:/Users/cs24035/Documents/develop/Reladen/apps/web/node_modules/.bin/tsc --noEmit -p packages/shared/tsconfig.json)",
+      "Bash(C:/Users/cs24035/Documents/develop/Reladen/apps/web/node_modules/.bin/tsc --noEmit -p apps/web/tsconfig.json)",
+      "Bash(C:/Users/cs24035/Documents/develop/Reladen/apps/web/node_modules/.bin/tsc --noEmit --skipLibCheck -p apps/web/tsconfig.json)",
+      "Bash(git add apps/web/app/api/conversations/start/route.ts apps/web/lib/conversation/run-conversation-v2.ts apps/web/lib/scheduler/conversation-scheduler.ts)",
+      "Bash(git rm apps/web/lib/conversation/run-conversation.ts apps/web/lib/conversation/experience-generator.ts apps/web/lib/conversation/experience-brief.ts apps/web/lib/conversation/grounding.ts apps/web/lib/conversation/run-conversation.test.ts apps/web/lib/conversation/experience-generator.test.ts apps/web/lib/conversation/experience-brief.test.ts apps/web/lib/conversation/grounding.test.ts apps/web/lib/gpt/call-gpt-for-conversation.ts apps/web/lib/gpt/call-gpt-for-conversation.test.ts apps/web/lib/gpt/conversation-prompt.test.ts packages/shared/gpt/prompts/conversation-prompt.ts)",
+      "Bash(git add apps/web/lib/conversation/experience-metrics.ts packages/shared/gpt/schemas/conversation-output.ts)",
+      "Bash(git mv packages/shared/types/conversation-v2.ts packages/shared/types/conversation-generation.ts)",
+      "Bash(git mv packages/shared/gpt/prompts/conversation-prompt-v2.ts packages/shared/gpt/prompts/conversation-prompt.ts)",
+      "Bash(git mv apps/web/lib/gpt/call-gpt-for-conversation-v2.ts apps/web/lib/gpt/call-gpt-for-conversation.ts)",
+      "Bash(git mv apps/web/lib/conversation/run-conversation-v2.ts apps/web/lib/conversation/run-conversation.ts)",
+      "Bash(git rm packages/shared/gpt/schemas/conversation-output-v2.ts)",
+      "Bash(C:/Users/cs24035/Documents/develop/Reladen/apps/web/node_modules/.bin/tsc --noEmit --skipLibCheck)",
+      "Bash(git add apps/web/app/api/conversations/start/route.ts apps/web/lib/conversation/run-conversation.ts apps/web/lib/gpt/call-gpt-for-conversation.ts packages/shared/gpt/prompts/conversation-prompt.ts packages/shared/gpt/prompts/trait-descriptions.ts packages/shared/gpt/schemas/conversation-output.ts packages/shared/logic/conversation-structure.ts packages/shared/logic/conversation-validator.ts packages/shared/logic/knowledge-propagation.ts packages/shared/logic/snippet-generator.ts packages/shared/logic/topic-selection.ts packages/shared/types/conversation-generation.ts packages/shared/types/conversation.ts packages/shared/types/index.ts)"
+    ]
+  }
+}
