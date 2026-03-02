@@ -66,7 +66,7 @@ export const conversationResponseSchema = {
         minItems: 2,
         maxItems: 2,
       },
-      topic: { type: "string" },
+      topic: { type: "string", minLength: 1 },
       lines: {
         type: "array",
         minItems: 1,
@@ -75,7 +75,7 @@ export const conversationResponseSchema = {
           additionalProperties: false,
           properties: {
             speaker: { type: "string", format: "uuid" },
-            text: { type: "string" },
+            text: { type: "string", minLength: 1 },
           },
           required: ["speaker", "text"],
         },
@@ -110,7 +110,7 @@ export const conversationResponseSchema = {
             type: "object",
             additionalProperties: false,
             properties: {
-              summary: { type: "string" },
+              summary: { type: "string", minLength: 1 },
               topicsCovered: {
                 type: "array",
                 items: { type: "string" },
@@ -126,7 +126,7 @@ export const conversationResponseSchema = {
                   additionalProperties: false,
                   properties: {
                     about: { type: "string", format: "uuid" },
-                    fact: { type: "string" },
+                    fact: { type: "string", minLength: 1 },
                   },
                   required: ["about", "fact"],
                 },

@@ -14,6 +14,26 @@ type StartConversationPayload =
   | { threadId: string }
   | { participants: [string, string] };
 
+class ConversationApiError extends Error {
+  status: number;
+  reason: string;
+
+  constructor(status: number, reason: string) {
+    super(`Conversation API error: ${reason}`);
+    this.name = "ConversationApiError";
+    this.status = status;
+    this.reason = reason;
+  }
+}
+
+function isThreadResolutionError(error: unknown): error is ConversationApiError {
+  if (!(error instanceof ConversationApiError)) return false;
+  return (
+    (error.status === 404 && error.reason === "thread_not_found")
+    || (error.status === 400 && error.reason === "invalid_thread_participants")
+  );
+}
+
 async function callConversationApi(input: StartConversationPayload) {
   const res = await fetch("/api/conversations/start", {
     method: "POST",
@@ -37,10 +57,10 @@ async function callConversationApi(input: StartConversationPayload) {
 
     if (res.status === 401) {
       // 認証切れ専用のエラー
-      throw new Error('Conversation API error: unauthenticated');
+      throw new ConversationApiError(401, "unauthenticated");
     }
 
-    throw new Error(`Conversation API error: ${reason}`);
+    throw new ConversationApiError(res.status, reason);
   }
 }
 
@@ -69,6 +89,29 @@ function pickAllowedPair(
   for (let i = 0; i < shuffled.length; i += 1) {
     for (let j = i + 1; j < shuffled.length; j += 1) {
       const pair: [string, string] = [shuffled[i].id, shuffled[j].id];
+      if (!hasNoneRelationBetween(pair, relations)) {
+        return pair;
+      }
+    }
+  }
+  return null;
+}
+
+function pairKey(participants: [string, string]) {
+  return [...participants].sort().join(":");
+}
+
+function pickAlternativePair(
+  awakeCandidates: Resident[],
+  relations: Relation[],
+  excludedPair: [string, string],
+): [string, string] | null {
+  const excludedKey = pairKey(excludedPair);
+  const shuffled = [...awakeCandidates].sort(() => 0.5 - Math.random());
+  for (let i = 0; i < shuffled.length; i += 1) {
+    for (let j = i + 1; j < shuffled.length; j += 1) {
+      const pair: [string, string] = [shuffled[i].id, shuffled[j].id];
+      if (pairKey(pair) === excludedKey) continue;
       if (!hasNoneRelationBetween(pair, relations)) {
         return pair;
       }
@@ -304,18 +347,60 @@ export async function triggerConversationNow(
       };
     }
 
-    await callConversationApi(
-      target.threadId
-        ? { threadId: target.threadId }
-        : { participants: target.participants },
-    );
+    let startedThreadId = target.threadId;
+    let startedParticipants = target.participants;
+
+    if (target.threadId) {
+      try {
+        await callConversationApi({ threadId: target.threadId });
+      } catch (error) {
+        if (!isThreadResolutionError(error)) throw error;
+
+        console.warn(
+          `[Scheduler] Thread start failed (${error.reason}). Retrying with participants.`,
+        );
+        try {
+          await callConversationApi({ participants: target.participants });
+          startedThreadId = undefined;
+        } catch (retryError) {
+          console.error("[Scheduler] Retry with thread participants failed:", retryError);
+
+          const alternativePair = pickAlternativePair(
+            awakeCandidates,
+            activeRelations,
+            target.participants,
+          );
+          if (!alternativePair) {
+            return { status: "skipped", reason: "no_target" };
+          }
+
+          try {
+            await callConversationApi({ participants: alternativePair });
+            startedThreadId = undefined;
+            startedParticipants = alternativePair;
+          } catch (alternativeError) {
+            console.error(
+              "[Scheduler] Failed to start conversation with alternative participants:",
+              alternativeError,
+            );
+            return {
+              status: "skipped",
+              reason: "no_target",
+              participants: alternativePair,
+            };
+          }
+        }
+      }
+    } else {
+      await callConversationApi({ participants: target.participants });
+    }
 
     markConversationRun();
     if (!force) refreshLock();
     return {
       status: "started",
-      threadId: target.threadId,
-      participants: target.participants,
+      threadId: startedThreadId,
+      participants: startedParticipants,
     };
   } catch (error) {
     if (!force) clearLock();

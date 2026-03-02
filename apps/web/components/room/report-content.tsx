@@ -21,10 +21,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage';
 import { useSync } from '@/lib/sync/use-sync';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  computeConversationQualityMetrics,
-  type ConversationQualityMetrics,
-} from '@/lib/conversation/experience-metrics';
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度';
 type ChangeKindFilter = ChangeKind | '';
@@ -207,10 +203,6 @@ function fmtTime(iso: string) {
   return f.format(d);
 }
 
-function formatRatePercent(rate: number): string {
-  return `${(rate * 100).toFixed(1)}%`;
-}
-
 export function ReportContent() {
   const router = useRouter();
   const deskTransition = useDeskTransition();
@@ -266,9 +258,6 @@ export function ReportContent() {
   };
 
   const [convItems, setConvItems] = useState<ReportItem[]>([]);
-  const [qualityMetrics, setQualityMetrics] = useState<ConversationQualityMetrics>(() =>
-    computeConversationQualityMetrics({ events: [] })
-  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -420,7 +409,6 @@ export function ReportContent() {
     const applyEvents = (events: EventLogStrict[]) => {
       if (!alive) return;
       setConvItems(buildReportItems(events));
-      setQualityMetrics(computeConversationQualityMetrics({ events }));
     };
 
     const loadLocal = async () => {
@@ -634,49 +622,6 @@ export function ReportContent() {
           管理室へ
         </Button>
       </div>
-      <Card
-        className="border-white/55 bg-white/24 shadow-[inset_0_0_18px_rgba(255,255,255,0.22)]"
-        style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}
-      >
-        <CardContent className="grid gap-3 py-3 md:grid-cols-2">
-          <div className="rounded-xl border border-white/50 bg-white/30 px-4 py-3">
-            <div className="text-xs text-muted-foreground">
-              接地率（{qualityMetrics.grounding.windowHours}時間）
-            </div>
-            <div className="text-xl font-semibold text-slate-700">
-              {formatRatePercent(qualityMetrics.grounding.rate)}
-            </div>
-            <div
-              className={`text-xs ${
-                qualityMetrics.grounding.meetsTarget ? 'text-emerald-700' : 'text-rose-700'
-              }`}
-            >
-              目標 {formatRatePercent(qualityMetrics.grounding.targetRate)} / 直近{' '}
-              {qualityMetrics.grounding.groundedConversations}
-              {' / '}
-              {qualityMetrics.grounding.totalConversations}
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/50 bg-white/30 px-4 py-3">
-            <div className="text-xs text-muted-foreground">
-              同型連投率（直近{qualityMetrics.repetition.recentConversationWindow}会話）
-            </div>
-            <div className="text-xl font-semibold text-slate-700">
-              {formatRatePercent(qualityMetrics.repetition.rate)}
-            </div>
-            <div
-              className={`text-xs ${
-                qualityMetrics.repetition.meetsTarget ? 'text-emerald-700' : 'text-rose-700'
-              }`}
-            >
-              目標 {formatRatePercent(qualityMetrics.repetition.targetRate)} 未満 / 連投{' '}
-              {qualityMetrics.repetition.repeatedConversations}
-              {' / '}
-              {qualityMetrics.repetition.totalConversations}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
       <Card
         className="border-white/55 bg-white/24 shadow-[inset_0_0_18px_rgba(255,255,255,0.22)]"
         style={{ backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }}

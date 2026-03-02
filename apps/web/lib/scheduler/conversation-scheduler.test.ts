@@ -61,6 +61,29 @@ function installBrowserLikeGlobals() {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
+function createFetchResponse(input: {
+  ok: boolean;
+  status?: number;
+  body?: unknown;
+}) {
+  const status = input.status ?? (input.ok ? 200 : 500);
+  const bodyText = typeof input.body === "string"
+    ? input.body
+    : JSON.stringify(input.body ?? {});
+  return {
+    ok: input.ok,
+    status,
+    text: async () => bodyText,
+    json: async () => {
+      try {
+        return JSON.parse(bodyText);
+      } catch {
+        return bodyText;
+      }
+    },
+  };
+}
+
 describe("conversation scheduler", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -202,5 +225,224 @@ describe("conversation scheduler", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}");
     expect(body).toEqual({ threadId: "thread_1" });
+  });
+
+  it("thread_not_found の場合は participants で再試行する", async () => {
+    mocks.listLocal.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "residents":
+          return [
+            { id: "resident_A", name: "A", deleted: false },
+            { id: "resident_B", name: "B", deleted: false },
+          ];
+        case "relations":
+          return [];
+        case "topic_threads":
+          return [
+            {
+              id: "thread_1",
+              participants: ["resident_A", "resident_B"],
+              status: "ongoing",
+              updated_at: "2026-01-01T00:00:00.000Z",
+              deleted: false,
+            },
+          ];
+        default:
+          return [];
+      }
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createFetchResponse({
+          ok: false,
+          status: 404,
+          body: { error: "thread_not_found" },
+        }),
+      )
+      .mockResolvedValueOnce(createFetchResponse({ ok: true, body: {} }));
+
+    const result = await triggerConversationNow({
+      force: true,
+      baseIntervalMs: 900_000,
+    });
+
+    expect(result).toMatchObject({
+      status: "started",
+      threadId: undefined,
+      participants: ["resident_A", "resident_B"],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}")).toEqual({
+      threadId: "thread_1",
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body ?? "{}")).toEqual({
+      participants: ["resident_A", "resident_B"],
+    });
+  });
+
+  it("invalid_thread_participants の場合は participants で再試行する", async () => {
+    mocks.listLocal.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "residents":
+          return [
+            { id: "resident_A", name: "A", deleted: false },
+            { id: "resident_B", name: "B", deleted: false },
+          ];
+        case "relations":
+          return [];
+        case "topic_threads":
+          return [
+            {
+              id: "thread_1",
+              participants: ["resident_A", "resident_B"],
+              status: "ongoing",
+              updated_at: "2026-01-01T00:00:00.000Z",
+              deleted: false,
+            },
+          ];
+        default:
+          return [];
+      }
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createFetchResponse({
+          ok: false,
+          status: 400,
+          body: { error: "invalid_thread_participants" },
+        }),
+      )
+      .mockResolvedValueOnce(createFetchResponse({ ok: true, body: {} }));
+
+    const result = await triggerConversationNow({
+      force: true,
+      baseIntervalMs: 900_000,
+    });
+
+    expect(result).toMatchObject({
+      status: "started",
+      threadId: undefined,
+      participants: ["resident_A", "resident_B"],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}")).toEqual({
+      threadId: "thread_1",
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body ?? "{}")).toEqual({
+      participants: ["resident_A", "resident_B"],
+    });
+  });
+
+  it("再試行も失敗した場合は代替ペアで継続する", async () => {
+    mocks.listLocal.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "residents":
+          return [
+            { id: "resident_A", name: "A", deleted: false },
+            { id: "resident_B", name: "B", deleted: false },
+            { id: "resident_C", name: "C", deleted: false },
+          ];
+        case "relations":
+          return [];
+        case "topic_threads":
+          return [
+            {
+              id: "thread_1",
+              participants: ["resident_A", "resident_B"],
+              status: "ongoing",
+              updated_at: "2026-01-01T00:00:00.000Z",
+              deleted: false,
+            },
+          ];
+        default:
+          return [];
+      }
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createFetchResponse({
+          ok: false,
+          status: 404,
+          body: { error: "thread_not_found" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        createFetchResponse({
+          ok: false,
+          status: 500,
+          body: { error: "conversation_failed" },
+        }),
+      )
+      .mockResolvedValueOnce(createFetchResponse({ ok: true, body: {} }));
+
+    const result = await triggerConversationNow({
+      force: true,
+      baseIntervalMs: 900_000,
+    });
+
+    expect(result.status).toBe("started");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}")).toEqual({
+      threadId: "thread_1",
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body ?? "{}")).toEqual({
+      participants: ["resident_A", "resident_B"],
+    });
+    const thirdBody = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body ?? "{}");
+    expect(Array.isArray(thirdBody.participants)).toBe(true);
+    expect(thirdBody.participants).not.toEqual(["resident_A", "resident_B"]);
+  });
+
+  it("再試行失敗かつ代替ペアがない場合でも skipped で返す", async () => {
+    mocks.listLocal.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "residents":
+          return [
+            { id: "resident_A", name: "A", deleted: false },
+            { id: "resident_B", name: "B", deleted: false },
+          ];
+        case "relations":
+          return [];
+        case "topic_threads":
+          return [
+            {
+              id: "thread_1",
+              participants: ["resident_A", "resident_B"],
+              status: "ongoing",
+              updated_at: "2026-01-01T00:00:00.000Z",
+              deleted: false,
+            },
+          ];
+        default:
+          return [];
+      }
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createFetchResponse({
+          ok: false,
+          status: 404,
+          body: { error: "thread_not_found" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        createFetchResponse({
+          ok: false,
+          status: 500,
+          body: { error: "conversation_failed" },
+        }),
+      );
+
+    const result = await triggerConversationNow({
+      force: true,
+      baseIntervalMs: 900_000,
+    });
+
+    expect(result).toEqual({ status: "skipped", reason: "no_target" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
