@@ -3,6 +3,7 @@ import type { EvalInput, EvaluationResult } from "@/lib/evaluation/evaluate-conv
 
 const mocks = vi.hoisted(() => ({
   listKV: vi.fn(),
+  MockKvUnauthenticatedError: class MockKvUnauthenticatedError extends Error {},
   callGptForConversation: vi.fn(),
   evaluateConversation: vi.fn(),
   persistConversation: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/db/kv-server", () => ({
   listKV: mocks.listKV,
+  KvUnauthenticatedError: mocks.MockKvUnauthenticatedError,
 }));
 
 vi.mock("@/lib/gpt/call-gpt-for-conversation", () => ({
@@ -303,6 +305,19 @@ describe("run-conversation", () => {
       code: "preset_load_failed",
       status: 503,
     });
+  });
+
+  it("presets 取得時の認証エラーはそのまま再throwする", async () => {
+    mocks.listKV.mockImplementation(async (table: string) => {
+      if (table === "presets") {
+        throw new mocks.MockKvUnauthenticatedError("unauthenticated");
+      }
+      return [];
+    });
+
+    await expect(runConversationFromApi({ participants: [A_ID, B_ID] })).rejects.toBeInstanceOf(
+      mocks.MockKvUnauthenticatedError,
+    );
   });
 
   it("runConversation は話題選定の主導者を構造決定にも引き継ぐ", async () => {

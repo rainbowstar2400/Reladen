@@ -22,7 +22,7 @@ import { buildConversationStructure, determineInitiator, type StructureInput } f
 import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
-import { listKV as listAny } from "@/lib/db/kv-server";
+import { KvUnauthenticatedError, listKV as listAny } from "@/lib/db/kv-server";
 import { persistConversation } from "@/lib/persist/persist-conversation";
 import { evaluateConversation, type EvalInput } from "@/lib/evaluation/evaluate-conversation";
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
@@ -227,6 +227,9 @@ async function loadCharacterProfiles(
   try {
     presetRows = (await listAny("presets")) as unknown as Array<Record<string, unknown>> | null;
   } catch (error) {
+    if (error instanceof KvUnauthenticatedError) {
+      throw error;
+    }
     const msg = (error as Error)?.message ?? String(error);
     console.error("[runConversationFromApi] Failed to load presets required for style-aware conversation.", {
       participants: participantIds,
