@@ -5,7 +5,8 @@
 // 2. 動機生成（話題選定）
 // 3. 会話構造決定（主導権、スタンス、温度感）
 // 4. プロンプト構築 + GPT呼び出し + 検証 + リトライ
-// 5. 結果返却
+// 5. 永続化（events, threads, feelings, notifications）
+// 6. 結果返却
 
 import type {
   ConversationOutputV2,
@@ -20,12 +21,16 @@ import { buildConversationStructure, type StructureInput } from "@repo/shared/lo
 import { callGptForConversationV2, type CallGptV2Result } from "@/lib/gpt/call-gpt-for-conversation-v2";
 import type { PromptInputV2, CharacterProfileV2 } from "@repo/shared/gpt/prompts/conversation-prompt-v2";
 import { newId } from "@/lib/newId";
+import { listKV as listAny } from "@/lib/db/kv-server";
+import { persistConversation } from "@/lib/persist/persist-conversation";
+import { evaluateConversation, type EvalInput } from "@/lib/evaluation/evaluate-conversation";
+import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
 
 // ---------------------------------------------------------------------------
 // 入力型
 // ---------------------------------------------------------------------------
 
-/** v2パイプラインの入力 */
+/** v2パイプラインの入力（データが既に解決済みの場合） */
 export type RunConversationV2Args = {
   participants: [string, string];
   /** キャラプロフィール */
@@ -84,6 +89,18 @@ export type RunConversationV2Result = {
   };
 };
 
+/** APIルートからの入力 */
+export type RunConversationApiArgs = {
+  threadId?: string;
+  participants: [string, string];
+};
+
+/** APIルートへの返却 */
+export type RunConversationApiResult = {
+  eventId: string;
+  threadId: string;
+};
+
 // ---------------------------------------------------------------------------
 // ヘルパー
 // ---------------------------------------------------------------------------
@@ -113,7 +130,200 @@ function toCharacterProfileV2(profile: RunCharacterProfile): CharacterProfileV2 
 }
 
 // ---------------------------------------------------------------------------
-// パイプライン
+// KV データ読み込み（v1からの移植・簡素化）
+// ---------------------------------------------------------------------------
+
+type RelationRow = {
+  a_id?: string;
+  b_id?: string;
+  aId?: string;
+  bId?: string;
+  type?: string;
+  updated_at?: string;
+  updatedAt?: string;
+  deleted?: boolean;
+};
+
+type FeelingRow = {
+  from_id?: string;
+  to_id?: string;
+  fromId?: string;
+  toId?: string;
+  label?: string;
+  score?: number;
+  updated_at?: string;
+  updatedAt?: string;
+  deleted?: boolean;
+};
+
+function toUpdatedAtMillis(row: { updated_at?: string; updatedAt?: string }): number {
+  const raw = typeof row.updated_at === "string"
+    ? row.updated_at
+    : typeof row.updatedAt === "string"
+      ? row.updatedAt
+      : undefined;
+  if (!raw) return 0;
+  const ts = Date.parse(raw);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function pickRelationPair(row: RelationRow): { aId?: string; bId?: string } {
+  return {
+    aId: typeof row.a_id === "string" ? row.a_id : typeof row.aId === "string" ? row.aId : undefined,
+    bId: typeof row.b_id === "string" ? row.b_id : typeof row.bId === "string" ? row.bId : undefined,
+  };
+}
+
+function pickFeelingPair(row: FeelingRow): { fromId?: string; toId?: string } {
+  return {
+    fromId: typeof row.from_id === "string" ? row.from_id : typeof row.fromId === "string" ? row.fromId : undefined,
+    toId: typeof row.to_id === "string" ? row.to_id : typeof row.toId === "string" ? row.toId : undefined,
+  };
+}
+
+/** 住民プロフィールを KV から読み込み、RunCharacterProfile に変換 */
+async function loadCharacterProfiles(
+  participantIds: [string, string],
+): Promise<Record<string, RunCharacterProfile>> {
+  const uniqueIds = Array.from(new Set(participantIds));
+  if (uniqueIds.length === 0) return {};
+
+  const presetRows = (await listAny("presets")) as unknown as Array<Record<string, unknown>> | null;
+  const presetMap = new Map<string, Record<string, unknown>>();
+  if (Array.isArray(presetRows)) {
+    for (const raw of presetRows) {
+      const id = typeof raw?.id === "string" ? raw.id : undefined;
+      if (!id || Boolean((raw as any)?.deleted)) continue;
+      presetMap.set(id, raw);
+    }
+  }
+
+  const rows = (await listAny("residents")) as unknown as Array<Record<string, unknown>> | null;
+  const dict: Record<string, RunCharacterProfile> = {};
+  if (!Array.isArray(rows)) return dict;
+
+  const idSet = new Set(uniqueIds);
+  for (const raw of rows) {
+    const id = typeof raw?.id === "string" ? raw.id : undefined;
+    if (!id || !idSet.has(id)) continue;
+
+    const r = raw as any;
+
+    // 年齢
+    const age = typeof r.age === "number" ? r.age
+      : Number.isFinite(Number(r.age)) ? Number(r.age) : null;
+
+    // 一人称
+    const firstPersonId = typeof r.first_person === "string" ? r.first_person : null;
+    const firstPersonPreset = firstPersonId ? presetMap.get(firstPersonId) : undefined;
+    const firstPerson = (firstPersonPreset as any)?.label ?? null;
+
+    // 口調プリセット → SpeechProfile に変換
+    const speechPresetId = typeof r.speech_preset === "string" ? r.speech_preset : null;
+    const speechPreset = speechPresetId ? presetMap.get(speechPresetId) : undefined;
+    let speechProfile: SpeechProfile | null = null;
+    if (speechPreset) {
+      const label = typeof (speechPreset as any).label === "string" ? (speechPreset as any).label : "";
+      const description = typeof (speechPreset as any).description === "string" ? (speechPreset as any).description : "";
+      const example = typeof (speechPreset as any).example === "string" ? (speechPreset as any).example : "";
+      if (label && description) {
+        speechProfile = {
+          label,
+          description,
+          endings: [],          // 既存プリセットには語尾情報がない → 空（今後LLM抽出で補完）
+          frequentPhrases: [],
+          avoidedPhrases: [],
+          examples: example ? [example] : [`（${label}の口調）`],
+        };
+      }
+    }
+
+    // 性格特性
+    const rawTraits = r.traits;
+    const traits: Partial<Traits> = {};
+    if (rawTraits && typeof rawTraits === "object") {
+      for (const key of ["sociability", "empathy", "stubbornness", "activity", "expressiveness"] as const) {
+        const v = (rawTraits as any)[key];
+        if (typeof v === "number" && v >= 1 && v <= 5) traits[key] = v;
+      }
+    }
+
+    // 興味タグ
+    const interests: string[] = Array.isArray(r.interests) ? r.interests.filter((i: unknown) => typeof i === "string") : [];
+
+    dict[id] = {
+      id,
+      name: r.name ?? "不明",
+      gender: r.gender ?? null,
+      age,
+      occupation: r.occupation ?? null,
+      firstPerson,
+      mbti: r.mbti ?? null,
+      traits,
+      interests,
+      speechProfile,
+    };
+  }
+
+  return dict;
+}
+
+/** 関係性タイプを KV から読み込み */
+async function loadRelationTypeForPair(
+  participants: [string, string],
+): Promise<string | undefined> {
+  const rows = (await listAny("relations")) as unknown as RelationRow[] | null;
+  if (!Array.isArray(rows)) return undefined;
+  const [a, b] = participants;
+
+  const matches = rows
+    .filter((rel) => {
+      if (!rel || rel.deleted || typeof rel.type !== "string") return false;
+      const { aId, bId } = pickRelationPair(rel);
+      if (!aId || !bId) return false;
+      return (aId === a && bId === b) || (aId === b && bId === a);
+    })
+    .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs));
+
+  return matches[0]?.type;
+}
+
+/** 好感度を KV から読み込み */
+async function loadFeelingsForPair(
+  participants: [string, string],
+): Promise<{ aToB: { label: string; score: number }; bToA: { label: string; score: number } }> {
+  const rows = (await listAny("feelings")) as unknown as FeelingRow[] | null;
+  const [a, b] = participants;
+
+  const pickLatest = (fromId: string, toId: string): { label: string; score: number } => {
+    if (!Array.isArray(rows)) return { label: "none", score: 0 };
+    const found = rows
+      .filter((row) => {
+        if (!row || row.deleted) return false;
+        const pair = pickFeelingPair(row);
+        return pair.fromId === fromId && pair.toId === toId;
+      })
+      .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs))[0];
+    return {
+      label: typeof found?.label === "string" ? found.label : "none",
+      score: typeof found?.score === "number" && Number.isFinite(found.score) ? found.score : 0,
+    };
+  };
+
+  return { aToB: pickLatest(a, b), bToA: pickLatest(b, a) };
+}
+
+/** 時間帯に基づく環境情報を決定 */
+function determineEnvironment(): { place: string; timeOfDay: string } {
+  const hour = new Date().getHours();
+  if (hour >= 6 && hour < 11) return { place: "駅前カフェ", timeOfDay: "朝" };
+  if (hour >= 11 && hour < 16) return { place: "商店街", timeOfDay: "昼" };
+  if (hour >= 16 && hour < 20) return { place: "川沿い公園", timeOfDay: "夕方" };
+  return { place: "コンビニ", timeOfDay: "夜" };
+}
+
+// ---------------------------------------------------------------------------
+// パイプライン（データ解決済み版）
 // ---------------------------------------------------------------------------
 
 export async function runConversationV2(
@@ -208,4 +418,84 @@ export async function runConversationV2(
       },
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// APIルート用エントリポイント（KVからデータ読み込み → パイプライン → 永続化）
+// ---------------------------------------------------------------------------
+
+/**
+ * APIルートから呼ばれるメインエントリポイント。
+ * KVストアからプロフィール・関係性・好感度を読み込み、
+ * v2パイプラインを実行し、結果を永続化して返す。
+ */
+export async function runConversationFromApi(
+  args: RunConversationApiArgs,
+): Promise<RunConversationApiResult> {
+  const { participants, threadId } = args;
+
+  // 1) プロフィール読み込み
+  const characters = await loadCharacterProfiles(participants);
+  if (!characters[participants[0]] || !characters[participants[1]]) {
+    throw new Error("[runConversationFromApi] Could not load profiles for one or both participants.");
+  }
+
+  // 2) 関係性読み込み
+  let relationType: string | undefined;
+  try {
+    relationType = await loadRelationTypeForPair(participants);
+  } catch (error) {
+    console.warn("[runConversationFromApi] Failed to load relation.", error);
+  }
+  if (relationType === "none") {
+    throw new Error("[runConversationFromApi] Conversation aborted because relation is 'none'.");
+  }
+
+  // 3) 好感度読み込み
+  let feelings = { aToB: { label: "none", score: 0 }, bToA: { label: "none", score: 0 } };
+  try {
+    feelings = await loadFeelingsForPair(participants);
+  } catch (error) {
+    console.warn("[runConversationFromApi] Failed to load feelings.", error);
+  }
+
+  // 4) 環境決定
+  const environment = determineEnvironment();
+
+  // 5) v2パイプライン実行
+  const result = await runConversationV2({
+    participants,
+    characters,
+    relation: {
+      type: (relationType ?? "acquaintance") as RunConversationV2Args["relation"]["type"],
+      feelingAtoB: feelings.aToB,
+      feelingBtoA: feelings.bToA,
+    },
+    environment,
+    threadId,
+    // TODO: 以下は今後バッチ生成機能から取得
+    // previousMemory, recentSnippets, knowledgeByA, knowledgeByB, recentTopics
+  });
+
+  // 6) 評価
+  const evalInput: EvalInput = {
+    threadId: result.threadId,
+    participants,
+    lines: result.output.lines,
+    meta: {
+      tags: result.output.meta.tags,
+      signals: result.output.meta.signals,
+      qualityHints: result.output.meta.qualityHints,
+    },
+  };
+  const evalResult = evaluateConversation(evalInput);
+
+  // 7) 永続化
+  // v2出力はv1の GptConversationOutput と構造的に互換
+  const { eventId } = await persistConversation({
+    gptOut: result.output as unknown as GptConversationOutput,
+    evalResult,
+  });
+
+  return { eventId, threadId: result.threadId };
 }

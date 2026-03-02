@@ -8,17 +8,11 @@
 import { listLocal } from "@/lib/db-local";
 import type { TopicThread } from "@repo/shared/types/conversation";
 import { selectConversationCandidates } from "@/lib/conversation/candidates";
-import type { Resident, Preset, Relation } from "@/types";
-import type { ConversationResidentProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
+import type { Resident, Relation } from "@/types";
 
 type StartConversationPayload = {
   threadId?: string;
   participants: [string, string];
-  topicHint?: string;
-  lastSummary?: string;
-  context?: {
-    residents?: Record<string, ConversationResidentProfile>;
-  };
 };
 
 async function callConversationApi(input: StartConversationPayload) {
@@ -49,52 +43,6 @@ async function callConversationApi(input: StartConversationPayload) {
 
     throw new Error(`Conversation API error: ${reason}`);
   }
-}
-
-function toConversationProfile(resident: Resident): ConversationResidentProfile {
-  return {
-    id: resident.id,
-    name: resident.name ?? null,
-    mbti: resident.mbti ?? null,
-    gender: resident.gender ?? null,
-    age: typeof resident.age === "number" ? resident.age : null,
-    occupation: resident.occupation ?? null,
-    speechPreset: resident.speechPreset ?? null,
-    speechPresetDescription: null,
-    firstPerson: resident.firstPerson ?? null,
-    traits: resident.traits ?? null,
-    interests: resident.interests ?? null,
-  };
-}
-
-function buildContextForParticipants(
-  participantIds: [string, string],
-  residents: Resident[],
-  presets: Preset[],
-): NonNullable<StartConversationPayload["context"]> {
-  const residentMap = new Map(residents.map((r) => [r.id, r]));
-  const presetMap = new Map(presets.filter((p) => !p.deleted).map((p) => [p.id, p]));
-
-  const context: NonNullable<StartConversationPayload["context"]> = {};
-
-  for (const id of participantIds) {
-    const res = residentMap.get(id);
-    if (res) {
-      context.residents = context.residents ?? {};
-      const speechPreset = res.speechPreset ? presetMap.get(res.speechPreset) : null;
-      const firstPersonPreset = res.firstPerson ? presetMap.get(res.firstPerson) : null;
-      const speechExample = speechPreset?.example ?? null;
-      context.residents[id] = {
-        ...toConversationProfile(res),
-        speechPreset: speechPreset?.label ?? null,
-        speechPresetDescription: speechPreset?.description ?? null,
-        speechExample: typeof speechExample === "string" || speechExample === null ? speechExample : null,
-        firstPerson: firstPersonPreset?.label ?? null,
-      };
-    }
-  }
-
-  return context;
 }
 
 function hasNoneRelationBetween(
@@ -325,9 +273,7 @@ export async function triggerConversationNow(
 
   try {
     const allResidents = (await listLocal("residents")) as Resident[];
-    const allPresets = (await listLocal("presets")) as Preset[];
     const allRelations = (await listLocal("relations")) as Relation[];
-    const activePresets = allPresets.filter((p) => !p.deleted);
     const activeRelations = allRelations.filter((r) => !r.deleted);
     const now = new Date();
     const awakeCandidates = selectConversationCandidates(now, allResidents);
@@ -359,16 +305,9 @@ export async function triggerConversationNow(
       };
     }
 
-    const context = buildContextForParticipants(
-      target.participants,
-      allResidents,
-      activePresets,
-    );
-
     await callConversationApi({
       threadId: target.threadId,
       participants: target.participants,
-      context: Object.keys(context).length ? context : undefined,
     });
 
     markConversationRun();
