@@ -64,6 +64,13 @@
       "when": 1771056000000,
       "tag": "0008_drop_beliefs",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1771142400000,
+      "tag": "0009_topic_thread_participants_constraints",
+      "breakpoints": true
     }
   ]
 }

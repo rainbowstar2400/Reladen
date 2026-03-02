@@ -1,50 +1,64 @@
 // packages/shared/gpt/prompts/conversation-prompt.ts
-import type {
-  TopicThread,
-  RelationType,
-  FeelingLabel,
-  ConversationBrief,
-  HookIntent,
-} from "@repo/shared/types";
+// 会話生成プロンプトビルダー
+// 「コードが"何を"、LLMが"どう言うか"」の原則に基づく
 
-export type ConversationResidentProfile = {
+import type {
+  SpeechProfile,
+  ConversationStructure,
+  SelectedTopic,
+  ConversationMemory,
+  SharedSnippet,
+  Traits,
+} from "@repo/shared/types/conversation-generation";
+
+import {
+  formatTraitDescriptions,
+  formatMbtiDescription,
+} from "./trait-descriptions";
+
+// ---------------------------------------------------------------------------
+// 入力型定義
+// ---------------------------------------------------------------------------
+
+/** プロンプトに必要なキャラクター情報 */
+export type CharacterProfile = {
   id: string;
-  name?: string | null;
-  mbti?: string | null;
+  name: string;
   gender?: string | null;
   age?: number | null;
   occupation?: string | null;
-  speechPreset?: string | null;
-  speechPresetDescription?: string | null;
-  speechExample?: string | null;
   firstPerson?: string | null;
-  traits?: unknown;
-  interests?: unknown;
-  summary?: string | null;
+  mbti?: string | null;
+  traits: Partial<Traits>;
+  interests: string[];
+  speechProfile?: SpeechProfile | null;
 };
 
-type PairFeeling = {
-  label?: FeelingLabel | string | null;
-  score?: number | null;
-};
-
-export type ConversationPairContext = {
-  relationType?: RelationType | string | null;
-  feelings?: {
-    aToB?: PairFeeling;
-    bToA?: PairFeeling;
+/** プロンプト構築の全入力 */
+export type PromptInput = {
+  characters: [CharacterProfile, CharacterProfile];
+  relation: {
+    type: string;
+    feelingAtoB: { label: string; score: number };
+    feelingBtoA: { label: string; score: number };
   };
-  recentLines?: Array<{ speaker: string; text: string }>;
+  structure: ConversationStructure;
+  topic: SelectedTopic;
+  environment: { place: string; timeOfDay: string; weather?: string };
+  recentSnippets: SharedSnippet[];
+  previousMemory: ConversationMemory | null;
+  threadId: string;
 };
 
-const MAX_RECENT_LINES = 4;
-const MAX_TEXT_CHARS = 80;
+// ---------------------------------------------------------------------------
+// システムプロンプト
+// ---------------------------------------------------------------------------
 
 export const systemPromptConversation = `
 あなたはキャラクター2人の自然な会話を生成するAIです。
 出力は必ず「正しいJSONのみ」を返し、説明文や補足を付けないでください。
-出力JSONは以下のスキーマに従います：
 
+出力JSONスキーマ:
 {
   "threadId": string,
   "participants": [string, string],
@@ -54,317 +68,278 @@ export const systemPromptConversation = `
   ],
   "meta": {
     "tags": string[],
-    "newKnowledge": [
-      { "target": string, "key": string }
-    ],
     "signals": ["continue"|"close"|"park"],
     "qualityHints": {
       "turnBalance": "balanced"|"skewed",
       "tone": string
     },
     "debug": string[],
-    "anchorExperienceId": string,
-    "grounded": boolean,
-    "groundingEvidence": string[],
-    "fallbackMode": "experience"|"continuation"|"free"
+    "memory": {
+      "summary": string,
+      "topicsCovered": string[],
+      "unresolvedThreads": string[],
+      "knowledgeGained": [
+        { "about": string, "fact": string }
+      ]
+    }
   }
 }
 
-登場人物ごとに「一人称」「話し方（プリセット名）」「話し方の説明」「話し方の例文」が渡されます。
-会話は自然さを保ちつつ、各人物の口調に寄せてください。
-一人称は firstPerson で渡された表記を厳密に使用し、表記揺れや別表記への変換は行わないでください。
+生成ルール:
+- 各キャラの「話し方」セクションに記載された語尾・頻出表現を忠実に反映すること
+- 「避ける表現」に記載された表現は絶対に使わないこと
+- 一人称は指定表記を厳守し、表記揺れ・別表記への変換を行わないこと
+- 「会話の構造」セクションの主導権・スタンス・温度感・ターンバランスに従うこと
+- memoryは会話内容から正確に抽出すること
 `.trim();
 
-function truncateText(value: string, max = MAX_TEXT_CHARS): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= max) return normalized;
-  return `${normalized.slice(0, Math.max(0, max - 1))}…`;
-}
+// ---------------------------------------------------------------------------
+// ヘルパー
+// ---------------------------------------------------------------------------
 
-function safeStringify(value: unknown, max = MAX_TEXT_CHARS): string {
-  if (value == null) return "未設定";
-  if (typeof value === "string") return truncateText(value, max);
-  try {
-    return truncateText(JSON.stringify(value), max);
-  } catch {
-    return "未設定";
+function relationLabel(type: string): string {
+  switch (type) {
+    case "acquaintance": return "知人";
+    case "friend": return "友人";
+    case "best_friend": return "親友";
+    case "lover": return "恋人";
+    case "family": return "家族";
+    case "none": return "関係なし";
+    default: return type || "不明";
   }
 }
 
-function relationLabel(relationType?: RelationType | string | null): string {
-  switch (relationType) {
-    case "acquaintance":
-      return "知人";
-    case "friend":
-      return "友人";
-    case "best_friend":
-      return "親友";
-    case "lover":
-      return "恋人";
-    case "family":
-      return "家族";
-    case "none":
-      return "関係なし";
-    case "":
-    case undefined:
-    case null:
-      return "不明";
-    default:
-      return String(relationType);
-  }
-}
-
-function feelingLabel(label?: FeelingLabel | string | null): string {
+function feelingLabel(label: string): string {
   switch (label) {
-    case "none":
-      return "なし";
-    case "dislike":
-      return "嫌い";
-    case "maybe_dislike":
-      return "嫌いかも";
-    case "curious":
-      return "気になる";
-    case "maybe_like":
-      return "好きかも";
-    case "like":
-      return "好き";
-    case "love":
-      return "愛情";
-    case "awkward":
-      return "気まずい";
-    case "":
-    case undefined:
-    case null:
-      return "不明";
-    default:
-      return String(label);
+    case "none": return "なし";
+    case "dislike": return "嫌い";
+    case "maybe_dislike": return "嫌いかも";
+    case "curious": return "気になる";
+    case "maybe_like": return "好きかも";
+    case "like": return "好き";
+    case "love": return "愛情";
+    case "awkward": return "気まずい";
+    default: return label || "不明";
   }
 }
 
-function formatFeelingScore(score?: number | null): string {
-  if (!Number.isFinite(score)) return "未設定";
-  return String(Math.round(Number(score)));
-}
-
-function formatHookIntent(intent: HookIntent): string {
-  switch (intent) {
-    case "invite":
-      return "誘う";
-    case "share":
-      return "共有する";
-    case "complain":
-      return "愚痴る";
-    case "consult":
-      return "相談する";
-    case "reflect":
-      return "振り返る";
-    default:
-      return intent;
+function stanceLabel(stance: string): string {
+  switch (stance) {
+    case "enthusiastic": return "乗り気。具体例を出して盛り上げる";
+    case "agreeable": return "穏やかに付き合う。反応は短め";
+    case "reluctant": return "面倒だが付き合う。最低限の返事";
+    case "indifferent": return "興味薄。短く返す";
+    case "confrontational": return "反論気味。突っかかる";
+    default: return stance;
   }
 }
 
-function formatProfileLine(
-  id: string,
-  profile: ConversationResidentProfile | undefined,
-) {
-  const displayName = profile?.name ?? id;
-  const parts: string[] = [];
-  if (profile?.gender) parts.push(`性別: ${profile.gender}`);
-  if (typeof profile?.age === "number") parts.push(`年齢: ${profile.age}`);
-  if (profile?.mbti) parts.push(`MBTI: ${profile.mbti}`);
-  if (profile?.occupation) parts.push(`職業: ${profile.occupation}`);
-  if (profile?.firstPerson) parts.push(`一人称: ${profile.firstPerson}`);
-
-  const identityLine = parts.length > 0 ? parts.join(" / ") : "基本属性: 未設定";
-  const speechPreset = profile?.speechPreset ?? "未設定";
-  const speechDescription = profile?.speechPresetDescription ?? "未設定";
-  const traitLine = `性格・特徴: ${safeStringify(profile?.traits)}`;
-  const interestLine = `趣味・関心: ${safeStringify(profile?.interests)}`;
-  const summaryLine = profile?.summary ? `要約: ${truncateText(profile.summary, 120)}` : undefined;
-
-  return [
-    `- ${displayName} (ID: ${id})`,
-    `  ${identityLine}`,
-    `  ${traitLine}`,
-    `  ${interestLine}`,
-    `  話し方: テンプレート「${speechPreset}」 / 説明: ${speechDescription}`,
-    profile?.firstPerson
-      ? `  一人称は「${profile.firstPerson}」を厳守すること。`
-      : "  一人称: 未設定",
-    profile?.speechExample
-      ? `  口調の例: 「${truncateText(profile.speechExample, 120)}」`
-      : "  口調の例: 未設定",
-    summaryLine ? `  ${summaryLine}` : undefined,
-  ]
-    .filter(Boolean)
-    .join("\n");
+function temperatureLabel(temp: string): string {
+  switch (temp) {
+    case "warm": return "和やかに盛り上がる";
+    case "lukewarm": return "ぎこちない";
+    case "neutral": return "普通";
+    case "tense": return "緊張感がある";
+    default: return temp;
+  }
 }
 
-function formatTimeOfDayJst(now: Date) {
-  const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const hour = jstDate.getUTCHours();
-  const month = jstDate.getUTCMonth() + 1;
-  const day = jstDate.getUTCDate();
-
-  let slot = "不明";
-  if (hour >= 6 && hour < 11) slot = "朝";
-  else if (hour >= 11 && hour < 16) slot = "昼";
-  else if (hour >= 16 && hour < 18) slot = "夕方";
-  else if (hour >= 18 && hour < 23) slot = "夜";
-  else if (hour >= 23 || hour < 4) slot = "深夜";
-  else if (hour >= 4 && hour < 6) slot = "明け方";
-
-  return `${month}月${day}日の${slot}です。`;
+function topicSourceLabel(source: string): string {
+  switch (source) {
+    case "shared_interest": return "共通の興味";
+    case "personal_interest": return "個人の興味";
+    case "continuation": return "前回の続き";
+    case "snippet": return "共有の出来事";
+    case "third_party": return "第三者の話題";
+    case "feeling_shift": return "関係性の変化";
+    case "environmental": return "環境";
+    default: return source;
+  }
 }
 
-function formatPairContext(opts: {
-  aId: string;
-  bId: string;
-  residents?: Record<string, ConversationResidentProfile>;
-  pairContext?: ConversationPairContext;
-}) {
-  const { aId, bId, residents, pairContext } = opts;
-  const aName = residents?.[aId]?.name ?? aId;
-  const bName = residents?.[bId]?.name ?? bId;
-  const relation = relationLabel(pairContext?.relationType);
+// ---------------------------------------------------------------------------
+// キャラクターブロック
+// ---------------------------------------------------------------------------
 
-  const aToB = pairContext?.feelings?.aToB;
-  const bToA = pairContext?.feelings?.bToA;
+function formatCharacterBlock(char: CharacterProfile): string {
+  const lines: string[] = [];
 
-  return [
-    `- 関係性: ${relation}`,
-    `- ${aName}→${bName}: 感情=${feelingLabel(aToB?.label)} / スコア=${formatFeelingScore(aToB?.score)}`,
-    `- ${bName}→${aName}: 感情=${feelingLabel(bToA?.label)} / スコア=${formatFeelingScore(bToA?.score)}`,
+  // 基本属性行
+  const attrParts: string[] = [];
+  if (char.gender) attrParts.push(`性別: ${char.gender}`);
+  if (typeof char.age === "number") attrParts.push(`年齢: ${char.age}`);
+  if (char.occupation) attrParts.push(`職業: ${char.occupation}`);
+  if (char.firstPerson) attrParts.push(`一人称: ${char.firstPerson}`);
+
+  lines.push(`- ${char.name} (ID: ${char.id})`);
+  if (attrParts.length > 0) {
+    lines.push(`  ${attrParts.join(" / ")}`);
+  }
+
+  // MBTI（認知スタイル）
+  const mbtiLine = formatMbtiDescription(char.mbti);
+  if (mbtiLine) {
+    lines.push(`  ${mbtiLine}`);
+  }
+
+  // 5特性（行動記述）
+  const traitLine = formatTraitDescriptions(char.traits);
+  lines.push(`  ${traitLine}`);
+
+  // 口調プロファイル
+  if (char.speechProfile) {
+    const sp = char.speechProfile;
+    lines.push(`  話し方「${sp.label}」:`);
+    lines.push(`    語尾: ${sp.endings.join(" / ")}`);
+    if (sp.frequentPhrases.length > 0) {
+      lines.push(`    よく使う表現: ${sp.frequentPhrases.join(", ")}`);
+    }
+    if (sp.avoidedPhrases.length > 0) {
+      lines.push(`    避ける表現: ${sp.avoidedPhrases.join(", ")}`);
+    }
+    if (sp.examples.length > 0) {
+      lines.push("    例:");
+      for (const ex of sp.examples) {
+        lines.push(`      - 「${ex}」`);
+      }
+    }
+  } else {
+    lines.push("  話し方: 未設定（自然な話し方で生成）");
+  }
+
+  // 一人称厳守指示
+  if (char.firstPerson) {
+    lines.push(`  一人称は「${char.firstPerson}」を厳守すること。`);
+  }
+
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// ユーザープロンプト構築
+// ---------------------------------------------------------------------------
+
+export function buildUserPrompt(input: PromptInput): string {
+  const [charA, charB] = input.characters;
+  const { structure, topic, relation, environment } = input;
+
+  const sections: string[] = [];
+
+  // 【会話設定】
+  const settingParts = [`場所: ${environment.place}（${environment.timeOfDay}`];
+  if (environment.weather) settingParts[0] += `、${environment.weather}`;
+  settingParts[0] += "、偶然鉢合わせ）";
+
+  sections.push(`【会話設定】\n${settingParts[0]}`);
+
+  // 【登場人物】
+  sections.push(
+    `【登場人物】\n${formatCharacterBlock(charA)}\n\n${formatCharacterBlock(charB)}`,
+  );
+
+  // 【2人の関係性と現在の感情】
+  const aName = charA.name;
+  const bName = charB.name;
+  const relationBlock = [
+    `- 関係性: ${relationLabel(relation.type)}`,
+    `- ${aName}→${bName}: ${feelingLabel(relation.feelingAtoB.label)} / スコア=${relation.feelingAtoB.score}`,
+    `- ${bName}→${aName}: ${feelingLabel(relation.feelingBtoA.label)} / スコア=${relation.feelingBtoA.score}`,
   ].join("\n");
-}
+  sections.push(`【2人の関係性と現在の感情】\n${relationBlock}`);
 
-function formatRecentLines(
-  recentLines: ConversationPairContext["recentLines"] | undefined,
-  residents?: Record<string, ConversationResidentProfile>,
-) {
-  if (!Array.isArray(recentLines) || recentLines.length === 0) return "(なし)";
-  return recentLines
-    .filter(
-      (line): line is { speaker: string; text: string } =>
-        !!line &&
-        typeof line.speaker === "string" &&
-        typeof line.text === "string" &&
-        line.text.trim().length > 0,
-    )
-    .slice(-MAX_RECENT_LINES)
-    .map((line) => {
-      const speakerName = residents?.[line.speaker]?.name ?? line.speaker;
-      return `- ${speakerName}: ${truncateText(line.text, 120)}`;
-    })
-    .join("\n") || "(なし)";
-}
-
-function formatBriefBlock(
-  brief: ConversationBrief,
-  residents?: Record<string, ConversationResidentProfile>,
-) {
-  const appraisalLines = brief.speakerAppraisal.length
-    ? brief.speakerAppraisal.map((entry) => {
-      const speakerName = residents?.[entry.speakerId]?.name ?? entry.speakerId;
-      return `- ${speakerName}: ${truncateText(entry.text, 120)}`;
-    }).join("\n")
-    : "- (なし)";
-
-  const hookLines = brief.speakerHookIntent.length
-    ? brief.speakerHookIntent.map((entry) => {
-      const speakerName = residents?.[entry.speakerId]?.name ?? entry.speakerId;
-      return `- ${speakerName}: ${formatHookIntent(entry.intent)} (${entry.intent})`;
-    }).join("\n")
-    : "- (なし)";
-
-  return [
-    `- fallbackMode: ${brief.fallbackMode}`,
-    `- expressionStyle: ${brief.expressionStyle}`,
-    `- anchorExperienceId: ${brief.anchorExperienceId ?? "(none)"}`,
-    `- anchorSignature: ${brief.anchorSignature ?? "(none)"}`,
-    `- anchorFact: ${brief.anchorFact}`,
-    "- speakerAppraisal:",
-    appraisalLines,
-    "- speakerHookIntent:",
-    hookLines,
+  // 【会話の構造】
+  const structureBlock = [
+    `- 主導: ${structure.initiatorName}（話題を振る側）`,
+    `- ${structure.initiatorName}のスタンス: ${structure.initiatorStance}（${stanceLabel(structure.initiatorStance)}）`,
+    `- ${structure.responderName}のスタンス: ${structure.responderStance}（${stanceLabel(structure.responderStance)}）`,
+    `- 温度感: ${structure.temperature}（${temperatureLabel(structure.temperature)}）`,
+    `- ${structure.initiatorName}の発話は${structure.initiatorTurnLength}、${structure.responderName}の発話は${structure.responderTurnLength}`,
   ].join("\n");
-}
+  sections.push(`【会話の構造】\n${structureBlock}`);
 
-export function buildUserPromptConversation(opts: {
-  thread: TopicThread;
-  brief: ConversationBrief;
-  topicHint?: string;
-  lastSummary?: string;
-  residents?: Record<string, ConversationResidentProfile>;
-  pairContext?: ConversationPairContext;
-}) {
-  const { thread, brief, topicHint, lastSummary, residents, pairContext } = opts;
-  const topic = topicHint ?? thread.topic ?? "雑談";
-  const [a, b] = thread.participants;
-  const timeContext = formatTimeOfDayJst(new Date());
+  // 【話題】
+  const topicLines = [
+    `種別: ${topicSourceLabel(topic.source)}`,
+    `内容: ${topic.label}`,
+  ];
+  if (topic.detail) {
+    topicLines.push(`補足: ${topic.detail}`);
+  }
+  if (topic.thirdPartyContext) {
+    const ctx = topic.thirdPartyContext;
+    topicLines.push(`${structure.initiatorName}が知っていること:`);
+    for (const fact of ctx.knownFacts) {
+      topicLines.push(`  - ${fact}`);
+    }
+    topicLines.push(
+      `${structure.responderName}と${ctx.characterName}の関係: ${ctx.listenerKnowsCharacter ? "知り合い" : "なし（直接は知らない）"}`,
+    );
+    topicLines.push(`注意: ${structure.initiatorName}の知識の範囲内でのみ${ctx.characterName}について言及すること`);
+  }
+  sections.push(`【話題】\n${topicLines.join("\n")}`);
 
-  const participantBlock = [
-    formatProfileLine(a, residents?.[a]),
-    formatProfileLine(b, residents?.[b]),
-  ].join("\n");
+  // 【直近の共有スニペット】（あれば）
+  if (input.recentSnippets.length > 0) {
+    const snippetLines = input.recentSnippets.map((s) => `- ${s.text}`);
+    sections.push(`【直近の共有スニペット】\n${snippetLines.join("\n")}`);
+  }
 
-  const relationBlock = formatPairContext({
-    aId: a,
-    bId: b,
-    residents,
-    pairContext,
-  });
-  const recentLinesBlock = formatRecentLines(pairContext?.recentLines, residents);
-  const briefBlock = formatBriefBlock(brief, residents);
+  // 【前回の会話記憶】（あれば）
+  if (input.previousMemory) {
+    const mem = input.previousMemory;
+    const memLines = [
+      `要約: ${mem.summary}`,
+      `話した話題: ${mem.topicsCovered.join(", ")}`,
+    ];
+    if (mem.unresolvedThreads.length > 0) {
+      memLines.push(`未解決の話題: ${mem.unresolvedThreads.join(", ")}`);
+    }
+    if (mem.knowledgeGained.length > 0) {
+      memLines.push("知ったこと:");
+      for (const k of mem.knowledgeGained) {
+        // about はIDなので、名前で表示
+        const aboutName = k.about === charA.id ? charA.name
+          : k.about === charB.id ? charB.name
+          : k.about;
+        memLines.push(`  - ${aboutName}について: ${k.fact}`);
+      }
+    }
+    sections.push(`【前回の会話記憶】\n${memLines.join("\n")}`);
+  }
 
-  return `
-【登場人物プロフィール】
-${participantBlock}
+  // 【生成ルール】
+  const rules = [
+    "- 上記の構造（主導権、スタンス、温度感、ターンバランス）に従うこと",
+    "- 6〜8ターンの会話を生成",
+    "- 1発話は1文を基本",
+    "- 話し方の語尾・頻出表現を口調に反映し、避ける表現は使わないこと",
+    "- 一人称は指定表記を厳守（表記揺れ禁止）",
+    "- 相手の直前発話を受けた返答を優先する",
+    "- 関連のない新話題を唐突に導入しない",
+    "- 汎用テンプレ台詞の連発は避ける",
+  ];
 
-【2人の関係性と現在の感情】
-${relationBlock}
+  // 話題ソースに応じた追加ルール
+  if (topic.source === "continuation" && input.previousMemory) {
+    rules.push("- 前回の未解決の話題を自然に再開すること");
+  }
+  if (topic.source === "snippet") {
+    rules.push("- 共有スニペットの出来事を会話のきっかけに使うこと");
+  }
 
-【直近の会話抜粋（最大4発話）】
-${recentLinesBlock}
+  sections.push(`【生成ルール】\n${rules.join("\n")}`);
 
-【現在時刻】
-${timeContext}
+  // 【出力仕様】
+  const outputRules = [
+    "- 出力は上記スキーマに厳密一致するJSONのみ",
+    `- threadId: "${input.threadId}"`,
+    `- participants: ["${charA.id}", "${charB.id}"]`,
+    "- lines[].speaker は必ず participants のどちらかにする",
+    `- lines[0].speaker は主導者(${structure.initiatorId})にすること`,
+    "- meta.memory は会話内容を正確に反映した構造化記憶",
+    "- meta.memory.knowledgeGained[].about はキャラIDを使うこと",
+  ];
+  sections.push(`【出力仕様】\n${outputRules.join("\n")}`);
 
-【最近の会話まとめ】
-${lastSummary ?? "(なし)"}
-
-【今回の話題】
-${topic}
-
-【ConversationBrief（最優先入力）】
-${briefBlock}
-
-【会話生成ルール】
-- fallbackMode が experience の場合、anchorFact の具体語を最低1つ本文に入れる
-- fallbackMode が experience の場合、少なくとも1人の appraisal を自然に反映する
-- fallbackMode が experience の場合、hookIntent に対応する会話行動（誘う/共有/愚痴/相談/振り返り）を1つ入れる
-- 同一会話内では主題を原則1つに保つ
-- 最近の会話まとめに主題がある場合は、その主題を優先して継続する
-- 話題を切り替える場合は橋渡し表現（例: そういえば / ところで / その話で言うと / 関連して）を必ず入れる
-- 話題を切り替えた場合のみ meta.tags に "topic_shift" を含める
-- 発話数は6〜8発話にする
-- 1発話は1文を基本にする
-- 相手の直前発話を受けた返答を優先する
-- 話し方（テンプレート名・説明・例文）を口調に反映する
-- 一人称はプロフィールで指定された表記を厳守する（表記揺れ禁止）
-- 関連のない新話題を唐突に導入しない
-- 汎用テンプレ台詞の連発は避ける
-
-【meta の設定ルール】
-- meta.anchorExperienceId は brief.anchorExperienceId をそのまま設定する（無ければ空文字）
-- meta.anchorSignature は brief.anchorSignature を設定する（無ければ空文字）
-- meta.fallbackMode は brief.fallbackMode を設定する
-- meta.grounded は本文が brief に接地していれば true、そうでなければ false
-- meta.groundingEvidence には anchorFact と appraisal の証拠語を短文で入れる（最大3件）
-
-【出力仕様】
-- 出力は必ず上記スキーマに厳密一致するJSONのみ
-- participants は指定された2名IDをそのまま使う
-- lines[].speaker は必ず participants のどちらかにする
-`.trim();
+  return sections.join("\n\n");
 }

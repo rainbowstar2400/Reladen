@@ -8,18 +8,34 @@
 import { listLocal } from "@/lib/db-local";
 import type { TopicThread } from "@repo/shared/types/conversation";
 import { selectConversationCandidates } from "@/lib/conversation/candidates";
-import type { Resident, Preset, Relation } from "@/types";
-import type { ConversationResidentProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
+import type { Resident, Relation } from "@/types";
 
-type StartConversationPayload = {
-  threadId?: string;
-  participants: [string, string];
-  topicHint?: string;
-  lastSummary?: string;
-  context?: {
-    residents?: Record<string, ConversationResidentProfile>;
-  };
-};
+type StartConversationPayload =
+  | { threadId: string }
+  | { participants: [string, string] };
+
+class ConversationApiError extends Error {
+  status: number;
+  reason: string;
+
+  constructor(status: number, reason: string) {
+    super(`Conversation API error: ${reason}`);
+    this.name = "ConversationApiError";
+    this.status = status;
+    this.reason = reason;
+  }
+}
+
+function isThreadResolutionError(error: unknown): error is ConversationApiError {
+  if (!(error instanceof ConversationApiError)) return false;
+  return (
+    (error.status === 404 && error.reason === "thread_not_found")
+    || (
+      (error.status === 400 || error.status === 422)
+      && error.reason === "invalid_thread_participants"
+    )
+  );
+}
 
 async function callConversationApi(input: StartConversationPayload) {
   const res = await fetch("/api/conversations/start", {
@@ -44,57 +60,11 @@ async function callConversationApi(input: StartConversationPayload) {
 
     if (res.status === 401) {
       // 認証切れ専用のエラー
-      throw new Error('Conversation API error: unauthenticated');
+      throw new ConversationApiError(401, "unauthenticated");
     }
 
-    throw new Error(`Conversation API error: ${reason}`);
+    throw new ConversationApiError(res.status, reason);
   }
-}
-
-function toConversationProfile(resident: Resident): ConversationResidentProfile {
-  return {
-    id: resident.id,
-    name: resident.name ?? null,
-    mbti: resident.mbti ?? null,
-    gender: resident.gender ?? null,
-    age: typeof resident.age === "number" ? resident.age : null,
-    occupation: resident.occupation ?? null,
-    speechPreset: resident.speechPreset ?? null,
-    speechPresetDescription: null,
-    firstPerson: resident.firstPerson ?? null,
-    traits: resident.traits ?? null,
-    interests: resident.interests ?? null,
-  };
-}
-
-function buildContextForParticipants(
-  participantIds: [string, string],
-  residents: Resident[],
-  presets: Preset[],
-): NonNullable<StartConversationPayload["context"]> {
-  const residentMap = new Map(residents.map((r) => [r.id, r]));
-  const presetMap = new Map(presets.filter((p) => !p.deleted).map((p) => [p.id, p]));
-
-  const context: NonNullable<StartConversationPayload["context"]> = {};
-
-  for (const id of participantIds) {
-    const res = residentMap.get(id);
-    if (res) {
-      context.residents = context.residents ?? {};
-      const speechPreset = res.speechPreset ? presetMap.get(res.speechPreset) : null;
-      const firstPersonPreset = res.firstPerson ? presetMap.get(res.firstPerson) : null;
-      const speechExample = speechPreset?.example ?? null;
-      context.residents[id] = {
-        ...toConversationProfile(res),
-        speechPreset: speechPreset?.label ?? null,
-        speechPresetDescription: speechPreset?.description ?? null,
-        speechExample: typeof speechExample === "string" || speechExample === null ? speechExample : null,
-        firstPerson: firstPersonPreset?.label ?? null,
-      };
-    }
-  }
-
-  return context;
 }
 
 function hasNoneRelationBetween(
@@ -122,6 +92,29 @@ function pickAllowedPair(
   for (let i = 0; i < shuffled.length; i += 1) {
     for (let j = i + 1; j < shuffled.length; j += 1) {
       const pair: [string, string] = [shuffled[i].id, shuffled[j].id];
+      if (!hasNoneRelationBetween(pair, relations)) {
+        return pair;
+      }
+    }
+  }
+  return null;
+}
+
+function pairKey(participants: [string, string]) {
+  return [...participants].sort().join(":");
+}
+
+function pickAlternativePair(
+  awakeCandidates: Resident[],
+  relations: Relation[],
+  excludedPair: [string, string],
+): [string, string] | null {
+  const excludedKey = pairKey(excludedPair);
+  const shuffled = [...awakeCandidates].sort(() => 0.5 - Math.random());
+  for (let i = 0; i < shuffled.length; i += 1) {
+    for (let j = i + 1; j < shuffled.length; j += 1) {
+      const pair: [string, string] = [shuffled[i].id, shuffled[j].id];
+      if (pairKey(pair) === excludedKey) continue;
       if (!hasNoneRelationBetween(pair, relations)) {
         return pair;
       }
@@ -325,9 +318,7 @@ export async function triggerConversationNow(
 
   try {
     const allResidents = (await listLocal("residents")) as Resident[];
-    const allPresets = (await listLocal("presets")) as Preset[];
     const allRelations = (await listLocal("relations")) as Relation[];
-    const activePresets = allPresets.filter((p) => !p.deleted);
     const activeRelations = allRelations.filter((r) => !r.deleted);
     const now = new Date();
     const awakeCandidates = selectConversationCandidates(now, allResidents);
@@ -359,24 +350,60 @@ export async function triggerConversationNow(
       };
     }
 
-    const context = buildContextForParticipants(
-      target.participants,
-      allResidents,
-      activePresets,
-    );
+    let startedThreadId = target.threadId;
+    let startedParticipants = target.participants;
 
-    await callConversationApi({
-      threadId: target.threadId,
-      participants: target.participants,
-      context: Object.keys(context).length ? context : undefined,
-    });
+    if (target.threadId) {
+      try {
+        await callConversationApi({ threadId: target.threadId });
+      } catch (error) {
+        if (!isThreadResolutionError(error)) throw error;
+
+        console.warn(
+          `[Scheduler] Thread start failed (${error.reason}). Retrying with participants.`,
+        );
+        try {
+          await callConversationApi({ participants: target.participants });
+          startedThreadId = undefined;
+        } catch (retryError) {
+          console.error("[Scheduler] Retry with thread participants failed:", retryError);
+
+          const alternativePair = pickAlternativePair(
+            awakeCandidates,
+            activeRelations,
+            target.participants,
+          );
+          if (!alternativePair) {
+            return { status: "skipped", reason: "no_target" };
+          }
+
+          try {
+            await callConversationApi({ participants: alternativePair });
+            startedThreadId = undefined;
+            startedParticipants = alternativePair;
+          } catch (alternativeError) {
+            console.error(
+              "[Scheduler] Failed to start conversation with alternative participants:",
+              alternativeError,
+            );
+            return {
+              status: "skipped",
+              reason: "no_target",
+              participants: alternativePair,
+            };
+          }
+        }
+      }
+    } else {
+      await callConversationApi({ participants: target.participants });
+    }
 
     markConversationRun();
     if (!force) refreshLock();
     return {
       status: "started",
-      threadId: target.threadId,
-      participants: target.participants,
+      threadId: startedThreadId,
+      participants: startedParticipants,
     };
   } catch (error) {
     if (!force) clearLock();

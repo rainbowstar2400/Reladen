@@ -1,128 +1,155 @@
 // apps/web/lib/conversation/run-conversation.ts
-// ------------------------------------------------------------
-// 会話エンジンのオーケストレータ。
-// 1) Experience Brief 生成（決定的）
-// 2) GPT生成（callGptForConversation）
-// 3) ローカル評価
-// 4) 永続化
-// ------------------------------------------------------------
+// 会話生成パイプライン オーケストレータ
+//
+// 1. 入力データ収集（キャラ、関係性、スニペット、記憶等）
+// 2. 動機生成（話題選定）
+// 3. 会話構造決定（主導権、スタンス、温度感）
+// 4. プロンプト構築 + GPT呼び出し + 検証 + リトライ
+// 5. 永続化（events, threads, feelings, notifications）
+// 6. 結果返却
 
-import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
-import type { EvaluationResult, EvalInput } from "@/lib/evaluation/evaluate-conversation";
-import { evaluateConversation } from "@/lib/evaluation/evaluate-conversation";
-import { persistConversation } from "@/lib/persist/persist-conversation";
-import { callGptForConversation } from "@/lib/gpt/call-gpt-for-conversation";
+import type {
+  ConversationOutput,
+  ConversationMemory,
+  SharedSnippet,
+  OffscreenKnowledge,
+  SpeechProfile,
+  Traits,
+  SelectedTopic,
+} from "@repo/shared/types/conversation-generation";
+import { selectTopic, type TopicSelectionInput, type CharacterContext } from "@repo/shared/logic/topic-selection";
+import { buildConversationStructure, determineInitiator, type StructureInput } from "@repo/shared/logic/conversation-structure";
+import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
+import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
+import { KvUnauthenticatedError, listKV as listAny } from "@/lib/db/kv-server";
+import { persistConversation } from "@/lib/persist/persist-conversation";
+import { evaluateConversation, type EvalInput } from "@/lib/evaluation/evaluate-conversation";
+import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
+import { z } from "zod";
 
-import { listKV as listAny } from "@/lib/db/kv-server";
-import type {
-  ConversationBrief,
-  ExperienceEvent,
-  ResidentExperience,
-  TopicThread,
-} from "@repo/shared/types/conversation";
-import {
-  buildConversationBrief,
-  parseExperienceEventRow,
-  parseResidentExperienceRow,
-} from "@/lib/conversation/experience-brief";
-import { generateAndPersistExperienceForParticipants } from "@/lib/conversation/experience-generator";
-import { assessConversationGrounding } from "@/lib/conversation/grounding";
-import type {
-  ConversationResidentProfile,
-  ConversationPairContext,
-} from "@repo/shared/gpt/prompts/conversation-prompt";
+// ---------------------------------------------------------------------------
+// 入力型
+// ---------------------------------------------------------------------------
 
-/** GPTに渡す thread 形状 */
-type ThreadForGpt = {
-  participants: [string, string];
-  status: "ongoing" | "paused" | "done";
-  id: string;
-  updated_at: string;
-  deleted: boolean;
-  topic?: string;
-  lastEventId?: string;
-};
-
+/** パイプラインの入力（データが既に解決済みの場合） */
 export type RunConversationArgs = {
-  /** 既存スレッドID（無ければ undefined） */
-  threadId?: string;
-  /** 参加者 [A,B] */
   participants: [string, string];
-  /** GPTへのヒント（任意） */
-  topicHint?: string;
-  /** 最終要約（任意） */
-  lastSummary?: string;
-  /** クライアント側で把握している住人プロフィール */
-  residentProfilesOverride?: Record<string, ConversationResidentProfile>;
+  /** キャラプロフィール */
+  characters: Record<string, RunCharacterProfile>;
+  /** ペアの関係性 */
+  relation: {
+    type: "none" | "acquaintance" | "friend" | "best_friend" | "lover" | "family";
+    feelingAtoB: { label: string; score: number };
+    feelingBtoA: { label: string; score: number };
+  };
+  /** 環境 */
+  environment: { place: string; timeOfDay: string; weather?: string };
+  /** 前回の会話記憶 */
+  previousMemory?: ConversationMemory | null;
+  /** 最近の共有スニペット */
+  recentSnippets?: SharedSnippet[];
+  /** キャラAが他キャラについて知っていること */
+  knowledgeByA?: OffscreenKnowledge[];
+  /** キャラBが他キャラについて知っていること */
+  knowledgeByB?: OffscreenKnowledge[];
+  /** 最近使われた話題（重複回避用） */
+  recentTopics?: string[];
+  /** 既存スレッドID（なければ新規） */
+  threadId?: string;
 };
 
+export type RunCharacterProfile = {
+  id: string;
+  name: string;
+  gender?: string | null;
+  age?: number | null;
+  occupation?: string | null;
+  firstPerson?: string | null;
+  mbti?: string | null;
+  traits: Partial<Traits>;
+  interests: string[];
+  speechProfile?: SpeechProfile | null;
+};
+
+/** パイプラインの結果 */
 export type RunConversationResult = {
+  threadId: string;
+  output: ConversationOutput;
+  retried: boolean;
+  violations: string[];
+  debug: {
+    topicCandidates: Array<{ source: string; label: string; score: number }>;
+    selectedTopic: { source: string; label: string };
+    structure: {
+      initiator: string;
+      responder: string;
+      initiatorStance: string;
+      responderStance: string;
+      temperature: string;
+    };
+  };
+};
+
+/** APIルートからの入力 */
+export type RunConversationApiArgs =
+  | { threadId: string }
+  | { participants: [string, string] };
+
+/** APIルートへの返却 */
+export type RunConversationApiResult = {
   eventId: string;
   threadId: string;
-  gptOut: GptConversationOutput;
-  evalResult: EvaluationResult;
 };
 
-async function loadResidentProfiles(
-  participantIds: [string, string],
-): Promise<Record<string, ConversationResidentProfile>> {
-  const uniqueIds = Array.from(new Set(participantIds));
-  if (uniqueIds.length === 0) return {};
+export type ConversationStartErrorCode =
+  | "thread_not_found"
+  | "invalid_thread_participants"
+  | "preset_load_failed";
 
-  const presetRows = (await listAny("presets")) as unknown as Array<Record<string, unknown>> | null;
-  const presetMap = new Map<string, Record<string, unknown>>();
-  if (Array.isArray(presetRows)) {
-    for (const raw of presetRows) {
-      const id = typeof raw?.id === "string" ? raw.id : undefined;
-      const isDeleted = Boolean((raw as any)?.deleted);
-      if (!id || isDeleted) continue;
-      presetMap.set(id, raw);
-    }
+export class ConversationStartError extends Error {
+  status: number;
+  code: ConversationStartErrorCode;
+
+  constructor(code: ConversationStartErrorCode, status: number, message?: string) {
+    super(message ?? code);
+    this.name = "ConversationStartError";
+    this.code = code;
+    this.status = status;
   }
-
-  const rows = (await listAny("residents")) as unknown as Array<Record<string, unknown>> | null;
-  const dict: Record<string, ConversationResidentProfile> = {};
-  if (!Array.isArray(rows)) return dict;
-
-  const idSet = new Set(uniqueIds);
-  for (const raw of rows) {
-    const id = typeof raw?.id === "string" ? raw.id : undefined;
-    if (!id || !idSet.has(id)) continue;
-
-    const ageValue = raw && typeof (raw as any).age === "number"
-      ? (raw as any).age
-      : Number.isFinite(Number((raw as any)?.age))
-        ? Number((raw as any).age)
-        : null;
-    const speechPresetRaw = (raw as any)?.speech_preset;
-    const speechPresetId = typeof speechPresetRaw === "string" ? speechPresetRaw : null;
-    const speechPreset = speechPresetId ? presetMap.get(speechPresetId) : undefined;
-    const speechExample = typeof speechPreset?.example === "string" || speechPreset?.example === null
-      ? (speechPreset as any).example ?? null
-      : null;
-    const firstPersonRaw = (raw as any)?.first_person;
-    const firstPersonId = typeof firstPersonRaw === "string" ? firstPersonRaw : null;
-    const firstPersonPreset = firstPersonId ? presetMap.get(firstPersonId) : undefined;
-
-    dict[id] = {
-      id,
-      name: (raw as any)?.name ?? null,
-      mbti: (raw as any)?.mbti ?? null,
-      gender: (raw as any)?.gender ?? null,
-      age: ageValue,
-      occupation: (raw as any)?.occupation ?? null,
-      speechPreset: (speechPreset as any)?.label ?? null,
-      speechPresetDescription: (speechPreset as any)?.description ?? null,
-      speechExample,
-      firstPerson: (firstPersonPreset as any)?.label ?? null,
-      traits: (raw as any)?.traits ?? null,
-      interests: (raw as any)?.interests ?? null,
-    };
-  }
-
-  return dict;
 }
+
+// ---------------------------------------------------------------------------
+// ヘルパー
+// ---------------------------------------------------------------------------
+
+function toCharacterContext(profile: RunCharacterProfile): CharacterContext {
+  return {
+    id: profile.id,
+    name: profile.name,
+    traits: profile.traits,
+    interests: profile.interests,
+  };
+}
+
+function toCharacterProfile(profile: RunCharacterProfile): CharacterProfile {
+  return {
+    id: profile.id,
+    name: profile.name,
+    gender: profile.gender,
+    age: profile.age,
+    occupation: profile.occupation,
+    firstPerson: profile.firstPerson,
+    mbti: profile.mbti,
+    traits: profile.traits,
+    interests: profile.interests,
+    speechProfile: profile.speechProfile,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// KV データ読み込み
+// ---------------------------------------------------------------------------
 
 type RelationRow = {
   a_id?: string;
@@ -136,7 +163,6 @@ type RelationRow = {
 };
 
 type FeelingRow = {
-  id?: string;
   from_id?: string;
   to_id?: string;
   fromId?: string;
@@ -148,22 +174,13 @@ type FeelingRow = {
   deleted?: boolean;
 };
 
-type EventRow = {
+type TopicThreadRow = {
   id?: string;
-  kind?: string;
-  payload?: unknown;
+  participants?: unknown;
   deleted?: boolean;
-  updated_at?: string;
 };
 
-const BRIDGE_PHRASES = [
-  "そういえば",
-  "ところで",
-  "その話で言うと",
-  "関連して",
-  "話は変わるけど",
-] as const;
-const SUMMARY_LINE_MAX = 42;
+const uuidStringSchema = z.string().uuid();
 
 function toUpdatedAtMillis(row: { updated_at?: string; updatedAt?: string }): number {
   const raw = typeof row.updated_at === "string"
@@ -177,118 +194,170 @@ function toUpdatedAtMillis(row: { updated_at?: string; updatedAt?: string }): nu
 }
 
 function pickRelationPair(row: RelationRow): { aId?: string; bId?: string } {
-  const aId = typeof row.a_id === "string"
-    ? row.a_id
-    : typeof row.aId === "string"
-      ? row.aId
-      : undefined;
-  const bId = typeof row.b_id === "string"
-    ? row.b_id
-    : typeof row.bId === "string"
-      ? row.bId
-      : undefined;
-  return { aId, bId };
+  return {
+    aId: typeof row.a_id === "string" ? row.a_id : typeof row.aId === "string" ? row.aId : undefined,
+    bId: typeof row.b_id === "string" ? row.b_id : typeof row.bId === "string" ? row.bId : undefined,
+  };
 }
 
 function pickFeelingPair(row: FeelingRow): { fromId?: string; toId?: string } {
-  const fromId = typeof row.from_id === "string"
-    ? row.from_id
-    : typeof row.fromId === "string"
-      ? row.fromId
-      : undefined;
-  const toId = typeof row.to_id === "string"
-    ? row.to_id
-    : typeof row.toId === "string"
-      ? row.toId
-      : undefined;
-  return { fromId, toId };
+  return {
+    fromId: typeof row.from_id === "string" ? row.from_id : typeof row.fromId === "string" ? row.fromId : undefined,
+    toId: typeof row.to_id === "string" ? row.to_id : typeof row.toId === "string" ? row.toId : undefined,
+  };
 }
 
-function truncateForSummary(text: string, max = SUMMARY_LINE_MAX): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (normalized.length <= max) return normalized;
-  return `${normalized.slice(0, Math.max(0, max - 1))}…`;
+function toParticipantTuple(value: unknown): [string, string] | null {
+  if (!Array.isArray(value) || value.length !== 2) return null;
+  const [a, b] = value;
+  if (typeof a !== "string" || typeof b !== "string") return null;
+  if (!uuidStringSchema.safeParse(a).success || !uuidStringSchema.safeParse(b).success) return null;
+  if (a === b) return null;
+  return [a, b];
 }
 
-function containsBridgePhrase(text: string): boolean {
-  const line = text.trim();
-  if (!line) return false;
-  return BRIDGE_PHRASES.some((phrase) => line.includes(phrase));
-}
+/** 住民プロフィールを KV から読み込み、RunCharacterProfile に変換 */
+async function loadCharacterProfiles(
+  participantIds: [string, string],
+): Promise<Record<string, RunCharacterProfile>> {
+  const uniqueIds = Array.from(new Set(participantIds));
+  if (uniqueIds.length === 0) return {};
 
-function buildLastSummaryFromRecentLines(input: {
-  recentLines: Array<{ speaker: string; text: string }>;
-  residents: Record<string, ConversationResidentProfile>;
-}): string | undefined {
-  const lines = Array.isArray(input.recentLines) ? input.recentLines.slice(-2) : [];
-  if (lines.length === 0) return undefined;
-  const chunks = lines.map((line) => {
-    const speaker = input.residents[line.speaker]?.name ?? line.speaker;
-    return `${speaker}: ${truncateForSummary(line.text)}`;
-  });
-  return `直近会話: ${chunks.join(" / ")}`;
-}
-
-export function shouldAllowTopicShift(input: {
-  previousTopic?: string;
-  nextTopic?: string;
-  tags?: string[];
-  lines: Array<{ speaker: string; text: string }>;
-}): boolean {
-  const previous = input.previousTopic?.trim();
-  const next = input.nextTopic?.trim();
-  if (!previous || !next) return false;
-  if (previous === next) return false;
-  const tags = Array.isArray(input.tags) ? input.tags : [];
-  if (!tags.includes("topic_shift")) return false;
-  const firstHalf = input.lines.slice(0, Math.max(1, Math.ceil(input.lines.length / 2)));
-  return firstHalf.some((line) => containsBridgePhrase(line.text));
-}
-
-function resolveEffectiveTopic(input: {
-  thread: ThreadForGpt;
-  gptOut: GptConversationOutput;
-  nextThreadState: EvaluationResult["threadNextState"];
-}): string {
-  const previousTopic = input.thread.topic?.trim();
-  const nextTopic = input.gptOut.topic?.trim() || previousTopic || "雑談";
-  if (!previousTopic) return nextTopic;
-  if (input.nextThreadState !== "ongoing") return nextTopic;
-  if (shouldAllowTopicShift({
-    previousTopic,
-    nextTopic,
-    tags: input.gptOut.meta?.tags,
-    lines: input.gptOut.lines,
-  })) {
-    return nextTopic;
+  let presetRows: Array<Record<string, unknown>> | null = null;
+  try {
+    presetRows = (await listAny("presets")) as unknown as Array<Record<string, unknown>> | null;
+  } catch (error) {
+    if (error instanceof KvUnauthenticatedError) {
+      throw error;
+    }
+    const msg = (error as Error)?.message ?? String(error);
+    console.error("[runConversationFromApi] Failed to load presets required for style-aware conversation.", {
+      participants: participantIds,
+      message: msg,
+    });
+    throw new ConversationStartError(
+      "preset_load_failed",
+      503,
+      `[runConversationFromApi] Failed to load presets required for style-aware conversation generation: ${msg}`,
+    );
   }
-  return previousTopic;
+
+  const presetMap = new Map<string, Record<string, unknown>>();
+  if (Array.isArray(presetRows)) {
+    for (const raw of presetRows) {
+      const id = typeof raw?.id === "string" ? raw.id : undefined;
+      if (!id || Boolean((raw as any)?.deleted)) continue;
+      presetMap.set(id, raw);
+    }
+  }
+
+  const rows = (await listAny("residents")) as unknown as Array<Record<string, unknown>> | null;
+  const dict: Record<string, RunCharacterProfile> = {};
+  if (!Array.isArray(rows)) return dict;
+
+  const idSet = new Set(uniqueIds);
+  for (const raw of rows) {
+    const id = typeof raw?.id === "string" ? raw.id : undefined;
+    if (!id || !idSet.has(id)) continue;
+
+    const r = raw as any;
+
+    // 年齢
+    const age = typeof r.age === "number" ? r.age
+      : Number.isFinite(Number(r.age)) ? Number(r.age) : null;
+
+    // 一人称
+    const firstPersonId = typeof r.first_person === "string" ? r.first_person : null;
+    const firstPersonPreset = firstPersonId ? presetMap.get(firstPersonId) : undefined;
+    const firstPerson = (firstPersonPreset as any)?.label ?? null;
+
+    // 口調プリセット → SpeechProfile に変換
+    const speechPresetId = typeof r.speech_preset === "string" ? r.speech_preset : null;
+    const speechPreset = speechPresetId ? presetMap.get(speechPresetId) : undefined;
+    let speechProfile: SpeechProfile | null = null;
+    if (speechPreset) {
+      const label = typeof (speechPreset as any).label === "string" ? (speechPreset as any).label : "";
+      const description = typeof (speechPreset as any).description === "string" ? (speechPreset as any).description : "";
+      const example = typeof (speechPreset as any).example === "string" ? (speechPreset as any).example : "";
+      if (label && description) {
+        speechProfile = {
+          label,
+          description,
+          endings: [],          // 既存プリセットには語尾情報がない → 空（今後LLM抽出で補完）
+          frequentPhrases: [],
+          avoidedPhrases: [],
+          examples: example ? [example] : [`（${label}の口調）`],
+        };
+      }
+    }
+
+    // 性格特性
+    const rawTraits = r.traits;
+    const traits: Partial<Traits> = {};
+    if (rawTraits && typeof rawTraits === "object") {
+      for (const key of ["sociability", "empathy", "stubbornness", "activity", "expressiveness"] as const) {
+        const v = (rawTraits as any)[key];
+        if (typeof v === "number" && v >= 1 && v <= 5) traits[key] = v;
+      }
+    }
+
+    // 興味タグ
+    const interests: string[] = Array.isArray(r.interests) ? r.interests.filter((i: unknown) => typeof i === "string") : [];
+
+    dict[id] = {
+      id,
+      name: r.name ?? "不明",
+      gender: r.gender ?? null,
+      age,
+      occupation: r.occupation ?? null,
+      firstPerson,
+      mbti: r.mbti ?? null,
+      traits,
+      interests,
+      speechProfile,
+    };
+  }
+
+  return dict;
 }
 
-async function hasNoneRelationBetween(
-  participants: [string, string],
-): Promise<boolean> {
-  const rows = (await listAny("relations")) as unknown as RelationRow[] | null;
-  if (!Array.isArray(rows)) return false;
+async function resolveParticipantsFromThread(
+  threadId: string,
+): Promise<[string, string]> {
+  const rows = (await listAny("topic_threads")) as unknown as TopicThreadRow[] | null;
+  if (!Array.isArray(rows)) {
+    throw new ConversationStartError(
+      "thread_not_found",
+      404,
+      `[runConversationFromApi] Thread not found: ${threadId}`,
+    );
+  }
 
-  const [a, b] = participants;
+  const thread = rows.find((row) => row?.id === threadId && !row?.deleted);
+  if (!thread) {
+    throw new ConversationStartError(
+      "thread_not_found",
+      404,
+      `[runConversationFromApi] Thread not found: ${threadId}`,
+    );
+  }
 
-  return rows.some((rel) => {
-    if (!rel || rel.deleted) return false;
-    const { aId, bId } = pickRelationPair(rel);
+  const participants = toParticipantTuple(thread.participants);
+  if (!participants) {
+    throw new ConversationStartError(
+      "invalid_thread_participants",
+      422,
+      `[runConversationFromApi] Invalid participants stored in topic_threads: ${threadId}`,
+    );
+  }
 
-    if (!aId || !bId) return false;
-    const isPair =
-      (aId === a && bId === b) ||
-      (aId === b && bId === a);
-
-    return isPair && rel.type === "none";
-  });
+  return participants;
 }
 
-async function loadRelationForPair(
+/** 関係性タイプを KV から読み込み */
+async function loadRelationTypeForPair(
   participants: [string, string],
-): Promise<ConversationPairContext["relationType"]> {
+): Promise<string | undefined> {
   const rows = (await listAny("relations")) as unknown as RelationRow[] | null;
   if (!Array.isArray(rows)) return undefined;
   const [a, b] = participants;
@@ -302,18 +371,18 @@ async function loadRelationForPair(
     })
     .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs));
 
-  if (matches.length === 0) return undefined;
-  return matches[0].type;
+  return matches[0]?.type;
 }
 
+/** 好感度を KV から読み込み */
 async function loadFeelingsForPair(
   participants: [string, string],
-): Promise<NonNullable<ConversationPairContext["feelings"]> | undefined> {
+): Promise<{ aToB: { label: string; score: number }; bToA: { label: string; score: number } }> {
   const rows = (await listAny("feelings")) as unknown as FeelingRow[] | null;
-  if (!Array.isArray(rows)) return undefined;
   const [a, b] = participants;
 
-  const pickLatest = (fromId: string, toId: string) => {
+  const pickLatest = (fromId: string, toId: string): { label: string; score: number } => {
+    if (!Array.isArray(rows)) return { label: "none", score: 0 };
     const found = rows
       .filter((row) => {
         if (!row || row.deleted) return false;
@@ -321,336 +390,224 @@ async function loadFeelingsForPair(
         return pair.fromId === fromId && pair.toId === toId;
       })
       .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs))[0];
-    if (!found) return undefined;
     return {
-      label: typeof found.label === "string" ? found.label : undefined,
-      score: typeof found.score === "number" && Number.isFinite(found.score)
-        ? found.score
-        : undefined,
+      label: typeof found?.label === "string" ? found.label : "none",
+      score: typeof found?.score === "number" && Number.isFinite(found.score) ? found.score : 0,
     };
   };
 
-  const aToB = pickLatest(a, b);
-  const bToA = pickLatest(b, a);
-  if (!aToB && !bToA) return undefined;
-  return { aToB, bToA };
+  return { aToB: pickLatest(a, b), bToA: pickLatest(b, a) };
 }
 
-async function loadRecentLinesFromThread(
-  thread: ThreadForGpt,
-): Promise<Array<{ speaker: string; text: string }>> {
-  if (!thread.lastEventId) return [];
-  const rows = (await listAny("events")) as unknown as EventRow[] | null;
-  if (!Array.isArray(rows)) return [];
-
-  const event = rows.find((row) => row?.id === thread.lastEventId && !row?.deleted);
-  if (!event || event.kind !== "conversation") return [];
-
-  const payload = event.payload as { lines?: unknown } | undefined;
-  const sourceLines = Array.isArray(payload?.lines) ? payload.lines : [];
-
-  return sourceLines
-    .map((line) => {
-      const speaker = typeof (line as any)?.speaker === "string" ? (line as any).speaker : "";
-      const text = typeof (line as any)?.text === "string" ? (line as any).text.trim() : "";
-      if (!speaker || !text) return null;
-      return { speaker, text };
-    })
-    .filter((line): line is { speaker: string; text: string } => Boolean(line))
-    .slice(-4);
+/** 時間帯に基づく環境情報を決定 */
+function determineEnvironment(): { place: string; timeOfDay: string } {
+  const now = new Date();
+  const hourText = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    hour12: false,
+  }).format(now);
+  const hour = Number(hourText);
+  const effectiveHour = Number.isFinite(hour) ? hour : now.getUTCHours();
+  if (effectiveHour >= 6 && effectiveHour < 11) return { place: "駅前カフェ", timeOfDay: "朝" };
+  if (effectiveHour >= 11 && effectiveHour < 16) return { place: "商店街", timeOfDay: "昼" };
+  if (effectiveHour >= 16 && effectiveHour < 20) return { place: "川沿い公園", timeOfDay: "夕方" };
+  return { place: "コンビニ", timeOfDay: "夜" };
 }
 
-async function loadRecentAnchorSignaturesForPair(
-  participants: [string, string],
-): Promise<string[]> {
-  const rows = (await listAny("events")) as unknown as EventRow[] | null;
-  if (!Array.isArray(rows)) return [];
-  const [a, b] = participants;
-
-  return rows
-    .filter((row) => row?.kind === "conversation" && !row?.deleted)
-    .sort((lhs, rhs) => {
-      const l = typeof lhs?.updated_at === "string" ? Date.parse(lhs.updated_at) : 0;
-      const r = typeof rhs?.updated_at === "string" ? Date.parse(rhs.updated_at) : 0;
-      return (Number.isFinite(r) ? r : 0) - (Number.isFinite(l) ? l : 0);
-    })
-    .map((row) => row.payload as {
-      participants?: unknown;
-      meta?: { anchorSignature?: unknown } | null;
-    } | undefined)
-    .filter((payload) => {
-      const ps = payload?.participants;
-      return Array.isArray(ps)
-        && ps.length === 2
-        && ((ps[0] === a && ps[1] === b) || (ps[0] === b && ps[1] === a));
-    })
-    .map((payload) => payload?.meta?.anchorSignature)
-    .filter((signature): signature is string => typeof signature === "string" && signature.length > 0)
-    .slice(0, 30);
-}
-
-function fallbackBrief(hasRecentConversation: boolean): ConversationBrief {
-  const fallbackMode = hasRecentConversation ? "continuation" : "free";
-  return {
-    anchorFact: fallbackMode === "continuation" ? "直近の会話の続き" : "日常の雑談",
-    speakerAppraisal: [],
-    speakerHookIntent: [],
-    expressionStyle: "mixed",
-    fallbackMode,
-  };
-}
-
-function isExperienceModeEnabled(): boolean {
-  return (process.env.NEXT_PUBLIC_EXPERIENCE_MODE ?? "on").toLowerCase() !== "off";
-}
-
-async function loadExperienceBrief(input: {
-  participants: [string, string];
-  hasRecentConversation: boolean;
-  nowIso: string;
-}): Promise<ConversationBrief> {
-  const [eventRows, residentRows, recentAnchorSignatures] = await Promise.all([
-    listAny("experience_events") as Promise<Array<Record<string, unknown>>>,
-    listAny("resident_experiences") as Promise<Array<Record<string, unknown>>>,
-    loadRecentAnchorSignaturesForPair(input.participants),
-  ]);
-
-  const events: ExperienceEvent[] = Array.isArray(eventRows)
-    ? eventRows
-        .map((row) => parseExperienceEventRow(row))
-        .filter((row): row is ExperienceEvent => Boolean(row))
-    : [];
-  const residentExperiences: ResidentExperience[] = Array.isArray(residentRows)
-    ? residentRows
-        .map((row) => parseResidentExperienceRow(row))
-        .filter((row): row is ResidentExperience => Boolean(row))
-    : [];
-
-  if (events.length === 0 || residentExperiences.length === 0) {
-    return fallbackBrief(input.hasRecentConversation);
-  }
-
-  return buildConversationBrief({
-    participants: input.participants,
-    experienceEvents: events,
-    residentExperiences,
-    nowIso: input.nowIso,
-    recentAnchorSignatures,
-    hasRecentConversation: input.hasRecentConversation,
-  });
-}
-
-function withGroundingMeta(
-  gptOut: GptConversationOutput,
-  brief: ConversationBrief,
-): GptConversationOutput {
-  const grounding = assessConversationGrounding({
-    brief,
-    lines: gptOut.lines,
-  });
-
-  return {
-    ...gptOut,
-    meta: {
-      ...gptOut.meta,
-      anchorExperienceId: brief.anchorExperienceId,
-      anchorSignature: brief.anchorSignature,
-      fallbackMode: brief.fallbackMode,
-      grounded: grounding.ok,
-      groundingEvidence: grounding.evidence,
-    },
-  };
-}
-
-/** threadId と participants から GPT向けの thread オブジェクトを構築 */
-async function ensureThreadForGpt(input: {
-  threadId?: string;
-  participants: [string, string];
-}): Promise<ThreadForGpt> {
-  const now = new Date().toISOString();
-
-  if (input.threadId) {
-    const allThreads = (await listAny("topic_threads")) as unknown as
-      | TopicThread[]
-      | null;
-
-    if (Array.isArray(allThreads)) {
-      const found = allThreads.find((t) => t.id === input.threadId);
-
-      if (found) {
-        const t = found;
-        const status: "ongoing" | "paused" | "done" = (t.status ??
-          "ongoing") as any;
-        return {
-          id: t.id,
-          participants:
-            (t.participants as [string, string]) ?? input.participants,
-          status,
-          topic: t.topic,
-          lastEventId: (t as any).lastEventId ?? (t as any).last_event_id,
-          updated_at: t.updated_at ?? now,
-          deleted: !!t.deleted,
-        };
-      }
-    }
-  }
-
-  return {
-    id: input.threadId ?? newId(),
-    participants: input.participants,
-    status: "ongoing",
-    updated_at: now,
-    deleted: false,
-  };
-}
+// ---------------------------------------------------------------------------
+// パイプライン（データ解決済み版）
+// ---------------------------------------------------------------------------
 
 export async function runConversation(
   args: RunConversationArgs,
 ): Promise<RunConversationResult> {
-  const {
-    participants,
-    threadId,
-    topicHint,
-    lastSummary,
-    residentProfilesOverride,
-  } = args;
+  const [aId, bId] = args.participants;
+  const charA = args.characters[aId];
+  const charB = args.characters[bId];
 
-  const thread: ThreadForGpt = await ensureThreadForGpt({
-    threadId,
-    participants,
-  });
-  const participantSet = new Set(participants);
-
-  let relationBlocked = false;
-  try {
-    relationBlocked = await hasNoneRelationBetween(thread.participants);
-  } catch (error) {
-    console.warn('[runConversation] Failed to load relations for participants.', error);
+  if (!charA || !charB) {
+    throw new Error(`[runConversation] Missing character profile for participants.`);
   }
-  if (relationBlocked) {
+
+  // 関係性が "none" なら会話しない
+  if (args.relation.type === "none") {
     throw new Error("[runConversation] Conversation aborted because relation is 'none'.");
   }
 
-  let residents: Record<string, ConversationResidentProfile> = {};
+  const threadId = args.threadId ?? newId();
+  const ctxA = toCharacterContext(charA);
+  const ctxB = toCharacterContext(charB);
+
+  // 話題選定と会話構造の主導者を一致させるため、先に主導者シードを確定する。
+  const seedTopic: SelectedTopic = {
+    source: "environmental",
+    label: `${args.environment.place}での出来事`,
+    detail: `${args.environment.timeOfDay}の${args.environment.place}`,
+  };
+  const { initiator: seedInitiator, responder: seedResponder } = determineInitiator(ctxA, ctxB, seedTopic);
+
+  // --- 1. 話題選定 ---
+  const topicInput: TopicSelectionInput = {
+    characterA: ctxA,
+    characterB: ctxB,
+    relation: args.relation,
+    previousMemory: args.previousMemory ?? null,
+    recentSnippets: args.recentSnippets ?? [],
+    knowledgeByA: args.knowledgeByA ?? [],
+    knowledgeByB: args.knowledgeByB ?? [],
+    recentTopics: args.recentTopics ?? [],
+    environment: args.environment,
+  };
+
+  const { selected: topic, candidates: topicCandidates } = selectTopic(
+    topicInput,
+    seedInitiator,
+    seedResponder,
+  );
+
+  // --- 2. 会話構造決定 ---
+  const structureInput: StructureInput = {
+    characterA: ctxA,
+    characterB: ctxB,
+    relation: args.relation,
+    topic,
+    initiatorOverrideId: seedInitiator.id,
+  };
+  const structure = buildConversationStructure(structureInput);
+
+  // --- 3. プロンプト構築 + GPT呼び出し ---
+  const promptInput: PromptInput = {
+    characters: [toCharacterProfile(charA), toCharacterProfile(charB)],
+    relation: args.relation,
+    structure,
+    topic,
+    environment: args.environment,
+    recentSnippets: args.recentSnippets ?? [],
+    previousMemory: args.previousMemory ?? null,
+    threadId,
+  };
+
+  // 一人称マップ
+  const firstPersonMap: Record<string, string> = {};
+  if (charA.firstPerson) firstPersonMap[charA.id] = charA.firstPerson;
+  if (charB.firstPerson) firstPersonMap[charB.id] = charB.firstPerson;
+
+  const gptResult: CallGptResult = await callGptForConversation(
+    promptInput,
+    structure,
+    firstPersonMap,
+  );
+
+  return {
+    threadId,
+    output: gptResult.output,
+    retried: gptResult.retried,
+    violations: gptResult.violations,
+    debug: {
+      topicCandidates: topicCandidates.map((c) => ({
+        source: c.source,
+        label: c.label,
+        score: c.score,
+      })),
+      selectedTopic: {
+        source: topic.source,
+        label: topic.label,
+      },
+      structure: {
+        initiator: structure.initiatorName,
+        responder: structure.responderName,
+        initiatorStance: structure.initiatorStance,
+        responderStance: structure.responderStance,
+        temperature: structure.temperature,
+      },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// APIルート用エントリポイント（KVからデータ読み込み → パイプライン → 永続化）
+// ---------------------------------------------------------------------------
+
+/**
+ * APIルートから呼ばれるメインエントリポイント。
+ * KVストアからプロフィール・関係性・好感度を読み込み、
+ * パイプラインを実行し、結果を永続化して返す。
+ */
+export async function runConversationFromApi(
+  args: RunConversationApiArgs,
+): Promise<RunConversationApiResult> {
+  let threadId: string | undefined;
+  let participants: [string, string];
+  if ("threadId" in args) {
+    threadId = args.threadId;
+    participants = await resolveParticipantsFromThread(args.threadId);
+  } else {
+    participants = args.participants;
+  }
+
+  // 1) プロフィール読み込み
+  const characters = await loadCharacterProfiles(participants);
+  if (!characters[participants[0]] || !characters[participants[1]]) {
+    throw new Error("[runConversationFromApi] Could not load profiles for one or both participants.");
+  }
+
+  // 2) 関係性読み込み
+  let relationType: string | undefined;
   try {
-    residents = await loadResidentProfiles(participants);
+    relationType = await loadRelationTypeForPair(participants);
   } catch (error) {
-    console.warn('[runConversation] Failed to load residents from server, fallback to overrides.', error);
+    console.warn("[runConversationFromApi] Failed to load relation.", error);
   }
-  if (residentProfilesOverride) {
-    for (const [residentId, profile] of Object.entries(residentProfilesOverride)) {
-      if (!participantSet.has(residentId) || !profile?.id) continue;
-      residents[residentId] = profile;
-    }
+  if (relationType === "none") {
+    throw new Error("[runConversationFromApi] Conversation aborted because relation is 'none'.");
   }
 
-  let pairContext: ConversationPairContext | undefined;
-  let relationType: ConversationPairContext["relationType"] | undefined;
-  let feelings: NonNullable<ConversationPairContext["feelings"]> | undefined;
-  let recentLines: Array<{ speaker: string; text: string }> = [];
-
+  // 3) 好感度読み込み
+  let feelings = { aToB: { label: "none", score: 0 }, bToA: { label: "none", score: 0 } };
   try {
-    relationType = await loadRelationForPair(thread.participants);
+    feelings = await loadFeelingsForPair(participants);
   } catch (error) {
-    console.warn("[runConversation] Failed to load pair relation context.", error);
+    console.warn("[runConversationFromApi] Failed to load feelings.", error);
   }
 
-  try {
-    feelings = await loadFeelingsForPair(thread.participants);
-  } catch (error) {
-    console.warn("[runConversation] Failed to load pair feeling context.", error);
-  }
+  // 4) 環境決定
+  const environment = determineEnvironment();
 
-  try {
-    recentLines = await loadRecentLinesFromThread(thread);
-  } catch (error) {
-    console.warn("[runConversation] Failed to load recent lines for prompt context.", error);
-  }
-
-  if (relationType || feelings || recentLines.length > 0) {
-    pairContext = {
-      relationType,
-      feelings,
-      recentLines: recentLines.length > 0 ? recentLines : undefined,
-    };
-  }
-  const effectiveLastSummary = (typeof lastSummary === "string" && lastSummary.trim().length > 0)
-    ? lastSummary.trim()
-    : buildLastSummaryFromRecentLines({
-      recentLines,
-      residents,
-    });
-
-  const nowIso = new Date().toISOString();
-  const experienceModeEnabled = isExperienceModeEnabled();
-  if (experienceModeEnabled) {
-    try {
-      await generateAndPersistExperienceForParticipants({
-        participants: thread.participants,
-        nowIso,
-      });
-    } catch (error) {
-      console.warn("[runConversation] Failed to generate experience events.", error);
-    }
-  }
-
-  let brief = fallbackBrief(recentLines.length > 0);
-  if (experienceModeEnabled) {
-    try {
-      brief = await loadExperienceBrief({
-        participants: thread.participants,
-        hasRecentConversation: recentLines.length > 0,
-        nowIso,
-      });
-    } catch (error) {
-      console.warn("[runConversation] Failed to load experiences. Fallback to continuation/free mode.", error);
-    }
-  }
-
-  const gptOutRaw: GptConversationOutput = await callGptForConversation({
-    thread,
-    brief,
-    topicHint,
-    lastSummary: effectiveLastSummary,
-    residents,
-    pairContext,
+  // 5) パイプライン実行
+  const result = await runConversation({
+    participants,
+    characters,
+    relation: {
+      type: (relationType ?? "acquaintance") as RunConversationArgs["relation"]["type"],
+      feelingAtoB: feelings.aToB,
+      feelingBtoA: feelings.bToA,
+    },
+    environment,
+    threadId,
+    // TODO: 以下は今後バッチ生成機能から取得
+    // previousMemory, recentSnippets, knowledgeByA, knowledgeByB, recentTopics
   });
 
-  if (!gptOutRaw) {
-    throw new Error(
-      "[runConversation] gptOut is null or undefined. callGptForConversation likely failed.",
-    );
-  }
-
-  const gptOut = withGroundingMeta(gptOutRaw, brief);
-  const ensuredThreadId = gptOut.threadId;
-
+  // 6) 評価
   const evalInput: EvalInput = {
-    threadId: ensuredThreadId,
+    threadId: result.threadId,
     participants,
-    lines: gptOut.lines,
-    meta: gptOut.meta,
+    lines: result.output.lines,
+    meta: {
+      tags: result.output.meta.tags,
+      signals: result.output.meta.signals,
+      qualityHints: result.output.meta.qualityHints,
+    },
   };
   const evalResult = evaluateConversation(evalInput);
 
-  const effectiveTopic = resolveEffectiveTopic({
-    thread,
-    gptOut,
-    nextThreadState: evalResult.threadNextState,
-  });
-  const effectiveGptOut = effectiveTopic === gptOut.topic
-    ? gptOut
-    : { ...gptOut, topic: effectiveTopic };
-
+  // 7) 永続化
+  // 新出力はv1の GptConversationOutput と構造的に互換
   const { eventId } = await persistConversation({
-    gptOut: effectiveGptOut,
+    gptOut: result.output as unknown as GptConversationOutput,
     evalResult,
   });
 
-  return {
-    eventId,
-    threadId: ensuredThreadId,
-    gptOut: effectiveGptOut,
-    evalResult,
-  };
+  return { eventId, threadId: result.threadId };
 }
