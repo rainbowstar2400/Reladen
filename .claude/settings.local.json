@@ -25,6 +25,7 @@
       "Bash(git rm packages/shared/gpt/schemas/conversation-output-v2.ts)",
       "Bash(C:/Users/cs24035/Documents/develop/Reladen/apps/web/node_modules/.bin/tsc --noEmit --skipLibCheck)",
       "Bash(git add apps/web/app/api/conversations/start/route.ts apps/web/lib/conversation/run-conversation.ts apps/web/lib/gpt/call-gpt-for-conversation.ts packages/shared/gpt/prompts/conversation-prompt.ts packages/shared/gpt/prompts/trait-descriptions.ts packages/shared/gpt/schemas/conversation-output.ts packages/shared/logic/conversation-structure.ts packages/shared/logic/conversation-validator.ts packages/shared/logic/knowledge-propagation.ts packages/shared/logic/snippet-generator.ts packages/shared/logic/topic-selection.ts packages/shared/types/conversation-generation.ts packages/shared/types/conversation.ts packages/shared/types/index.ts)"
+      "Bash(ls:*)"
     ]
   }
 }
