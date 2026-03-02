@@ -238,6 +238,7 @@ export type StructureInput = {
   characterB: CharacterContext;
   relation: RelationContext;
   topic: SelectedTopic;
+  initiatorOverrideId?: string;
 };
 
 /**
@@ -246,10 +247,14 @@ export type StructureInput = {
 export function buildConversationStructure(
   input: StructureInput,
 ): ConversationStructure {
-  const { characterA, characterB, relation, topic } = input;
+  const { characterA, characterB, relation, topic, initiatorOverrideId } = input;
 
   // 1. 主導者・追随者の決定
-  const { initiator, responder } = determineInitiator(characterA, characterB, topic);
+  const { initiator, responder } = initiatorOverrideId === characterA.id
+    ? { initiator: characterA, responder: characterB }
+    : initiatorOverrideId === characterB.id
+      ? { initiator: characterB, responder: characterA }
+      : determineInitiator(characterA, characterB, topic);
 
   // 2. 話題への興味判定
   const initiatorTopicInterest = hasTopicInterest(initiator, topic);

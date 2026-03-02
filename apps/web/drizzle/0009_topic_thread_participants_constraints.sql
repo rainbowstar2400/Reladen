@@ -1,0 +1,13 @@
+DO $$ BEGIN
+  ALTER TABLE "topic_threads"
+    ADD CONSTRAINT "topic_threads_participants_len_chk"
+    CHECK (
+      jsonb_typeof("participants") = 'array'
+      AND jsonb_array_length("participants") = 2
+      AND jsonb_typeof("participants"->0) = 'string'
+      AND jsonb_typeof("participants"->1) = 'string'
+      AND ("participants"->>0) <> ("participants"->>1)
+    );
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;

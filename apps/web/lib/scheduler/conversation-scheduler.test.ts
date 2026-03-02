@@ -151,6 +151,8 @@ describe("conversation scheduler", () => {
 
     expect(result.status).toBe("started");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}");
+    expect(body).toEqual({ participants: ["resident_A", "resident_B"] });
   });
 
   it("手動発火(forceなし)は最短間隔内だと skipped を返す", async () => {
@@ -164,5 +166,41 @@ describe("conversation scheduler", () => {
 
     expect(result).toMatchObject({ status: "skipped", reason: "recently_ran" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("既存スレッドがある場合は threadId のみを送信する", async () => {
+    mocks.listLocal.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "residents":
+          return [
+            { id: "resident_A", name: "A", deleted: false },
+            { id: "resident_B", name: "B", deleted: false },
+          ];
+        case "relations":
+          return [];
+        case "topic_threads":
+          return [
+            {
+              id: "thread_1",
+              participants: ["resident_A", "resident_B"],
+              status: "ongoing",
+              updated_at: "2026-01-01T00:00:00.000Z",
+              deleted: false,
+            },
+          ];
+        default:
+          return [];
+      }
+    });
+
+    const result = await triggerConversationNow({
+      force: true,
+      baseIntervalMs: 900_000,
+    });
+
+    expect(result.status).toBe("started");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}");
+    expect(body).toEqual({ threadId: "thread_1" });
   });
 });

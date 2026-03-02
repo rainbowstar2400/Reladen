@@ -15,9 +15,10 @@ import type {
   OffscreenKnowledge,
   SpeechProfile,
   Traits,
+  SelectedTopic,
 } from "@repo/shared/types/conversation-generation";
 import { selectTopic, type TopicSelectionInput, type CharacterContext } from "@repo/shared/logic/topic-selection";
-import { buildConversationStructure, type StructureInput } from "@repo/shared/logic/conversation-structure";
+import { buildConversationStructure, determineInitiator, type StructureInput } from "@repo/shared/logic/conversation-structure";
 import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
@@ -25,6 +26,7 @@ import { listKV as listAny } from "@/lib/db/kv-server";
 import { persistConversation } from "@/lib/persist/persist-conversation";
 import { evaluateConversation, type EvalInput } from "@/lib/evaluation/evaluate-conversation";
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
+import { z } from "zod";
 
 // ---------------------------------------------------------------------------
 // 入力型
@@ -90,16 +92,31 @@ export type RunConversationResult = {
 };
 
 /** APIルートからの入力 */
-export type RunConversationApiArgs = {
-  threadId?: string;
-  participants: [string, string];
-};
+export type RunConversationApiArgs =
+  | { threadId: string }
+  | { participants: [string, string] };
 
 /** APIルートへの返却 */
 export type RunConversationApiResult = {
   eventId: string;
   threadId: string;
 };
+
+export type ConversationStartErrorCode =
+  | "thread_not_found"
+  | "invalid_thread_participants";
+
+export class ConversationStartError extends Error {
+  status: number;
+  code: ConversationStartErrorCode;
+
+  constructor(code: ConversationStartErrorCode, status: number, message?: string) {
+    super(message ?? code);
+    this.name = "ConversationStartError";
+    this.code = code;
+    this.status = status;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // ヘルパー
@@ -156,6 +173,14 @@ type FeelingRow = {
   deleted?: boolean;
 };
 
+type TopicThreadRow = {
+  id?: string;
+  participants?: unknown;
+  deleted?: boolean;
+};
+
+const uuidStringSchema = z.string().uuid();
+
 function toUpdatedAtMillis(row: { updated_at?: string; updatedAt?: string }): number {
   const raw = typeof row.updated_at === "string"
     ? row.updated_at
@@ -179,6 +204,15 @@ function pickFeelingPair(row: FeelingRow): { fromId?: string; toId?: string } {
     fromId: typeof row.from_id === "string" ? row.from_id : typeof row.fromId === "string" ? row.fromId : undefined,
     toId: typeof row.to_id === "string" ? row.to_id : typeof row.toId === "string" ? row.toId : undefined,
   };
+}
+
+function toParticipantTuple(value: unknown): [string, string] | null {
+  if (!Array.isArray(value) || value.length !== 2) return null;
+  const [a, b] = value;
+  if (typeof a !== "string" || typeof b !== "string") return null;
+  if (!uuidStringSchema.safeParse(a).success || !uuidStringSchema.safeParse(b).success) return null;
+  if (a === b) return null;
+  return [a, b];
 }
 
 /** 住民プロフィールを KV から読み込み、RunCharacterProfile に変換 */
@@ -268,6 +302,39 @@ async function loadCharacterProfiles(
   return dict;
 }
 
+async function resolveParticipantsFromThread(
+  threadId: string,
+): Promise<[string, string]> {
+  const rows = (await listAny("topic_threads")) as unknown as TopicThreadRow[] | null;
+  if (!Array.isArray(rows)) {
+    throw new ConversationStartError(
+      "thread_not_found",
+      404,
+      `[runConversationFromApi] Thread not found: ${threadId}`,
+    );
+  }
+
+  const thread = rows.find((row) => row?.id === threadId && !row?.deleted);
+  if (!thread) {
+    throw new ConversationStartError(
+      "thread_not_found",
+      404,
+      `[runConversationFromApi] Thread not found: ${threadId}`,
+    );
+  }
+
+  const participants = toParticipantTuple(thread.participants);
+  if (!participants) {
+    throw new ConversationStartError(
+      "invalid_thread_participants",
+      422,
+      `[runConversationFromApi] Invalid participants stored in topic_threads: ${threadId}`,
+    );
+  }
+
+  return participants;
+}
+
 /** 関係性タイプを KV から読み込み */
 async function loadRelationTypeForPair(
   participants: [string, string],
@@ -343,11 +410,21 @@ export async function runConversation(
   }
 
   const threadId = args.threadId ?? newId();
+  const ctxA = toCharacterContext(charA);
+  const ctxB = toCharacterContext(charB);
+
+  // 話題選定と会話構造の主導者を一致させるため、先に主導者シードを確定する。
+  const seedTopic: SelectedTopic = {
+    source: "environmental",
+    label: `${args.environment.place}での出来事`,
+    detail: `${args.environment.timeOfDay}の${args.environment.place}`,
+  };
+  const { initiator: seedInitiator, responder: seedResponder } = determineInitiator(ctxA, ctxB, seedTopic);
 
   // --- 1. 話題選定 ---
   const topicInput: TopicSelectionInput = {
-    characterA: toCharacterContext(charA),
-    characterB: toCharacterContext(charB),
+    characterA: ctxA,
+    characterB: ctxB,
     relation: args.relation,
     previousMemory: args.previousMemory ?? null,
     recentSnippets: args.recentSnippets ?? [],
@@ -357,10 +434,11 @@ export async function runConversation(
     environment: args.environment,
   };
 
-  // 主導者の仮判定（話題選定にinitiatorsの興味が影響するため）
-  const ctxA = toCharacterContext(charA);
-  const ctxB = toCharacterContext(charB);
-  const { selected: topic, candidates: topicCandidates } = selectTopic(topicInput, ctxA, ctxB);
+  const { selected: topic, candidates: topicCandidates } = selectTopic(
+    topicInput,
+    seedInitiator,
+    seedResponder,
+  );
 
   // --- 2. 会話構造決定 ---
   const structureInput: StructureInput = {
@@ -368,6 +446,7 @@ export async function runConversation(
     characterB: ctxB,
     relation: args.relation,
     topic,
+    initiatorOverrideId: seedInitiator.id,
   };
   const structure = buildConversationStructure(structureInput);
 
@@ -432,7 +511,14 @@ export async function runConversation(
 export async function runConversationFromApi(
   args: RunConversationApiArgs,
 ): Promise<RunConversationApiResult> {
-  const { participants, threadId } = args;
+  let threadId: string | undefined;
+  let participants: [string, string];
+  if ("threadId" in args) {
+    threadId = args.threadId;
+    participants = await resolveParticipantsFromThread(args.threadId);
+  } else {
+    participants = args.participants;
+  }
 
   // 1) プロフィール読み込み
   const characters = await loadCharacterProfiles(participants);

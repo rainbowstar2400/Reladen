@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { runConversationFromApi } from '@/lib/conversation/run-conversation';
+import { ConversationStartError, runConversationFromApi } from '@/lib/conversation/run-conversation';
 import { KvUnauthenticatedError } from '@/lib/db/kv-server';
 
-const startConversationSchema = z.object({
-  threadId: z.string().uuid().optional(),
-  participants: z.tuple([z.string().min(1), z.string().min(1)]),
-});
+const startConversationSchema = z.union([
+  z.object({
+    threadId: z.string().uuid(),
+  }).strict(),
+  z.object({
+    participants: z.tuple([z.string().uuid(), z.string().uuid()]),
+  }).strict(),
+]);
 
 export async function POST(req: Request) {
   let payload: unknown;
@@ -24,13 +28,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const { threadId, participants } = parsed.data;
-
   try {
-    const { eventId, threadId: ensuredThreadId } = await runConversationFromApi({
-      threadId,
-      participants,
-    });
+    const { eventId, threadId: ensuredThreadId } = await runConversationFromApi(parsed.data);
 
     return NextResponse.json({ eventId, threadId: ensuredThreadId });
   } catch (error) {
@@ -44,6 +43,9 @@ export async function POST(req: Request) {
 
     if (error instanceof KvUnauthenticatedError) {
       return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+    }
+    if (error instanceof ConversationStartError) {
+      return NextResponse.json({ error: error.code }, { status: error.status });
     }
 
     return NextResponse.json(

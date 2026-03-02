@@ -59,10 +59,10 @@ export const conversationResponseSchema = {
     type: "object",
     additionalProperties: false,
     properties: {
-      threadId: { type: "string" },
+      threadId: { type: "string", format: "uuid" },
       participants: {
         type: "array",
-        items: { type: "string" },
+        items: { type: "string", format: "uuid" },
         minItems: 2,
         maxItems: 2,
       },
@@ -74,7 +74,7 @@ export const conversationResponseSchema = {
           type: "object",
           additionalProperties: false,
           properties: {
-            speaker: { type: "string" },
+            speaker: { type: "string", format: "uuid" },
             text: { type: "string" },
           },
           required: ["speaker", "text"],
@@ -125,7 +125,7 @@ export const conversationResponseSchema = {
                   type: "object",
                   additionalProperties: false,
                   properties: {
-                    about: { type: "string" },
+                    about: { type: "string", format: "uuid" },
                     fact: { type: "string" },
                   },
                   required: ["about", "fact"],

@@ -10,10 +10,9 @@ import type { TopicThread } from "@repo/shared/types/conversation";
 import { selectConversationCandidates } from "@/lib/conversation/candidates";
 import type { Resident, Relation } from "@/types";
 
-type StartConversationPayload = {
-  threadId?: string;
-  participants: [string, string];
-};
+type StartConversationPayload =
+  | { threadId: string }
+  | { participants: [string, string] };
 
 async function callConversationApi(input: StartConversationPayload) {
   const res = await fetch("/api/conversations/start", {
@@ -305,10 +304,11 @@ export async function triggerConversationNow(
       };
     }
 
-    await callConversationApi({
-      threadId: target.threadId,
-      participants: target.participants,
-    });
+    await callConversationApi(
+      target.threadId
+        ? { threadId: target.threadId }
+        : { participants: target.participants },
+    );
 
     markConversationRun();
     if (!force) refreshLock();
