@@ -104,7 +104,8 @@ export type RunConversationApiResult = {
 
 export type ConversationStartErrorCode =
   | "thread_not_found"
-  | "invalid_thread_participants";
+  | "invalid_thread_participants"
+  | "preset_load_failed";
 
 export class ConversationStartError extends Error {
   status: number;
@@ -222,7 +223,22 @@ async function loadCharacterProfiles(
   const uniqueIds = Array.from(new Set(participantIds));
   if (uniqueIds.length === 0) return {};
 
-  const presetRows = (await listAny("presets")) as unknown as Array<Record<string, unknown>> | null;
+  let presetRows: Array<Record<string, unknown>> | null = null;
+  try {
+    presetRows = (await listAny("presets")) as unknown as Array<Record<string, unknown>> | null;
+  } catch (error) {
+    const msg = (error as Error)?.message ?? String(error);
+    console.error("[runConversationFromApi] Failed to load presets required for style-aware conversation.", {
+      participants: participantIds,
+      message: msg,
+    });
+    throw new ConversationStartError(
+      "preset_load_failed",
+      503,
+      `[runConversationFromApi] Failed to load presets required for style-aware conversation generation: ${msg}`,
+    );
+  }
+
   const presetMap = new Map<string, Record<string, unknown>>();
   if (Array.isArray(presetRows)) {
     for (const raw of presetRows) {
@@ -382,10 +398,17 @@ async function loadFeelingsForPair(
 
 /** 時間帯に基づく環境情報を決定 */
 function determineEnvironment(): { place: string; timeOfDay: string } {
-  const hour = new Date().getHours();
-  if (hour >= 6 && hour < 11) return { place: "駅前カフェ", timeOfDay: "朝" };
-  if (hour >= 11 && hour < 16) return { place: "商店街", timeOfDay: "昼" };
-  if (hour >= 16 && hour < 20) return { place: "川沿い公園", timeOfDay: "夕方" };
+  const now = new Date();
+  const hourText = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tokyo",
+    hour: "2-digit",
+    hour12: false,
+  }).format(now);
+  const hour = Number(hourText);
+  const effectiveHour = Number.isFinite(hour) ? hour : now.getUTCHours();
+  if (effectiveHour >= 6 && effectiveHour < 11) return { place: "駅前カフェ", timeOfDay: "朝" };
+  if (effectiveHour >= 11 && effectiveHour < 16) return { place: "商店街", timeOfDay: "昼" };
+  if (effectiveHour >= 16 && effectiveHour < 20) return { place: "川沿い公園", timeOfDay: "夕方" };
   return { place: "コンビニ", timeOfDay: "夜" };
 }
 

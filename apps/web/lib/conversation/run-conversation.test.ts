@@ -282,6 +282,29 @@ describe("run-conversation", () => {
     });
   });
 
+  it("presets 取得失敗時は preset_load_failed を返す", async () => {
+    mocks.listKV.mockImplementation(async (table: string) => {
+      if (table === "presets") {
+        throw new Error("presets unavailable");
+      }
+      if (table === "residents") {
+        return baseResidents();
+      }
+      if (table === "relations") {
+        return [{ a_id: A_ID, b_id: B_ID, type: "friend", deleted: false }];
+      }
+      if (table === "feelings") {
+        return [];
+      }
+      return [];
+    });
+
+    await expect(runConversationFromApi({ participants: [A_ID, B_ID] })).rejects.toMatchObject({
+      code: "preset_load_failed",
+      status: 503,
+    });
+  });
+
   it("runConversation は話題選定の主導者を構造決定にも引き継ぐ", async () => {
     const result = await runConversation({
       participants: [A_ID, B_ID],

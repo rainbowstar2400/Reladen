@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   runConversationFromApi: vi.fn(),
   MockConversationStartError: class MockConversationStartError extends Error {
-    code: "thread_not_found" | "invalid_thread_participants";
+    code: "thread_not_found" | "invalid_thread_participants" | "preset_load_failed";
     status: number;
 
-    constructor(code: "thread_not_found" | "invalid_thread_participants", status: number) {
+    constructor(code: "thread_not_found" | "invalid_thread_participants" | "preset_load_failed", status: number) {
       super(code);
       this.name = "ConversationStartError";
       this.code = code;
@@ -102,5 +102,17 @@ describe("POST /api/conversations/start", () => {
 
     expect(res.status).toBe(404);
     expect(data).toEqual({ error: "thread_not_found" });
+  });
+
+  it("presets 取得失敗時は 503 preset_load_failed を返す", async () => {
+    mocks.runConversationFromApi.mockRejectedValue(
+      new mocks.MockConversationStartError("preset_load_failed", 503),
+    );
+
+    const res = await POST(makeRequest({ participants: [A_ID, B_ID] }));
+    const data = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(data).toEqual({ error: "preset_load_failed" });
   });
 });
