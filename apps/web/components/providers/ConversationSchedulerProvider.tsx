@@ -52,7 +52,11 @@ export default function ConversationSchedulerProvider(props: Props) {
     stopRef.current = null;
 
     if (!shouldRunScheduler) {
-      if (enabled && ready && !user) {
+      if (!enabled) {
+        console.info("[ConversationScheduler] スキップ: NEXT_PUBLIC_CONV_SCHEDULER=off のため無効です。");
+      } else if (!ready) {
+        console.info("[ConversationScheduler] スキップ: 認証の準備中…");
+      } else if (!user) {
         console.info("[ConversationScheduler] スキップ: 未ログインのため会話生成を停止しています。");
       }
       return () => {
