@@ -417,6 +417,8 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
   const O = { ...DEFAULTS, ...(opts ?? {}) };
   if (!O.enabled) return { stop: () => { } };
 
+  console.log(`[Scheduler] Starting conversation scheduler (interval: ${O.baseIntervalMs}ms).`);
+
   let timer: number | null = null;
   let stopped = false;
 
@@ -431,11 +433,17 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
       */
       const result = await triggerConversationNow({ baseIntervalMs: O.baseIntervalMs });
       if (result.status === "started") {
+        console.log(
+          "[Scheduler] Conversation started.",
+          result.threadId ? `threadId=${result.threadId}` : "(new)",
+          `participants=[${result.participants.join(", ")}]`,
+        );
         return;
       }
 
       switch (result.reason) {
         case "locked":
+          console.log("[Scheduler] Skipping: locked by another tab.");
           return;
         case "recently_ran":
           console.log("[Scheduler] Skipping: conversation ran recently.");
@@ -497,9 +505,13 @@ export function startConversationScheduler(opts?: SchedulerOptions) {
   // 初回起動
   scheduleNext();
 
-  // visibility 変化時に軽くロックを見直す
+  // visibility 変化時のハンドラ（将来の拡張用に残す）
+  // 注: 以前は refreshLock() を呼んでいたが、tryAcquireLock() がタブを
+  // 区別できないため、自タブの visibility ハンドラが書いたロックを
+  // 「他タブが保持中」と誤認して無言スキップする self-locking バグがあった。
+  // マルチタブ重複防止は hasRecentConversationRun() が担っている。
   const onVis = () => {
-    if (!document.hidden) refreshLock();
+    // no-op: refreshLock() を削除（self-locking 防止）
   };
   document.addEventListener("visibilitychange", onVis);
 
