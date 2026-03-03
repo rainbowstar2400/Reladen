@@ -94,6 +94,22 @@ export const systemPromptConversation = `
 `.trim();
 
 // ---------------------------------------------------------------------------
+// シチュエーション候補（冒頭のバリエーション用）
+// ---------------------------------------------------------------------------
+
+const ENCOUNTER_SITUATIONS = [
+  "偶然鉢合わせ",
+  "同じ場所に居合わせた",
+  "向こうから歩いてきた",
+  "隣にいることに気づいた",
+  "近くを通りかかった",
+] as const;
+
+function pickRandom<T>(arr: readonly T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// ---------------------------------------------------------------------------
 // ヘルパー
 // ---------------------------------------------------------------------------
 
@@ -226,9 +242,10 @@ export function buildUserPrompt(input: PromptInput): string {
   const sections: string[] = [];
 
   // 【会話設定】
+  const encounter = pickRandom(ENCOUNTER_SITUATIONS);
   const settingParts = [`場所: ${environment.place}（${environment.timeOfDay}`];
   if (environment.weather) settingParts[0] += `、${environment.weather}`;
-  settingParts[0] += "、偶然鉢合わせ）";
+  settingParts[0] += `、${encounter}）`;
 
   sections.push(`【会話設定】\n${settingParts[0]}`);
 
@@ -311,12 +328,15 @@ export function buildUserPrompt(input: PromptInput): string {
   const rules = [
     "- 上記の構造（主導権、スタンス、温度感、ターンバランス）に従うこと",
     "- 6〜8ターンの会話を生成",
-    "- 1発話は1文を基本",
+    "- 1発話は短文2〜3文程度まで可。ただし長くなりすぎないこと",
+    "- 意味的に区切れる箇所では句点（。）、感嘆符（！）、疑問符（？）で文を区切ること。読点（、）だけで複数の文をつなげないこと",
     "- 話し方の語尾・頻出表現を口調に反映し、避ける表現は使わないこと",
     "- 一人称は指定表記を厳守（表記揺れ禁止）",
+    "- 一人称が名前以外に指定されているキャラクターは、自分自身を指す際に自分の名前を主語として使わないこと（例: 一人称が「私」なら「遥は〜した」ではなく「私は〜した」）。ただし他者の発言を引用する場合は除く",
     "- 相手の直前発話を受けた返答を優先する",
     "- 関連のない新話題を唐突に導入しない",
     "- 汎用テンプレ台詞の連発は避ける",
+    "- 会話の冒頭を毎回同じパターンにしないこと。「あ、〇〇じゃん」のような驚き型の挨拶だけでなく、声をかける、手を振る、隣に座る等、多様な始め方をすること",
   ];
 
   // 話題ソースに応じた追加ルール

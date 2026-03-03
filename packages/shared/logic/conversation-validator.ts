@@ -159,6 +159,34 @@ function validateMemory(
 }
 
 // ---------------------------------------------------------------------------
+// 句読点検証
+// ---------------------------------------------------------------------------
+
+function validatePunctuation(
+  output: ConversationOutput,
+): ValidationViolation[] {
+  const violations: ValidationViolation[] = [];
+
+  for (const line of output.lines) {
+    const text = line.text;
+    // 句点・感嘆符・疑問符で区切られているかチェック
+    const commaCount = (text.match(/、/g) ?? []).length;
+    const hasSentenceEnd = /[。！？!?]/.test(text);
+
+    // 読点が3個以上あるのに文末句読点が一つもない → 読点で無理につなげている可能性
+    if (commaCount >= 3 && !hasSentenceEnd) {
+      violations.push({
+        rule: "punctuation_comma_chain",
+        message: `発話に読点が${commaCount}個ありますが句点・感嘆符・疑問符がありません。文を適切に区切ってください: "${text}"`,
+        severity: "warning",
+      });
+    }
+  }
+
+  return violations;
+}
+
+// ---------------------------------------------------------------------------
 // ヒューリスティクス検証（口調非依存）
 // ---------------------------------------------------------------------------
 
@@ -277,6 +305,7 @@ export function validateConversationOutput(
   violations.push(...validateFirstPerson(input.output, input.firstPersonMap));
   violations.push(...validateParticipants(input.output));
   violations.push(...validateMemory(input.output));
+  violations.push(...validatePunctuation(input.output));
 
   // ヒューリスティクス検証
   violations.push(...heuristicCheckStance(input.output, input.structure));
