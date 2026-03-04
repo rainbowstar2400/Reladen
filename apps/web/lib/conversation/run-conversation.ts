@@ -28,7 +28,6 @@ import { generateSnippetsIfStale } from "@/lib/batch/generate-snippets";
 import { generateRecentEventsIfStale } from "@/lib/batch/generate-recent-events";
 import { persistConversation } from "@/lib/persist/persist-conversation";
 import { evaluateConversation, type EvalInput } from "@/lib/evaluation/evaluate-conversation";
-import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -806,9 +805,8 @@ export async function runConversationFromApi(
   const evalResult = evaluateConversation(evalInput);
 
   // 10) 永続化
-  // 新出力はv1の GptConversationOutput と構造的に互換
   const { eventId } = await persistConversation({
-    gptOut: result.output as unknown as GptConversationOutput,
+    gptOut: result.output,
     evalResult,
   });
 

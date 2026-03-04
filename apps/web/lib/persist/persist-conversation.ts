@@ -1,7 +1,7 @@
 // apps/web/lib/persist/persist-conversation.ts
 import { putKV as putAny, listKV as listAny } from "@/lib/db/kv-server";
 import { newId } from "@/lib/newId";
-import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
+import type { ConversationOutput } from "@repo/shared/types/conversation-generation";
 import type {
   NotificationRecord,
   TopicThread,
@@ -179,7 +179,7 @@ async function createNotification(params: {
  * 会話の永続化：events / topic_threads / notifications / feelings
  */
 export async function persistConversation(params: {
-  gptOut: GptConversationOutput;
+  gptOut: ConversationOutput;
   evalResult: EvaluationResult;
 }) {
   const { gptOut, evalResult } = params;

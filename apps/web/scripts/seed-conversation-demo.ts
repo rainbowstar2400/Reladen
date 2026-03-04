@@ -24,8 +24,13 @@ async function main() {
       ],
       meta: {
         tags: ['共感', '感謝', '軽い雑談'],
-        newKnowledge: [{ target: b, key: 'likes.movie.title:XXXX' }],
         signals: ['continue'],
+        memory: {
+          summary: '映画について感想を共有した',
+          topicsCovered: ['映画'],
+          unresolvedThreads: [],
+          knowledgeGained: [{ about: b, fact: '映画好き' }],
+        },
       },
       deltas: {
         aToB: { favor: 1, impression: 1 },

@@ -30,9 +30,15 @@ export type ConversationPayloadStrict = {
   lines: { speaker: string; text: string }[];
   meta: {
     tags: string[];
-    newKnowledge: { target: string; key: string }[];
     signals?: ('continue' | 'close' | 'park')[];
     qualityHints?: { [k: string]: unknown };
+    debug?: string[];
+    memory?: {
+      summary: string;
+      topicsCovered: string[];
+      unresolvedThreads: string[];
+      knowledgeGained: { about: string; fact: string }[];
+    };
   };
   deltas: {
     aToB: ImpressionDelta;

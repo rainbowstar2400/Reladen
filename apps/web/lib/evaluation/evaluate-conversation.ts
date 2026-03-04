@@ -19,7 +19,6 @@ export type EvalInput = {
   lines: Array<{ speaker: string; text: string }>;
   meta?: {
     tags?: string[];
-    newKnowledge?: Array<{ target: string; key: string }>;
     signals?: Array<'continue' | 'close' | 'park'>;
     qualityHints?: Record<string, unknown>;
     // special の付与/解除は明示フラグのみ

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
+import type { ConversationOutput } from "@repo/shared/types/conversation-generation";
 import type { EvaluationResult } from "@/lib/evaluation/evaluate-conversation";
 
 const mocks = vi.hoisted(() => ({
@@ -22,9 +22,8 @@ import { persistConversation } from "@/lib/persist/persist-conversation";
 const A_ID = "11111111-1111-4111-8111-111111111111";
 const B_ID = "22222222-2222-4222-8222-222222222222";
 const THREAD_ID = "33333333-3333-4333-8333-333333333333";
-const EXPERIENCE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
-const baseGptOut: GptConversationOutput = {
+const baseGptOut: ConversationOutput = {
   threadId: THREAD_ID,
   participants: [A_ID, B_ID],
   topic: "休日の予定",
@@ -34,17 +33,18 @@ const baseGptOut: GptConversationOutput = {
   ],
   meta: {
     tags: ["雑談・共通"],
-    newKnowledge: [],
     signals: ["continue"],
     qualityHints: {
       turnBalance: "balanced",
       tone: "calm",
     },
     debug: [],
-    anchorExperienceId: EXPERIENCE_ID,
-    grounded: true,
-    groundingEvidence: ["fact:カフェ", "hook:invite"],
-    fallbackMode: "experience",
+    memory: {
+      summary: "休日の過ごし方について話した",
+      topicsCovered: ["休日の予定", "カフェ"],
+      unresolvedThreads: [],
+      knowledgeGained: [],
+    },
   },
 };
 
@@ -92,7 +92,7 @@ describe("persistConversation", () => {
     mocks.putKV.mockImplementation(async (_table: string, payload: unknown) => payload);
   });
 
-  it("events payload に grounding 用 meta を保持して保存する", async () => {
+  it("events payload に memory を保持して保存する", async () => {
     const result = await persistConversation({
       gptOut: baseGptOut,
       evalResult: makeEvalResult(),
@@ -104,9 +104,12 @@ describe("persistConversation", () => {
     expect(eventWrite).toBeTruthy();
 
     const payload = eventWrite?.[1] as { payload?: { meta?: Record<string, unknown> } };
-    expect(payload.payload?.meta?.anchorExperienceId).toBe(EXPERIENCE_ID);
-    expect(payload.payload?.meta?.grounded).toBe(true);
-    expect(payload.payload?.meta?.fallbackMode).toBe("experience");
+    expect(payload.payload?.meta?.memory).toEqual({
+      summary: "休日の過ごし方について話した",
+      topicsCovered: ["休日の予定", "カフェ"],
+      unresolvedThreads: [],
+      knowledgeGained: [],
+    });
   });
 
   it("会話保存時に notifications まで書き込む", async () => {

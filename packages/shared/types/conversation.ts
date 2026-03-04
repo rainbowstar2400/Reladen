@@ -3,6 +3,7 @@
 // 会話生成パイプライン固有の型は conversation-generation.ts を参照。
 import { z } from 'zod';
 import { baseEntitySchema, BaseEntity } from './base';
+import { conversationMemorySchema } from './conversation-generation';
 
 // 印象（base）と special（気まずさ等）の分離
 export const impressionBaseEnum = z.enum(['dislike', 'maybe_dislike', 'none', 'curious', 'maybe_like', 'like']);
@@ -44,21 +45,14 @@ export const conversationLineSchema = z.object({
 });
 
 const eventMetaSchema = z.object({
-  tags: z.array(z.string()).max(12), // タグ辞書は最初10〜12程度
-  newKnowledge: z.array(z.object({
-    target: z.string().uuid(),
-    key: z.string().min(1),
-  })),
+  tags: z.array(z.string()).max(12),
   signals: z.array(z.enum(['continue', 'close', 'park'])).optional(),
   qualityHints: z.object({
     turnBalance: z.enum(['balanced', 'skewed']).optional(),
     tone: z.string().optional(),
   }).optional(),
-  anchorExperienceId: z.string().uuid().optional(),
-  anchorSignature: z.string().optional(),
-  grounded: z.boolean().optional(),
-  groundingEvidence: z.array(z.string()).optional(),
-  fallbackMode: conversationFallbackModeEnum.optional(),
+  debug: z.array(z.string()).optional(),
+  memory: conversationMemorySchema.optional(), // optional: 旧データには存在しない
 });
 
 export const conversationEventPayloadSchema = z.object({

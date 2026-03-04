@@ -21,7 +21,6 @@ function buildConversationPayload(a: Resident, b: Resident): ConversationPayload
     ],
     meta: {
       tags: ['demo'],
-      newKnowledge: [],
     },
     deltas: {
       aToB: { favor: 1, impression: 'like' },
