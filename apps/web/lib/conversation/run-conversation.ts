@@ -24,6 +24,7 @@ import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/con
 import { newId } from "@/lib/newId";
 import { KvUnauthenticatedError, listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
 import { extractSpeechProfile } from "@/lib/gpt/extract-speech-profile";
+import { generateSnippetsIfStale } from "@/lib/batch/generate-snippets";
 import { persistConversation } from "@/lib/persist/persist-conversation";
 import { evaluateConversation, type EvalInput } from "@/lib/evaluation/evaluate-conversation";
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
@@ -486,6 +487,48 @@ async function loadConversationHistory(
   return { previousMemory, recentTopics };
 }
 
+// ---------------------------------------------------------------------------
+// 共有スニペット読み込み
+// ---------------------------------------------------------------------------
+
+/**
+ * 同ペアの直近24時間のスニペットを SharedSnippet 型で返す。
+ */
+async function loadRecentSnippets(
+  participants: [string, string],
+): Promise<SharedSnippet[]> {
+  let rows: Array<Record<string, any>> | null = null;
+  try {
+    rows = (await listAny("shared_snippets")) as unknown as Array<Record<string, any>> | null;
+  } catch (error) {
+    console.warn("[loadRecentSnippets] Failed to load shared_snippets.", error);
+    return [];
+  }
+  if (!Array.isArray(rows)) return [];
+
+  const [a, b] = participants;
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+
+  return rows
+    .filter((s) => {
+      if (!s || s.deleted) return false;
+      const pa = s.participant_a;
+      const pb = s.participant_b;
+      if (!pa || !pb) return false;
+      if (!((pa === a && pb === b) || (pa === b && pb === a))) return false;
+      const ts = Date.parse(s.occurred_at ?? s.updated_at ?? "");
+      return Number.isFinite(ts) && ts >= cutoff;
+    })
+    .map((s) => ({
+      id: s.id ?? "",
+      participants: [s.participant_a, s.participant_b] as [string, string],
+      text: s.text ?? "",
+      occurredAt: s.occurred_at ?? new Date().toISOString(),
+      source: s.source ?? "coincidence",
+    }))
+    .sort((lhs, rhs) => Date.parse(rhs.occurredAt) - Date.parse(lhs.occurredAt));
+}
+
 /** 時間帯に基づく環境情報を決定 */
 function determineEnvironment(): { place: string; timeOfDay: string } {
   const now = new Date();
@@ -664,7 +707,15 @@ export async function runConversationFromApi(
   // 5) 会話履歴読み込み（previousMemory + recentTopics）
   const { previousMemory, recentTopics } = await loadConversationHistory(participants);
 
-  // 6) パイプライン実行
+  // 6) スニペットバッチ生成 + 取得
+  try {
+    await generateSnippetsIfStale();
+  } catch (error) {
+    console.warn("[runConversationFromApi] Failed to generate snippets.", error);
+  }
+  const recentSnippets = await loadRecentSnippets(participants);
+
+  // 7) パイプライン実行
   const result = await runConversation({
     participants,
     characters,
@@ -677,11 +728,12 @@ export async function runConversationFromApi(
     threadId,
     previousMemory,
     recentTopics,
+    recentSnippets,
     // TODO: 以下は今後バッチ生成機能から取得
-    // recentSnippets, knowledgeByA, knowledgeByB
+    // knowledgeByA, knowledgeByB
   });
 
-  // 7) 評価
+  // 8) 評価
   const evalInput: EvalInput = {
     threadId: result.threadId,
     participants,
@@ -694,7 +746,7 @@ export async function runConversationFromApi(
   };
   const evalResult = evaluateConversation(evalInput);
 
-  // 8) 永続化
+  // 9) 永続化
   // 新出力はv1の GptConversationOutput と構造的に互換
   const { eventId } = await persistConversation({
     gptOut: result.output as unknown as GptConversationOutput,

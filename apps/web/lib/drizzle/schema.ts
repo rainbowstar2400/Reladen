@@ -255,6 +255,18 @@ export const notifications = pgTable('notifications', {
   updatedIdx: index('notifications_updated_idx').on(t.updatedAt),
 }));
 
+export const sharedSnippets = pgTable('shared_snippets', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  participantA: uuid('participant_a').notNull(),
+  participantB: uuid('participant_b').notNull(),
+  text: text('text').notNull(),
+  source: text('source').notNull().default('coincidence'),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deleted: boolean('deleted').notNull().default(false),
+  ownerId: uuid('owner_id'),
+});
+
 export const worldStates = pgTable('world_states', {
   id: uuid('id').primaryKey().defaultRandom(),
   weatherCurrent: jsonb('weather_current').notNull(),
