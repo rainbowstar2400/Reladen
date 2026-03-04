@@ -267,6 +267,29 @@ export const sharedSnippets = pgTable('shared_snippets', {
   ownerId: uuid('owner_id'),
 });
 
+export const recentEvents = pgTable('recent_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  characterId: uuid('character_id').notNull(),
+  fact: text('fact').notNull(),
+  generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
+  sharedWith: jsonb('shared_with').notNull().default([]),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deleted: boolean('deleted').notNull().default(false),
+  ownerId: uuid('owner_id'),
+});
+
+export const offscreenKnowledge = pgTable('offscreen_knowledge', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  learnedBy: uuid('learned_by').notNull(),
+  about: uuid('about').notNull(),
+  fact: text('fact').notNull(),
+  source: text('source').notNull().default('offscreen'),
+  learnedAt: timestamp('learned_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deleted: boolean('deleted').notNull().default(false),
+  ownerId: uuid('owner_id'),
+});
+
 export const worldStates = pgTable('world_states', {
   id: uuid('id').primaryKey().defaultRandom(),
   weatherCurrent: jsonb('weather_current').notNull(),

@@ -25,6 +25,7 @@ import { newId } from "@/lib/newId";
 import { KvUnauthenticatedError, listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
 import { extractSpeechProfile } from "@/lib/gpt/extract-speech-profile";
 import { generateSnippetsIfStale } from "@/lib/batch/generate-snippets";
+import { generateRecentEventsIfStale } from "@/lib/batch/generate-recent-events";
 import { persistConversation } from "@/lib/persist/persist-conversation";
 import { evaluateConversation, type EvalInput } from "@/lib/evaluation/evaluate-conversation";
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
@@ -529,6 +530,40 @@ async function loadRecentSnippets(
     .sort((lhs, rhs) => Date.parse(rhs.occurredAt) - Date.parse(lhs.occurredAt));
 }
 
+// ---------------------------------------------------------------------------
+// オフスクリーン知識読み込み
+// ---------------------------------------------------------------------------
+
+/**
+ * 指定キャラクターが他キャラについて持つオフスクリーン知識を返す。
+ */
+async function loadOffscreenKnowledge(
+  characterId: string,
+): Promise<OffscreenKnowledge[]> {
+  let rows: Array<Record<string, any>> | null = null;
+  try {
+    rows = (await listAny("offscreen_knowledge")) as unknown as Array<Record<string, any>> | null;
+  } catch (error) {
+    console.warn("[loadOffscreenKnowledge] Failed to load offscreen_knowledge.", error);
+    return [];
+  }
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .filter((k) => {
+      if (!k || k.deleted) return false;
+      return k.learned_by === characterId;
+    })
+    .map((k) => ({
+      id: k.id ?? "",
+      learnedBy: k.learned_by ?? "",
+      about: k.about ?? "",
+      fact: k.fact ?? "",
+      source: k.source ?? "offscreen",
+      learnedAt: k.learned_at ?? new Date().toISOString(),
+    }));
+}
+
 /** 時間帯に基づく環境情報を決定 */
 function determineEnvironment(): { place: string; timeOfDay: string } {
   const now = new Date();
@@ -707,15 +742,26 @@ export async function runConversationFromApi(
   // 5) 会話履歴読み込み（previousMemory + recentTopics）
   const { previousMemory, recentTopics } = await loadConversationHistory(participants);
 
-  // 6) スニペットバッチ生成 + 取得
+  // 6) バッチ生成（スニペット + 最近の出来事）
   try {
     await generateSnippetsIfStale();
   } catch (error) {
     console.warn("[runConversationFromApi] Failed to generate snippets.", error);
   }
-  const recentSnippets = await loadRecentSnippets(participants);
+  try {
+    await generateRecentEventsIfStale();
+  } catch (error) {
+    console.warn("[runConversationFromApi] Failed to generate recent events.", error);
+  }
 
-  // 7) パイプライン実行
+  // 7) スニペット + オフスクリーン知識の取得
+  const recentSnippets = await loadRecentSnippets(participants);
+  const [knowledgeByA, knowledgeByB] = await Promise.all([
+    loadOffscreenKnowledge(participants[0]),
+    loadOffscreenKnowledge(participants[1]),
+  ]);
+
+  // 8) パイプライン実行
   const result = await runConversation({
     participants,
     characters,
@@ -729,11 +775,11 @@ export async function runConversationFromApi(
     previousMemory,
     recentTopics,
     recentSnippets,
-    // TODO: 以下は今後バッチ生成機能から取得
-    // knowledgeByA, knowledgeByB
+    knowledgeByA,
+    knowledgeByB,
   });
 
-  // 8) 評価
+  // 9) 評価
   const evalInput: EvalInput = {
     threadId: result.threadId,
     participants,
@@ -746,7 +792,7 @@ export async function runConversationFromApi(
   };
   const evalResult = evaluateConversation(evalInput);
 
-  // 9) 永続化
+  // 10) 永続化
   // 新出力はv1の GptConversationOutput と構造的に互換
   const { eventId } = await persistConversation({
     gptOut: result.output as unknown as GptConversationOutput,
