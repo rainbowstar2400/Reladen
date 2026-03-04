@@ -16,13 +16,15 @@ import {
 } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2, Pencil, Check, X, Ban } from 'lucide-react';
+import { TagInput } from '@/components/ui/tag-input';
+import { Loader2, Pencil, Check, X, Ban, ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import {
   usePresetsByCategory,
   useUpsertPreset,
   type Preset,
   type PresetCategory,
 } from '@/lib/data/presets';
+import type { SpeechProfileData } from '@repo/shared/types';
 import { DeskPanel } from '@/components/room/desk-panel';
 import { OfficePanelShell } from '@/components/room/office-panel-shell';
 
@@ -66,6 +68,14 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
   const [editLabel, setEditLabel] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editExample, setEditExample] = useState('');
+
+  // SpeechProfile 詳細編集
+  const [spOpen, setSpOpen] = useState(false);
+  const [spEndings, setSpEndings] = useState<string[]>([]);
+  const [spFrequentPhrases, setSpFrequentPhrases] = useState<string[]>([]);
+  const [spAvoidedPhrases, setSpAvoidedPhrases] = useState<string[]>([]);
+  const [spExamples, setSpExamples] = useState('');
+  const [spExtracting, setSpExtracting] = useState(false);
 
   const handleAdd = () => {
     if (!newLabel || (category === 'speech' && !newDescription)) return;
@@ -116,23 +126,74 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
     });
   };
 
-  // 編集開始処理 (モーダルの時と同じ)
+  // 編集開始処理
   const handleOpenEdit = (item: Preset) => {
     setEditingItem(item);
     setEditLabel(item.label);
     setEditDescription(item.description ?? '');
     setEditExample(item.example ?? '');
+    // SpeechProfile
+    const sp = item.speechProfileData;
+    setSpEndings(sp?.endings ?? []);
+    setSpFrequentPhrases(sp?.frequentPhrases ?? []);
+    setSpAvoidedPhrases(sp?.avoidedPhrases ?? []);
+    setSpExamples(sp?.examples?.join('\n') ?? '');
+    setSpOpen(!!sp);
   };
 
-  // 編集キャンセル処理 (モーダルの時と同じ)
+  // 編集キャンセル処理
   const handleCloseEdit = () => {
     setEditingItem(null);
     setEditLabel('');
     setEditDescription('');
     setEditExample('');
+    setSpOpen(false);
+    setSpEndings([]);
+    setSpFrequentPhrases([]);
+    setSpAvoidedPhrases([]);
+    setSpExamples('');
   };
 
-  // 編集保存処理 (モーダルの時と同じ)
+  // SpeechProfile データを組み立てる
+  const buildSpeechProfileData = (): SpeechProfileData | null => {
+    const examplesArr = spExamples.split('\n').map(s => s.trim()).filter(Boolean);
+    if (spEndings.length === 0 && spFrequentPhrases.length === 0 && spAvoidedPhrases.length === 0 && examplesArr.length === 0) {
+      return null;
+    }
+    return {
+      endings: spEndings,
+      frequentPhrases: spFrequentPhrases,
+      avoidedPhrases: spAvoidedPhrases,
+      examples: examplesArr,
+    };
+  };
+
+  // LLM 自動生成
+  const handleExtractSpeechProfile = async () => {
+    if (!editLabel || !editDescription) return;
+    setSpExtracting(true);
+    try {
+      const res = await fetch('/api/presets/extract-speech-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: editLabel, description: editDescription, example: editExample || undefined }),
+      });
+      if (!res.ok) throw new Error('LLM 抽出に失敗しました');
+      const data = await res.json();
+      setSpEndings(data.endings ?? []);
+      setSpFrequentPhrases(data.frequentPhrases ?? []);
+      setSpAvoidedPhrases(data.avoidedPhrases ?? []);
+      setSpExamples((data.examples ?? []).join('\n'));
+      setSpOpen(true);
+    } catch (e) {
+      console.error(e);
+      alert('LLM による口調抽出に失敗しました。');
+    } finally {
+      setSpExtracting(false);
+    }
+  };
+
+  // 編集保存処理
   const handleSaveEdit = () => {
     if (!editingItem || !editLabel) return;
 
@@ -146,10 +207,11 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
       label: editLabel,
       description: category === 'speech' ? editDescription : undefined,
       example: category === 'speech' ? (editExample || null) : undefined,
+      speechProfileData: category === 'speech' ? buildSpeechProfileData() : undefined,
       category: editingItem.category,
     }, {
       onSuccess: () => {
-        handleCloseEdit(); // 成功したら編集モードを解除
+        handleCloseEdit();
       }
     });
   };
@@ -232,6 +294,80 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                             disabled={isMutating}
                           />
                         </div>
+
+                        {/* SpeechProfile 詳細設定 */}
+                        <div className="mt-2 rounded-md border border-white/30 bg-white/8 p-3">
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-1.5 text-sm font-medium text-white/80 hover:text-white/95"
+                            onClick={() => setSpOpen(!spOpen)}
+                          >
+                            {spOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            口調の詳細設定（任意）
+                          </button>
+
+                          {spOpen && (
+                            <div className="mt-3 space-y-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs">語尾パターン</Label>
+                                <TagInput
+                                  value={spEndings}
+                                  onChange={setSpEndings}
+                                  placeholder="例: 〜だよ"
+                                  disabled={isMutating}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">よく使う表現</Label>
+                                <TagInput
+                                  value={spFrequentPhrases}
+                                  onChange={setSpFrequentPhrases}
+                                  placeholder="例: マジで？"
+                                  disabled={isMutating}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">避ける表現</Label>
+                                <TagInput
+                                  value={spAvoidedPhrases}
+                                  onChange={setSpAvoidedPhrases}
+                                  placeholder="例: 〜ですわ"
+                                  disabled={isMutating}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor={`sp-examples-${item.id}`} className="text-xs">発話例（1行ずつ）</Label>
+                                <Textarea
+                                  id={`sp-examples-${item.id}`}
+                                  value={spExamples}
+                                  onChange={(e) => setSpExamples(e.target.value)}
+                                  placeholder={"今日いい感じじゃん。\nマジで最高！"}
+                                  rows={3}
+                                  disabled={isMutating}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* LLM 自動生成ボタン */}
+                          <div className="mt-3">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 gap-1.5 text-xs text-white/70 hover:text-white/90"
+                              onClick={handleExtractSpeechProfile}
+                              disabled={isMutating || spExtracting || !editLabel || !editDescription}
+                            >
+                              {spExtracting ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Sparkles className="h-3.5 w-3.5" />
+                              )}
+                              {spExtracting ? 'LLM で抽出中...' : 'LLM で自動生成'}
+                            </Button>
+                          </div>
+                        </div>
                       </>
                     )}
 
@@ -309,6 +445,11 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                     {item.example && (
                       <p className="pl-1 text-xs text-gray-600 dark:text-gray-400">
                         例文: {item.example}
+                      </p>
+                    )}
+                    {item.speechProfileData?.endings && item.speechProfileData.endings.length > 0 && (
+                      <p className="pl-1 text-xs text-gray-500 dark:text-gray-500">
+                        語尾: {item.speechProfileData.endings.slice(0, 4).join(', ')}{item.speechProfileData.endings.length > 4 ? ' ...' : ''}
                       </p>
                     )}
                   </>

@@ -168,6 +168,9 @@ export function useUpsertPreset() {
                 isManaged: input.isManaged ?? existing?.isManaged ?? false,
                 description: input.description ?? existing?.description ?? null,
                 example: input.example ?? existing?.example ?? null,
+                speechProfileData: input.speechProfileData !== undefined
+                    ? input.speechProfileData
+                    : (existing?.speechProfileData ?? null),
                 updated_at: new Date().toISOString(),
                 deleted: false,
                 owner_id: existing?.owner_id === 'SYSTEM' ? null : (existing?.owner_id ?? null), // SYSTEM ID は引き継がない

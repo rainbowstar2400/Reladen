@@ -145,12 +145,21 @@ export const eventSchema = baseEntitySchema.extend({
   payload: z.record(z.any()),
 });
 
+export const speechProfileDataSchema = z.object({
+  endings: z.array(z.string()),
+  frequentPhrases: z.array(z.string()),
+  avoidedPhrases: z.array(z.string()),
+  examples: z.array(z.string()),
+});
+export type SpeechProfileData = z.infer<typeof speechProfileDataSchema>;
+
 export const presetSchema = baseEntitySchema.extend({
   category: presetCategoryEnum,
   label: z.string().min(1),
   description: z.string().nullable().optional(),
   example: z.string().nullable().optional(),
   isManaged: z.boolean().default(false),
+  speechProfileData: speechProfileDataSchema.nullable().optional(),
 });
 
 export const syncPayloadSchema = z.object({
