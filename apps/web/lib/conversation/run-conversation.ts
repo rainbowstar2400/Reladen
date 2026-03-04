@@ -22,7 +22,8 @@ import { buildConversationStructure, determineInitiator, type StructureInput } f
 import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
-import { KvUnauthenticatedError, listKV as listAny } from "@/lib/db/kv-server";
+import { KvUnauthenticatedError, listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
+import { extractSpeechProfile } from "@/lib/gpt/extract-speech-profile";
 import { persistConversation } from "@/lib/persist/persist-conversation";
 import { evaluateConversation, type EvalInput } from "@/lib/evaluation/evaluate-conversation";
 import type { GptConversationOutput } from "@repo/shared/gpt/schemas/conversation-output";
@@ -271,7 +272,7 @@ async function loadCharacterProfiles(
     const firstPersonPreset = firstPersonId ? presetMap.get(firstPersonId) : undefined;
     const firstPerson = (firstPersonPreset as any)?.label ?? null;
 
-    // 口調プリセット → SpeechProfile に変換
+    // 口調プリセット → SpeechProfile に変換（キャッシュ or LLM抽出）
     const speechPresetId = typeof r.speech_preset === "string" ? r.speech_preset : null;
     const speechPreset = speechPresetId ? presetMap.get(speechPresetId) : undefined;
     let speechProfile: SpeechProfile | null = null;
@@ -280,14 +281,41 @@ async function loadCharacterProfiles(
       const description = typeof (speechPreset as any).description === "string" ? (speechPreset as any).description : "";
       const example = typeof (speechPreset as any).example === "string" ? (speechPreset as any).example : "";
       if (label && description) {
-        speechProfile = {
-          label,
-          description,
-          endings: [],          // 既存プリセットには語尾情報がない → 空（今後LLM抽出で補完）
-          frequentPhrases: [],
-          avoidedPhrases: [],
-          examples: example ? [example] : [`（${label}の口調）`],
-        };
+        // speech_profile_data にキャッシュがあればそれを使う
+        const cached = (speechPreset as any).speech_profile_data;
+        if (cached && typeof cached === "object" && Array.isArray(cached.endings) && cached.endings.length > 0) {
+          speechProfile = {
+            label,
+            description,
+            endings: cached.endings,
+            frequentPhrases: cached.frequentPhrases ?? [],
+            avoidedPhrases: cached.avoidedPhrases ?? [],
+            examples: cached.examples ?? (example ? [example] : [`（${label}の口調）`]),
+          };
+        } else {
+          // キャッシュなし → LLM で抽出して保存
+          try {
+            const extracted = await extractSpeechProfile({ label, description, example });
+            speechProfile = { label, description, ...extracted };
+            // キャッシュ保存（非同期、失敗しても続行）
+            putAny("presets", {
+              id: speechPresetId,
+              speech_profile_data: extracted,
+            }).catch((err) => {
+              console.warn("[loadCharacterProfiles] Failed to cache speech_profile_data.", err);
+            });
+          } catch (err) {
+            console.warn("[loadCharacterProfiles] Failed to extract speech profile, using fallback.", err);
+            speechProfile = {
+              label,
+              description,
+              endings: [],
+              frequentPhrases: [],
+              avoidedPhrases: [],
+              examples: example ? [example] : [`（${label}の口調）`],
+            };
+          }
+        }
       }
     }
 

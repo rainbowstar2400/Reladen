@@ -43,6 +43,7 @@ export const presets = pgTable('presets', {
   label: text('label').notNull(),
   description: text('description'),
   example: text('example'),
+  speechProfileData: jsonb('speech_profile_data'),
   isManaged: boolean('is_managed').notNull().default(false),
   ownerId: uuid('owner_id'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
