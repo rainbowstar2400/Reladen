@@ -336,7 +336,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                                 />
                               </div>
                               <div className="space-y-1">
-                                <Label htmlFor={`sp-examples-${item.id}`} className="text-xs">発話例（1行ずつ）</Label>
+                                <Label htmlFor={`sp-examples-${item.id}`} className="text-xs">セリフ例（1行ずつ）</Label>
                                 <Textarea
                                   id={`sp-examples-${item.id}`}
                                   value={spExamples}
@@ -364,7 +364,7 @@ function PresetCategoryManager({ category }: { category: PresetCategory }) {
                               ) : (
                                 <Sparkles className="h-3.5 w-3.5" />
                               )}
-                              {spExtracting ? 'LLM で抽出中...' : 'LLM で自動生成'}
+                              {spExtracting ? '抽出中...' : '自動生成'}
                             </Button>
                           </div>
                         </div>
