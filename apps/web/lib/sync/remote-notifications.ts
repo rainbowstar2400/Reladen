@@ -17,13 +17,54 @@ async function requireOwnerId(client: SupabaseClient<Database>): Promise<string>
   return data.user.id;
 }
 
+function describeParticipantsValue(value: unknown): string {
+  const kind =
+    value === null
+      ? 'null'
+      : Array.isArray(value)
+        ? `array(length=${value.length})`
+        : typeof value;
+
+  let preview: string;
+  try {
+    preview = JSON.stringify(value);
+  } catch {
+    preview = String(value);
+  }
+
+  return `${kind}: ${preview}`;
+}
+
+function parseNotificationParticipants(
+  participants: unknown,
+  notificationId: string,
+): [string, string] | undefined {
+  if (participants == null) {
+    return undefined;
+  }
+
+  if (
+    Array.isArray(participants) &&
+    participants.length === 2 &&
+    typeof participants[0] === 'string' &&
+    typeof participants[1] === 'string'
+  ) {
+    return [participants[0], participants[1]];
+  }
+
+  throw new Error(
+    `[notifications] Invalid participants for notification ${notificationId}. ` +
+      `Expected [string, string] | null, received ${describeParticipantsValue(participants)}`,
+  );
+}
+
 function toNotificationRecord(row: NotificationRow): NotificationRecord {
   return {
     id: row.id,
     type: row.type as NotificationRecord['type'],
     linkedEventId: row.linked_event_id,
     threadId: row.thread_id ?? undefined,
-    participants: row.participants ?? undefined,
+    participants: parseNotificationParticipants(row.participants, row.id),
     snippet: row.snippet ?? undefined,
     occurredAt: row.occurred_at,
     status: row.status as NotificationRecord['status'],
@@ -33,12 +74,14 @@ function toNotificationRecord(row: NotificationRow): NotificationRecord {
 }
 
 function toNotificationInsert(record: NotificationRecord, ownerId: string): NotificationInsert {
+  const participants = parseNotificationParticipants(record.participants, record.id);
+
   return {
     id: record.id,
     type: record.type,
     linked_event_id: record.linkedEventId,
     thread_id: record.threadId ?? null,
-    participants: record.participants ?? null,
+    participants: participants ?? null,
     snippet: record.snippet ?? null,
     occurred_at: record.occurredAt,
     status: record.status,
