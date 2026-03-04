@@ -48,6 +48,8 @@ export type TopicSelectionInput = {
   recentTopics: string[];
   /** 天気・場所（environmental用） */
   environment: { place: string; timeOfDay: string; weather?: string };
+  /** キャラクターID → 名前のマップ（third_party 名前解決用） */
+  nameMap?: Map<string, string>;
 };
 
 // ---------------------------------------------------------------------------
@@ -147,11 +149,13 @@ function generateThirdPartyCandidates(
 
   const candidates: TopicCandidate[] = [];
   bySubject.forEach((facts, aboutId) => {
+    const name = input.nameMap?.get(aboutId) ?? aboutId;
     candidates.push({
       source: "third_party" as TopicSource,
-      label: `${aboutId}の近況`,
+      label: `${name}の近況`,
       detail: facts.map((f) => f.fact).join("; "),
       score: 0,
+      aboutCharacterId: aboutId,
     });
   });
   return candidates;
@@ -310,14 +314,14 @@ export function selectTopic(
     detail: best.detail,
   };
 
-  if (best.source === "third_party") {
+  if (best.source === "third_party" && best.aboutCharacterId) {
+    const aboutId = best.aboutCharacterId;
+    const characterName = input.nameMap?.get(aboutId) ?? aboutId;
+
     // 対象キャラの知識をまとめる
     const initiatorKnowledge = initiator === input.characterA
       ? input.knowledgeByA
       : input.knowledgeByB;
-
-    // label は "{aboutId}の近況" 形式なので aboutId を抽出
-    const aboutId = best.label.replace("の近況", "");
     const facts = initiatorKnowledge
       .filter((k) => k.about === aboutId)
       .map((k) => k.fact);
@@ -329,7 +333,7 @@ export function selectTopic(
     const listenerKnows = responderKnowledge.some((k) => k.about === aboutId);
 
     selected.thirdPartyContext = {
-      characterName: aboutId, // 実運用では名前を解決する
+      characterName,
       knownFacts: facts,
       listenerKnowsCharacter: listenerKnows,
     };

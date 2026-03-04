@@ -60,6 +60,8 @@ export type RunConversationArgs = {
   recentTopics?: string[];
   /** 既存スレッドID（なければ新規） */
   threadId?: string;
+  /** キャラクターID → 名前のマップ（third_party 名前解決用） */
+  nameMap?: Map<string, string>;
 };
 
 export type RunCharacterProfile = {
@@ -222,9 +224,9 @@ function toParticipantTuple(value: unknown): [string, string] | null {
 /** 住民プロフィールを KV から読み込み、RunCharacterProfile に変換 */
 async function loadCharacterProfiles(
   participantIds: [string, string],
-): Promise<Record<string, RunCharacterProfile>> {
+): Promise<{ profiles: Record<string, RunCharacterProfile>; nameMap: Map<string, string> }> {
   const uniqueIds = Array.from(new Set(participantIds));
-  if (uniqueIds.length === 0) return {};
+  if (uniqueIds.length === 0) return { profiles: {}, nameMap: new Map() };
 
   let presetRows: Array<Record<string, unknown>> | null = null;
   try {
@@ -256,7 +258,16 @@ async function loadCharacterProfiles(
 
   const rows = (await listAny("residents")) as unknown as Array<Record<string, unknown>> | null;
   const dict: Record<string, RunCharacterProfile> = {};
-  if (!Array.isArray(rows)) return dict;
+  const nameMap = new Map<string, string>();
+  if (!Array.isArray(rows)) return { profiles: dict, nameMap };
+
+  // 全住民の名前マップを構築（third_party 名前解決用）
+  for (const raw of rows) {
+    const rid = typeof raw?.id === "string" ? raw.id : undefined;
+    if (!rid || Boolean((raw as any)?.deleted)) continue;
+    const rname = typeof (raw as any)?.name === "string" ? (raw as any).name : undefined;
+    if (rname) nameMap.set(rid, rname);
+  }
 
   const idSet = new Set(uniqueIds);
   for (const raw of rows) {
@@ -348,7 +359,7 @@ async function loadCharacterProfiles(
     };
   }
 
-  return dict;
+  return { profiles: dict, nameMap };
 }
 
 async function resolveParticipantsFromThread(
@@ -623,6 +634,7 @@ export async function runConversation(
     knowledgeByB: args.knowledgeByB ?? [],
     recentTopics: args.recentTopics ?? [],
     environment: args.environment,
+    nameMap: args.nameMap,
   };
 
   const { selected: topic, candidates: topicCandidates } = selectTopic(
@@ -712,7 +724,7 @@ export async function runConversationFromApi(
   }
 
   // 1) プロフィール読み込み
-  const characters = await loadCharacterProfiles(participants);
+  const { profiles: characters, nameMap } = await loadCharacterProfiles(participants);
   if (!characters[participants[0]] || !characters[participants[1]]) {
     throw new Error("[runConversationFromApi] Could not load profiles for one or both participants.");
   }
@@ -777,6 +789,7 @@ export async function runConversationFromApi(
     recentSnippets,
     knowledgeByA,
     knowledgeByB,
+    nameMap,
   });
 
   // 9) 評価

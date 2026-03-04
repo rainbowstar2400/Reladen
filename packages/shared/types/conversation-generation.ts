@@ -86,6 +86,8 @@ export const topicCandidateSchema = z.object({
   label: z.string().min(1),
   detail: z.string().optional(),
   score: z.number(),
+  /** third_party 候補の場合、対象キャラの ID */
+  aboutCharacterId: z.string().uuid().optional(),
 });
 export type TopicCandidate = z.infer<typeof topicCandidateSchema>;
 
