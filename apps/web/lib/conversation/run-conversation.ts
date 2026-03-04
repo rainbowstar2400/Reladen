@@ -399,6 +399,65 @@ async function loadFeelingsForPair(
   return { aToB: pickLatest(a, b), bToA: pickLatest(b, a) };
 }
 
+// ---------------------------------------------------------------------------
+// 会話履歴読み込み（previousMemory + recentTopics）
+// ---------------------------------------------------------------------------
+
+/**
+ * 同ペアの過去の会話イベントから、前回の記憶と最近の話題を読み込む。
+ * 1回の listAny("events") で両方を解決する。
+ */
+async function loadConversationHistory(
+  participants: [string, string],
+): Promise<{
+  previousMemory: ConversationMemory | null;
+  recentTopics: string[];
+}> {
+  let allEvents: Array<Record<string, any>> | null = null;
+  try {
+    allEvents = (await listAny("events")) as unknown as Array<Record<string, any>> | null;
+  } catch (error) {
+    console.warn("[loadConversationHistory] Failed to load events.", error);
+    return { previousMemory: null, recentTopics: [] };
+  }
+  if (!Array.isArray(allEvents)) return { previousMemory: null, recentTopics: [] };
+
+  const [a, b] = participants;
+  const pairConvEvents = allEvents
+    .filter((e) => {
+      if (!e || e.deleted || e.kind !== "conversation") return false;
+      const p = e.payload?.participants;
+      if (!Array.isArray(p) || p.length !== 2) return false;
+      return (p[0] === a && p[1] === b) || (p[0] === b && p[1] === a);
+    })
+    .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs));
+
+  // previousMemory: 最新イベントの memory を取得
+  const latestMemory = pairConvEvents[0]?.payload?.meta?.memory;
+  const previousMemory: ConversationMemory | null =
+    latestMemory &&
+    typeof latestMemory === "object" &&
+    typeof latestMemory.summary === "string" &&
+    latestMemory.summary.length > 0
+      ? (latestMemory as ConversationMemory)
+      : null;
+
+  // recentTopics: 直近5件のイベントから話題を集約
+  const recentTopics: string[] = [];
+  for (const e of pairConvEvents.slice(0, 5)) {
+    const covered = e.payload?.meta?.memory?.topicsCovered;
+    if (Array.isArray(covered)) {
+      for (const t of covered) {
+        if (typeof t === "string" && !recentTopics.includes(t)) {
+          recentTopics.push(t);
+        }
+      }
+    }
+  }
+
+  return { previousMemory, recentTopics };
+}
+
 /** 時間帯に基づく環境情報を決定 */
 function determineEnvironment(): { place: string; timeOfDay: string } {
   const now = new Date();
@@ -574,7 +633,10 @@ export async function runConversationFromApi(
   // 4) 環境決定
   const environment = determineEnvironment();
 
-  // 5) パイプライン実行
+  // 5) 会話履歴読み込み（previousMemory + recentTopics）
+  const { previousMemory, recentTopics } = await loadConversationHistory(participants);
+
+  // 6) パイプライン実行
   const result = await runConversation({
     participants,
     characters,
@@ -585,11 +647,13 @@ export async function runConversationFromApi(
     },
     environment,
     threadId,
+    previousMemory,
+    recentTopics,
     // TODO: 以下は今後バッチ生成機能から取得
-    // previousMemory, recentSnippets, knowledgeByA, knowledgeByB, recentTopics
+    // recentSnippets, knowledgeByA, knowledgeByB
   });
 
-  // 6) 評価
+  // 7) 評価
   const evalInput: EvalInput = {
     threadId: result.threadId,
     participants,
@@ -602,7 +666,7 @@ export async function runConversationFromApi(
   };
   const evalResult = evaluateConversation(evalInput);
 
-  // 7) 永続化
+  // 8) 永続化
   // 新出力はv1の GptConversationOutput と構造的に互換
   const { eventId } = await persistConversation({
     gptOut: result.output as unknown as GptConversationOutput,
