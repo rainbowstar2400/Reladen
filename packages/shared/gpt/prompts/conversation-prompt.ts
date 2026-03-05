@@ -51,7 +51,7 @@ export type PromptInput = {
 };
 
 // ---------------------------------------------------------------------------
-// システムプロンプト
+// システムプロンプト（few-shot例つき）
 // ---------------------------------------------------------------------------
 
 export const systemPromptConversation = `
@@ -86,11 +86,30 @@ export const systemPromptConversation = `
 }
 
 生成ルール:
-- 各キャラの「話し方」セクションに記載された語尾・頻出表現を忠実に反映すること
+- 各キャラの「口調ルール」セクションに記載された語尾・頻出表現を忠実に反映すること
 - 「避ける表現」に記載された表現は絶対に使わないこと
 - 一人称は指定表記を厳守し、表記揺れ・別表記への変換を行わないこと
-- 「会話の構造」セクションの主導権・スタンス・温度感・ターンバランスに従うこと
+- 「会話の方向」セクションの主導権・スタンス・温度感・ターンバランスに従うこと
 - memoryは会話内容から正確に抽出すること
+
+【理想の会話例】
+設定: 友人同士、共通の興味（料理）、商店街で偶然会う、warm
+A: 一人称「俺」、語尾「〜じゃん」「〜だろ」
+B: 一人称「私」、語尾「〜だよね」「〜かな」
+
+{"lines":[
+  {"speaker":"A","text":"買い物帰り？ すごい荷物じゃん。"},
+  {"speaker":"B","text":"安売りしてて、つい買いすぎちゃった。"},
+  {"speaker":"A","text":"わかる。俺も昨日アボカド98円につられて3つ買ったわ。"},
+  {"speaker":"B","text":"3つは多いよね。何作るの？"},
+  {"speaker":"A","text":"アボカド丼かなー。レパートリー少なくてさ。"},
+  {"speaker":"B","text":"私も最近同じのばっかり。今度一緒に新しいの作ってみない？"}
+]}
+
+この例のポイント:
+- 冒頭は相手の状況を見て声をかけている（テンプレ挨拶ではない）
+- 具体物（アボカド、98円、3つ）で会話が展開している
+- 語尾が自然に使われ、一人称の表記揺れがない
 `.trim();
 
 // ---------------------------------------------------------------------------
@@ -174,7 +193,40 @@ function topicSourceLabel(source: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// キャラクターブロック
+// 口調ルールブロック（プロンプト先頭用・最重要）
+// ---------------------------------------------------------------------------
+
+function formatSpeechRuleBlock(char: CharacterProfile): string {
+  const lines: string[] = [];
+  lines.push(`■ ${char.name}:`);
+
+  // 一人称（最優先）
+  if (char.firstPerson) {
+    lines.push(`  一人称: 「${char.firstPerson}」（厳守・表記揺れ禁止・自分の名前で自己言及しない）`);
+  }
+
+  // 口調プロファイル
+  if (char.speechProfile) {
+    const sp = char.speechProfile;
+    lines.push(`  語尾: ${sp.endings.join(" / ")}`);
+    if (sp.frequentPhrases.length > 0) {
+      lines.push(`  よく使う表現: ${sp.frequentPhrases.join(", ")}`);
+    }
+    if (sp.avoidedPhrases.length > 0) {
+      lines.push(`  避ける表現: ${sp.avoidedPhrases.join(", ")}`);
+    }
+    if (sp.examples.length > 0) {
+      lines.push(`  セリフ例: ${sp.examples.map((ex) => `「${ex}」`).join(" ")}`);
+    }
+  } else {
+    lines.push("  話し方: 未設定（自然な話し方で生成）");
+  }
+
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// キャラクター補足ブロック（基本属性・MBTI・特性のみ）
 // ---------------------------------------------------------------------------
 
 function formatCharacterBlock(char: CharacterProfile): string {
@@ -185,7 +237,6 @@ function formatCharacterBlock(char: CharacterProfile): string {
   if (char.gender) attrParts.push(`性別: ${char.gender}`);
   if (typeof char.age === "number") attrParts.push(`年齢: ${char.age}`);
   if (char.occupation) attrParts.push(`職業: ${char.occupation}`);
-  if (char.firstPerson) attrParts.push(`一人称: ${char.firstPerson}`);
 
   lines.push(`- ${char.name} (ID: ${char.id})`);
   if (attrParts.length > 0) {
@@ -202,32 +253,6 @@ function formatCharacterBlock(char: CharacterProfile): string {
   const traitLine = formatTraitDescriptions(char.traits);
   lines.push(`  ${traitLine}`);
 
-  // 口調プロファイル
-  if (char.speechProfile) {
-    const sp = char.speechProfile;
-    lines.push(`  話し方「${sp.label}」:`);
-    lines.push(`    語尾: ${sp.endings.join(" / ")}`);
-    if (sp.frequentPhrases.length > 0) {
-      lines.push(`    よく使う表現: ${sp.frequentPhrases.join(", ")}`);
-    }
-    if (sp.avoidedPhrases.length > 0) {
-      lines.push(`    避ける表現: ${sp.avoidedPhrases.join(", ")}`);
-    }
-    if (sp.examples.length > 0) {
-      lines.push("    例:");
-      for (const ex of sp.examples) {
-        lines.push(`      - 「${ex}」`);
-      }
-    }
-  } else {
-    lines.push("  話し方: 未設定（自然な話し方で生成）");
-  }
-
-  // 一人称厳守指示
-  if (char.firstPerson) {
-    lines.push(`  一人称は「${char.firstPerson}」を厳守すること。`);
-  }
-
   return lines.join("\n");
 }
 
@@ -241,67 +266,83 @@ export function buildUserPrompt(input: PromptInput): string {
 
   const sections: string[] = [];
 
+  // ====================================================================
+  // 【最重要: 口調ルール】— プロンプト先頭に配置（primacy bias 活用）
+  // ====================================================================
+  sections.push(
+    `【最重要: 口調ルール】\n以下の口調を各発話に必ず反映すること。\n\n${formatSpeechRuleBlock(charA)}\n\n${formatSpeechRuleBlock(charB)}`,
+  );
+
+  // ====================================================================
+  // 【話題と会話の方向】— 会話の骨格を早期に把握させる
+  // ====================================================================
+  const directionLines: string[] = [];
+
+  // 話題
+  directionLines.push(`話題: ${topicSourceLabel(topic.source)}「${topic.label}」`);
+  if (topic.detail) {
+    directionLines.push(`  補足: ${topic.detail}`);
+  }
+
+  // 構造
+  directionLines.push(`主導: ${structure.initiatorName}（話題を振る側）`);
+  directionLines.push(`${structure.initiatorName}のスタンス: ${structure.initiatorStance}（${stanceLabel(structure.initiatorStance)}）`);
+  directionLines.push(`${structure.responderName}のスタンス: ${structure.responderStance}（${stanceLabel(structure.responderStance)}）`);
+  directionLines.push(`温度感: ${structure.temperature}（${temperatureLabel(structure.temperature)}）`);
+  directionLines.push(`${structure.initiatorName}の発話は${structure.initiatorTurnLength}、${structure.responderName}の発話は${structure.responderTurnLength}`);
+
+  // third_party コンテキスト
+  if (topic.thirdPartyContext) {
+    const ctx = topic.thirdPartyContext;
+    directionLines.push(`${structure.initiatorName}が知っていること:`);
+    for (const fact of ctx.knownFacts) {
+      directionLines.push(`  - ${fact}`);
+    }
+    directionLines.push(
+      `${structure.responderName}と${ctx.characterName}の関係: ${ctx.listenerKnowsCharacter ? "知り合い" : "なし（直接は知らない）"}`,
+    );
+    directionLines.push(`注意: ${structure.initiatorName}の知識の範囲内でのみ${ctx.characterName}について言及すること`);
+  }
+
+  sections.push(`【話題と会話の方向】\n${directionLines.join("\n")}`);
+
+  // ====================================================================
+  // 【登場人物（補足情報）】— MBTI・特性等の参考情報
+  // ====================================================================
+  sections.push(
+    `【登場人物（補足情報）】\n${formatCharacterBlock(charA)}\n\n${formatCharacterBlock(charB)}`,
+  );
+
+  // ====================================================================
   // 【会話設定】
+  // ====================================================================
   const encounter = pickRandom(ENCOUNTER_SITUATIONS);
   const settingParts = [`場所: ${environment.place}（${environment.timeOfDay}`];
   if (environment.weather) settingParts[0] += `、${environment.weather}`;
   settingParts[0] += `、${encounter}）`;
 
-  sections.push(`【会話設定】\n${settingParts[0]}`);
-
-  // 【登場人物】
-  sections.push(
-    `【登場人物】\n${formatCharacterBlock(charA)}\n\n${formatCharacterBlock(charB)}`,
-  );
-
-  // 【2人の関係性と現在の感情】
+  // 関係性もここに統合
   const aName = charA.name;
   const bName = charB.name;
   const relationBlock = [
-    `- 関係性: ${relationLabel(relation.type)}`,
-    `- ${aName}→${bName}: ${feelingLabel(relation.feelingAtoB.label)} / スコア=${relation.feelingAtoB.score}`,
-    `- ${bName}→${aName}: ${feelingLabel(relation.feelingBtoA.label)} / スコア=${relation.feelingBtoA.score}`,
-  ].join("\n");
-  sections.push(`【2人の関係性と現在の感情】\n${relationBlock}`);
+    `関係性: ${relationLabel(relation.type)}`,
+    `${aName}→${bName}: ${feelingLabel(relation.feelingAtoB.label)} / スコア=${relation.feelingAtoB.score}`,
+    `${bName}→${aName}: ${feelingLabel(relation.feelingBtoA.label)} / スコア=${relation.feelingBtoA.score}`,
+  ].join(" / ");
 
-  // 【会話の構造】
-  const structureBlock = [
-    `- 主導: ${structure.initiatorName}（話題を振る側）`,
-    `- ${structure.initiatorName}のスタンス: ${structure.initiatorStance}（${stanceLabel(structure.initiatorStance)}）`,
-    `- ${structure.responderName}のスタンス: ${structure.responderStance}（${stanceLabel(structure.responderStance)}）`,
-    `- 温度感: ${structure.temperature}（${temperatureLabel(structure.temperature)}）`,
-    `- ${structure.initiatorName}の発話は${structure.initiatorTurnLength}、${structure.responderName}の発話は${structure.responderTurnLength}`,
-  ].join("\n");
-  sections.push(`【会話の構造】\n${structureBlock}`);
+  sections.push(`【会話設定】\n${settingParts[0]}\n${relationBlock}`);
 
-  // 【話題】
-  const topicLines = [
-    `種別: ${topicSourceLabel(topic.source)}`,
-    `内容: ${topic.label}`,
-  ];
-  if (topic.detail) {
-    topicLines.push(`補足: ${topic.detail}`);
-  }
-  if (topic.thirdPartyContext) {
-    const ctx = topic.thirdPartyContext;
-    topicLines.push(`${structure.initiatorName}が知っていること:`);
-    for (const fact of ctx.knownFacts) {
-      topicLines.push(`  - ${fact}`);
-    }
-    topicLines.push(
-      `${structure.responderName}と${ctx.characterName}の関係: ${ctx.listenerKnowsCharacter ? "知り合い" : "なし（直接は知らない）"}`,
-    );
-    topicLines.push(`注意: ${structure.initiatorName}の知識の範囲内でのみ${ctx.characterName}について言及すること`);
-  }
-  sections.push(`【話題】\n${topicLines.join("\n")}`);
-
+  // ====================================================================
   // 【直近の共有スニペット】（あれば）
+  // ====================================================================
   if (input.recentSnippets.length > 0) {
     const snippetLines = input.recentSnippets.map((s) => `- ${s.text}`);
     sections.push(`【直近の共有スニペット】\n${snippetLines.join("\n")}`);
   }
 
+  // ====================================================================
   // 【前回の会話記憶】（あれば）
+  // ====================================================================
   if (input.previousMemory) {
     const mem = input.previousMemory;
     const memLines = [
@@ -314,7 +355,6 @@ export function buildUserPrompt(input: PromptInput): string {
     if (mem.knowledgeGained.length > 0) {
       memLines.push("知ったこと:");
       for (const k of mem.knowledgeGained) {
-        // about はIDなので、名前で表示
         const aboutName = k.about === charA.id ? charA.name
           : k.about === charB.id ? charB.name
           : k.about;
@@ -324,19 +364,18 @@ export function buildUserPrompt(input: PromptInput): string {
     sections.push(`【前回の会話記憶】\n${memLines.join("\n")}`);
   }
 
-  // 【生成ルール】
+  // ====================================================================
+  // 【生成ルール（厳守）】— プロンプト末尾で再強調（recency bias 活用）
+  // ====================================================================
   const rules = [
-    "- 上記の構造（主導権、スタンス、温度感、ターンバランス）に従うこと",
     "- 6〜8ターンの会話を生成",
     "- 1発話は短文2〜3文程度まで可。ただし長くなりすぎないこと",
     "- 意味的に区切れる箇所では句点（。）、感嘆符（！）、疑問符（？）で文を区切ること。読点（、）だけで複数の文をつなげないこと",
-    "- 話し方の語尾・頻出表現を口調に反映し、避ける表現は使わないこと",
-    "- 一人称は指定表記を厳守（表記揺れ禁止）",
-    "- 一人称が名前以外に指定されているキャラクターは、自分自身を指す際に自分の名前を主語として使わないこと（例: 一人称が「私」なら「遥は〜した」ではなく「私は〜した」）。ただし他者の発言を引用する場合は除く",
+    "- 上記の構造（主導権、スタンス、温度感、ターンバランス）に従うこと",
     "- 相手の直前発話を受けた返答を優先する",
     "- 関連のない新話題を唐突に導入しない",
     "- 汎用テンプレ台詞の連発は避ける",
-    "- 会話の冒頭を毎回同じパターンにしないこと。「あ、〇〇じゃん」のような驚き型の挨拶だけでなく、声をかける、手を振る、隣に座る等、多様な始め方をすること",
+    "- 会話の冒頭を毎回同じパターンにしないこと。「あ、〇〇じゃん」のような驚き型の挨拶だけでなく、既に隣にいる状態からの「そういえばさ」、相手の行動へのツッコミ「何読んでんの」、作業中の声かけ等、多様な始め方をすること",
   ];
 
   // 話題ソースに応じた追加ルール
@@ -347,9 +386,15 @@ export function buildUserPrompt(input: PromptInput): string {
     rules.push("- 共有スニペットの出来事を会話のきっかけに使うこと");
   }
 
-  sections.push(`【生成ルール】\n${rules.join("\n")}`);
+  // 一人称ルールを末尾で再強調
+  rules.push("- 【再確認】口調ルールセクションの語尾・頻出表現を毎ターン反映すること");
+  rules.push("- 【再確認】一人称は指定表記を厳守（表記揺れ禁止）。自分の名前を一人称として使わないこと");
 
+  sections.push(`【生成ルール（厳守）】\n${rules.join("\n")}`);
+
+  // ====================================================================
   // 【出力仕様】
+  // ====================================================================
   const outputRules = [
     "- 出力は上記スキーマに厳密一致するJSONのみ",
     `- threadId: "${input.threadId}"`,

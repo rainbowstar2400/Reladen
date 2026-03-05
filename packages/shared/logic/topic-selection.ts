@@ -70,6 +70,23 @@ const INTIMACY: Record<string, number> = {
 const FRESHNESS_PENALTY = -3;
 
 // ---------------------------------------------------------------------------
+// ヘルパー
+// ---------------------------------------------------------------------------
+
+/**
+ * 候補ラベルが最近の話題と一致するか（部分一致で判定）
+ *
+ * recentTopics は LLM 生成の自然言語（例: "料理の話"）、
+ * candidate.label は興味タグ等の短い文字列（例: "料理"）のため
+ * 完全一致では機能しない。双方向の部分一致で判定する。
+ */
+function isRecentTopic(label: string, recentTopics: string[]): boolean {
+  return recentTopics.some(
+    (t) => t.includes(label) || label.includes(t),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 候補生成
 // ---------------------------------------------------------------------------
 
@@ -256,8 +273,8 @@ function scoreCandidate(
       break;
   }
 
-  // 鮮度: 最近同じ話題を使っていたら減点
-  if (input.recentTopics.includes(candidate.label)) {
+  // 鮮度: 最近同じ話題を使っていたら減点（部分一致で判定）
+  if (isRecentTopic(candidate.label, input.recentTopics)) {
     score += FRESHNESS_PENALTY;
   }
 
@@ -294,8 +311,10 @@ export function selectTopic(
   // スコア降順ソート
   scored.sort((a, b) => b.score - a.score);
 
-  // 最高スコアの候補を採用。全候補が低スコアならenvironmentalにフォールバック
-  const best = scored[0];
+  // 最高スコアの候補群からランダム選択（同スコア候補が偏らないように）
+  const topScore = scored[0]?.score ?? 0;
+  const topCandidates = scored.filter((c) => c.score === topScore);
+  const best = topCandidates[Math.floor(Math.random() * topCandidates.length)];
 
   if (!best || best.score <= 0) {
     // フォールバック: environmental
