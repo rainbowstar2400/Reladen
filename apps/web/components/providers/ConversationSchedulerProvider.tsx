@@ -4,6 +4,7 @@
 import { useEffect, useRef } from "react";
 import { startConversationScheduler, triggerConversationNow } from "@/lib/scheduler/conversation-scheduler";
 import { useAuth } from "@/lib/auth/use-auth";
+import { ensureUserPresetBootstrap } from "@/lib/data/presets";
 
 type Props = {
   enabled?: boolean;
@@ -45,6 +46,13 @@ export default function ConversationSchedulerProvider(props: Props) {
       }
     };
   }, [baseIntervalMs, canExposeManualTrigger]);
+
+  useEffect(() => {
+    if (!ready || !user?.id) return;
+    void ensureUserPresetBootstrap(user.id).catch((error) => {
+      console.error("[PresetBootstrap] failed to initialize default presets.", error);
+    });
+  }, [ready, user?.id]);
 
   useEffect(() => {
     // 既存のスケジューラがあれば停止

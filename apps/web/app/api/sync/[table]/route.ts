@@ -30,7 +30,7 @@ function createAuthedClient(req: NextRequest) {
 // Supabaseエラーを 400/401 に成形
 function asHttpError(prefix: string, err: any) {
   const m = err?.message ?? String(err);
-  const isAuth = /JWT|permission|RLS|row level|authorization/i.test(m);
+  const isAuth = /JWT|permission|RLS|row level|row-level|authorization/i.test(m);
   const status = isAuth ? 401 : 400;
   return jsonWithHeaders({ message: `${prefix}: ${m}` }, status);
 }
@@ -208,7 +208,12 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     return jsonWithHeaders(resp, 200, requestId);
   } catch (e: any) {
     const durationMs = Date.now() - started;
-    const isResp = e instanceof Response;
+    const isResp =
+      e instanceof Response ||
+      (typeof e === 'object' &&
+        e !== null &&
+        typeof e.status === 'number' &&
+        typeof e.text === 'function');
     const status = isResp ? e.status : 500;
     let body = { message: 'internal error', requestId };
     if (isResp) {
