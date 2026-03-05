@@ -15,15 +15,105 @@ type DefaultPresetInput = Omit<Preset, 'example'> & { example?: string | null };
 
 const DEFAULT_PRESETS_BASE: ReadonlyArray<DefaultPresetInput> = [
     // Speech
-    { id: 'fdc5f580-a7c6-dbb1-28f6-64ad237831aa', category: 'speech', label: '優しい敬語', description: '丁寧で穏やかな話し方：「〜です」「〜ます」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じですね。' },
-    { id: '33ff24b3-0861-6bc0-7aa0-4ac350fe5c51', category: 'speech', label: '冷たい敬語', description: '距離感のある敬語：「ご自由にどうぞ」「そうですか」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日、いい感じですね。' },
-    { id: 'a24b66df-0f96-e060-26ee-6e153dd14754', category: 'speech', label: 'タメ口', description: 'フレンドリーな砕けた口調：「〜だよ」「〜じゃん」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日いい感じじゃん。' },
-    { id: '7d4ffa4f-e0cb-19d2-85f1-27ff467cef0a', category: 'speech', label: 'ギャル語', description: '砕けた陽気な話し方：「マジで？」「〜じゃね？」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日、いい感じじゃね？' },
-    { id: 'd4498811-d12f-a38a-7eec-474dc908b26f', category: 'speech', label: 'お嬢様風', description: '上品で古風な敬語：「〜ですわ」「〜ですこと」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じですわね。' },
-    { id: '5d603d72-66c7-90d8-9259-5c804e412bdc', category: 'speech', label: '関西弁', description: '柔らかい関西口調：「〜やで」「ほんま？」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日いい感じやね。' },
-    { id: 'b3ff700f-489a-f3b3-c491-f115c00536b4', category: 'speech', label: '子供っぽい', description: '幼い印象の話し方：「〜だね！」「やったぁ」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じだね！' },
-    { id: 'd58d88d7-abb1-90bc-d6d3-0d1723c67349', category: 'speech', label: '無口', description: '短く省略がち：「……別に」「うん」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日、いい感じ。' },
-    { id: 'be34dad9-d3ef-8026-c127-4efe2c143f77', category: 'speech', label: 'ご婦人風', description: '華やかな柔らかい口調：「〜かしら」「あらやだ」など', isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じね。' },
+    {
+        id: 'fdc5f580-a7c6-dbb1-28f6-64ad237831aa', category: 'speech',
+        label: '優しい敬語', description: '丁寧で穏やかな話し方：「〜です」「〜ます」など',
+        isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じですね。',
+        speechProfileData: {
+            endings: ['〜です', '〜ますね', '〜ですよ'],
+            frequentPhrases: ['そうですね', 'ありがとうございます'],
+            avoidedPhrases: ['マジで', 'やべえ'],
+            examples: ['今日はいい天気ですね。', 'お元気でしたか？'],
+        },
+    },
+    {
+        id: '33ff24b3-0861-6bc0-7aa0-4ac350fe5c51', category: 'speech',
+        label: '冷たい敬語', description: '距離感のある敬語：「ご自由にどうぞ」「そうですか」など',
+        isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日、いい感じですね。',
+        speechProfileData: {
+            endings: ['〜ですか', '〜ですね', '〜では？'],
+            frequentPhrases: ['そうですが', 'いい感じですね', 'ご自由にどうぞ'],
+            avoidedPhrases: ['マジで', 'やべえ'],
+            examples: ['今日はいい天気ですね。', 'お好きにしてください'],
+        },
+    },
+    {
+        id: 'a24b66df-0f96-e060-26ee-6e153dd14754', category: 'speech',
+        label: 'タメ口', description: 'フレンドリーな砕けた口調：「〜だよ」「〜じゃん」など',
+        isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日いい感じじゃん。',
+        speechProfileData: {
+            endings: ['〜だね', '〜じゃない', '〜だよ', '～じゃん'],
+            frequentPhrases: ['いいね', 'ありがと', 'どう？'],
+            avoidedPhrases: ['しましょう', '思います'],
+            examples: ['今日はいい天気だね。', '元気？'],
+        },
+    },
+    {
+        id: '7d4ffa4f-e0cb-19d2-85f1-27ff467cef0a', category: 'speech',
+        label: 'ギャル語', description: '砕けた陽気な話し方：「マジで？」「〜じゃね？」など',
+        isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日、いい感じじゃね？',
+        speechProfileData: {
+            endings: ['〜じゃね？', '〜でしょ', '〜よね'],
+            frequentPhrases: ['マジで？', 'いいじゃん', 'よすぎる'],
+            avoidedPhrases: ['思います', 'いいですね'],
+            examples: ['今日マジでいい天気じゃね？', 'やっぱこれっしょ！'],
+        },
+    },
+    {
+        id: 'd4498811-d12f-a38a-7eec-474dc908b26f', category: 'speech',
+        label: 'お嬢様風', description: '上品で古風な敬語：「〜ですわ」「〜ですこと」など',
+        isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じですわね。',
+        speechProfileData: {
+            endings: ['〜ですわ', '〜かしら', '〜ですこと'],
+            frequentPhrases: ['そうですわね', '助かりましたわ', 'よろしくお願いしますわ'],
+            avoidedPhrases: ['マジで', 'やべえ'],
+            examples: ['今日はいい天気ですわね。', 'ご機嫌いかがかしら？'],
+        },
+    },
+    {
+        id: '5d603d72-66c7-90d8-9259-5c804e412bdc', category: 'speech',
+        label: '関西弁', description: '柔らかい関西口調：「〜やで」「ほんま？」など',
+        isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日いい感じやね。',
+        speechProfileData: {
+            endings: ['〜やね', '〜やで', '〜せん'],
+            frequentPhrases: ['そうやんな', 'ありがとな','こうやで'],
+            avoidedPhrases: ['そうです', '思います'],
+            examples: ['今日いい天気やね。', '元気やった？', 'ほんまおもろいなぁ'],
+        },
+    },
+    {
+        id: 'b3ff700f-489a-f3b3-c491-f115c00536b4', category: 'speech',
+        label: '子供っぽい', description: '無邪気で幼い印象の話し方：「〜だね！」「やったぁ」など',
+        isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じだね！',
+        speechProfileData: {
+            endings: ['〜だね！', '〜もん', '〜じゃん'],
+            frequentPhrases: ['やったぁ', 'ありがとう！', 'そうだよね！'],
+            avoidedPhrases: ['思います', 'やべえ'],
+            examples: ['今日はいい天気だね！。', 'わくわくしてきた', '楽しんじゃおう'],
+        },
+    },
+    {
+        id: 'd58d88d7-abb1-90bc-d6d3-0d1723c67349', category: 'speech',
+        label: '無口', description: '短く省略がち：「……別に」「うん」など',
+        isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日、いい感じ。',
+        speechProfileData: {
+            endings: ['〜……', '〜……かな', '〜……だね'],
+            frequentPhrases: ['うん', 'ありがと', 'そうだね'],
+            avoidedPhrases: ['マジで', 'やべえ'],
+            examples: ['今日、いい天気だね。', '……別に。', 'まぁ、そんな感じ。'],
+        },
+    },
+    {
+        id: 'be34dad9-d3ef-8026-c127-4efe2c143f77', category: 'speech',
+        label: 'ご婦人風', description: '華やかな柔らかい口調：「〜かしら」「あらやだ」など',
+        isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false, example: '今日はいい感じね。',
+        speechProfileData: {
+            endings: ['〜かしら', '〜わね', '〜でしょう？'],
+            frequentPhrases: ['どうかしら', '悪くないわね', 'こんな感じでしょう？'],
+            avoidedPhrases: ['マジで', 'やべえ'],
+            examples: ['今日はいい天気ね。', 'ご一緒にいかがかしら。', 'あなたもお好きでしょう？'],
+        },
+    },
 
     // Occupation
     { id: '24e3646f-fba5-86c9-cda0-963ce1766158', category: 'occupation', label: '高校生', description: null, isManaged: true, owner_id: 'SYSTEM', updated_at: now, deleted: false },
