@@ -8,3 +8,4 @@ node_modules
 /apps/desktop/src-tauri/target/
 Todo.md
 /.claude
+/documents/memo
