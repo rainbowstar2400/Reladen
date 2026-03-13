@@ -67,7 +67,6 @@ const residentFormSchema = z.object({
     activity: z.number().int().min(1).max(5),
     expressiveness: z.number().int().min(1).max(5),
   }),
-  trustToPlayer: z.number().min(0).max(100).optional(),
 
   // --- プリセット項目 (ラベル) ---
   speechPreset: z.string({ required_error: '口調を選択してください' }).min(1, '口調を選択してください'),
@@ -281,7 +280,6 @@ export function ResidentForm({
         name: formDefaultValues?.name ?? '',
         mbti: formDefaultValues?.mbti ?? undefined,
         traits: traitsObj,
-        trustToPlayer: formDefaultValues?.trustToPlayer ?? 50,
 
         speechPreset: defaultSpeechPreset?.label ?? undefined,
         speechPresetDescription: defaultSpeechPreset?.description ?? null,
@@ -588,7 +586,6 @@ export function ResidentForm({
       name: saved.name,
       mbti: saved.mbti ?? '',
       traits: saved.traits ?? { ...DEFAULT_TRAITS },
-      trustToPlayer: saved.trustToPlayer ?? 50,
 
       // DBデータ(savedPreset)からラベルをセット
       speechPreset: savedSpeechPreset?.label ?? (values.speechPreset ?? null),
