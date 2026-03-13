@@ -13,6 +13,7 @@ function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
   // サーバー側 route.ts で { consult: {...} } 形式を返す想定
   const src = apiData?.consult ?? apiData ?? {}
   const p = src?.payload ?? src?.data ?? src ?? {}
+  const serverAnswer = apiData?.answer ?? null
 
   // --- 日付／時刻の整形（ダミー互換: date, weekday, time） ---
   const updatedISO: string | undefined =
@@ -63,8 +64,7 @@ function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
     choices,
     replyByChoice,
     systemAfter,
-    // selectedChoiceId は非同期で別途読み込み
-    selectedChoiceId: null,
+    selectedChoiceId: serverAnswer?.selectedChoiceId ?? null,
   }
 }
 
@@ -99,7 +99,7 @@ export default function ConsultDetailPage() {
         if (aborted) return
         setData({
           ...base,
-          selectedChoiceId: stored?.selectedChoiceId ?? null,
+          selectedChoiceId: base.selectedChoiceId ?? stored?.selectedChoiceId ?? null,
         })
       } catch (e: any) {
         if (!aborted) {

@@ -383,6 +383,7 @@ export function HomeContent() {
   function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
     const src = apiData?.consult ?? apiData ?? {};
     const p = src?.payload ?? src?.data ?? src ?? {};
+    const serverAnswer = apiData?.answer ?? null;
     const updatedISO: string | undefined =
       src?.updated_at || p?.updated_at || p?.occurredAt || undefined;
     const d = updatedISO ? new Date(updatedISO) : new Date();
@@ -421,7 +422,7 @@ export function HomeContent() {
       choices,
       replyByChoice,
       systemAfter,
-      selectedChoiceId: null,
+      selectedChoiceId: serverAnswer?.selectedChoiceId ?? null,
     };
   }
 
@@ -500,7 +501,7 @@ export function HomeContent() {
         setConsultDetail({
           ...base,
           prompt: { ...base.prompt, speaker: mappedSpeaker },
-          selectedChoiceId: stored?.selectedChoiceId ?? null,
+          selectedChoiceId: base.selectedChoiceId ?? stored?.selectedChoiceId ?? null,
         });
       } catch {
         try {

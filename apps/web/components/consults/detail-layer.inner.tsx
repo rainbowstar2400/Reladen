@@ -1,20 +1,23 @@
 // apps/web/components/consults/detail-layer.inner.tsx
 'use client'
 
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import ConsultDetailPanel, { ConsultDetail } from './consult-detail-panel'
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage'
 import { useQueryClient } from '@tanstack/react-query'
 
 // DB/APIから取得したデータを ConsultDetailPanel の型へ合わせて整形
-async function fetchConsultDetailForPanel(id: string): Promise<Omit<ConsultDetail, 'selectedChoiceId'>> {
+async function fetchConsultDetailForPanel(id: string): Promise<ConsultDetail> {
   const res = await fetch(`/api/consults/${id}`, { method: 'GET', headers: { 'Content-Type': 'application/json' }, cache: 'no-store' });
   if (!res.ok) throw new Error(`Failed to fetch consult ${id} (${res.status})`);
   const json = await res.json();
+  const src = json?.consult ?? json ?? {};
+  const p = src?.payload ?? src?.data ?? src ?? {};
+  const serverAnswer = json?.answer ?? null;
 
   // createdAt/created_at から date/weekday/time を派生（無ければ空）
-  const createdIso = json?.createdAt ?? json?.created_at ?? null;
+  const createdIso = src?.updated_at ?? p?.updated_at ?? p?.occurredAt ?? null;
   let date = '', weekday = '', time = '';
   if (createdIso) {
     const d = new Date(createdIso);
@@ -24,24 +27,29 @@ async function fetchConsultDetailForPanel(id: string): Promise<Omit<ConsultDetai
   }
 
   // choices: { id, label } に整形
-  const choices = Array.isArray(json?.choices)
-    ? json.choices.map((c: any) => ({ id: String(c?.id ?? ''), label: String(c?.label ?? c?.text ?? '') }))
+  const choicesRaw: any[] =
+    Array.isArray(p?.choices) ? p.choices : Array.isArray(p?.options) ? p.options : [];
+  const choices = Array.isArray(choicesRaw)
+    ? choicesRaw.map((c: any, idx: number) => ({
+      id: String(c?.id ?? c?.value ?? `c${idx + 1}`),
+      label: String(c?.label ?? c?.text ?? c ?? `選択肢 ${idx + 1}`),
+    }))
     : [];
 
   return {
-    id: json?.id ?? id,
-    title: json?.title ?? '(no title)',
+    id: src?.id ?? id,
+    title: p?.title ?? p?.subject ?? '(no title)',
     date,
     weekday,
     time,
     prompt: {
-      speaker: json?.prompt?.speaker ?? json?.speaker ?? 'System',
-      text: json?.prompt?.text ?? json?.body ?? '',
+      speaker: p?.speaker ?? p?.residentName ?? p?.from ?? 'System',
+      text: p?.text ?? p?.content ?? p?.body ?? '',
     },
     choices,
-    replyByChoice: json?.replyByChoice ?? {},
-    systemAfter: json?.systemAfter ?? [],
-    // selectedChoiceId は下の state から合成する
+    replyByChoice: p?.replyByChoice ?? p?.replies ?? {},
+    systemAfter: p?.systemAfter ?? [],
+    selectedChoiceId: serverAnswer?.selectedChoiceId ?? null,
   };
 }
 
@@ -50,27 +58,9 @@ export default function ConsultDetailLayerInner() {
   const sp = useSearchParams()
   const queryClient = useQueryClient()
   const consultId = sp.get('consult')
-  const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<Omit<ConsultDetail, 'selectedChoiceId'> | null>(null);
+  const [detail, setDetail] = useState<ConsultDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let aborted = false
-      ; (async () => {
-        if (!consultId) {
-          setSelectedChoiceId(null)
-          return
-        }
-        try {
-          const stored = await loadConsultAnswer(consultId)
-          if (!aborted) setSelectedChoiceId(stored?.selectedChoiceId ?? null)
-        } catch {
-          if (!aborted) setSelectedChoiceId(null)
-        }
-      })()
-    return () => { aborted = true }
-  }, [consultId])
 
   useEffect(() => {
     let aborted = false;
@@ -82,8 +72,14 @@ export default function ConsultDetailLayerInner() {
       setLoading(true);
       setError(null);
       try {
-        const d = await fetchConsultDetailForPanel(consultId);
-        if (!aborted) setDetail(d);
+        const serverDetail = await fetchConsultDetailForPanel(consultId);
+        const stored = await loadConsultAnswer(serverDetail.id);
+        if (!aborted) {
+          setDetail({
+            ...serverDetail,
+            selectedChoiceId: serverDetail.selectedChoiceId ?? stored?.selectedChoiceId ?? null,
+          });
+        }
       } catch (e: any) {
         if (!aborted) setError(e?.message ?? 'failed to load consult');
       } finally {
@@ -93,23 +89,20 @@ export default function ConsultDetailLayerInner() {
     return () => { aborted = true; };
   }, [consultId]);
 
-  const data = useMemo(
-    () => (detail ? { ...detail, selectedChoiceId } : null),
-    [detail, selectedChoiceId]
-  );
-
   if (!consultId) return null;
-  if (loading && !data) return <div className="p-4 text-sm text-muted-foreground">読み込み中…</div>;
-  if (error && !data) return <div className="p-4 text-sm text-red-600">エラー: {error}</div>;
+  if (loading && !detail) return <div className="p-4 text-sm text-muted-foreground">読み込み中…</div>;
+  if (error && !detail) return <div className="p-4 text-sm text-red-600">エラー: {error}</div>;
 
   return (
     <ConsultDetailPanel
       open={!!consultId}
-      data={data}
+      data={detail}
       onDecide={async (choiceId) => {
         if (!consultId) return
         const result = await saveConsultAnswer(consultId, choiceId)
-        setSelectedChoiceId(result.selectedChoiceId ?? choiceId ?? null) // UIへ即反映
+        setDetail((prev) =>
+          prev ? { ...prev, selectedChoiceId: result.selectedChoiceId ?? choiceId ?? null } : prev
+        ) // UIへ即反映
         if (result.applied) {
           await queryClient.invalidateQueries({ queryKey: ['residents'] })
         }

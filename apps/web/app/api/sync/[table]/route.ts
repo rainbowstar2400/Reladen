@@ -35,6 +35,129 @@ function asHttpError(prefix: string, err: any) {
   return jsonWithHeaders({ message: `${prefix}: ${m}` }, status);
 }
 
+function pickFirst<T>(...values: Array<T | null | undefined>): T | undefined {
+  for (const value of values) {
+    if (value !== undefined && value !== null) return value;
+  }
+  return undefined;
+}
+
+function isUniqueViolation(error: any): boolean {
+  const code = String(error?.code ?? '');
+  const message = String(error?.message ?? '');
+  return code === '23505' || /duplicate key value violates unique constraint/i.test(message);
+}
+
+function isMissingColumnError(error: any, column: string): boolean {
+  const message = String(error?.message ?? '');
+  return /column .* does not exist/i.test(message) && message.includes(column);
+}
+
+type ConsultVariant = 'snake' | 'compact';
+
+function buildConsultAnswerPayload(
+  incomingData: Record<string, any>,
+  variant: ConsultVariant,
+  allowedCols: Set<string>,
+  fallbackUpdatedAt?: string,
+) {
+  const payload: Record<string, any> = {};
+  const id = incomingData.id;
+  const updatedAt = pickFirst(
+    incomingData.updated_at,
+    incomingData.updatedAt,
+    incomingData.updatedat,
+    fallbackUpdatedAt,
+  );
+  const selectedChoiceId = pickFirst(
+    incomingData.selectedChoiceId,
+    incomingData.selected_choice_id,
+    incomingData.selectedchoiceid,
+  );
+  const decidedAt = pickFirst(
+    incomingData.decidedAt,
+    incomingData.decided_at,
+    incomingData.decidedat,
+  );
+
+  if (id && allowedCols.has('id')) payload.id = id;
+  if (allowedCols.has('updated_at')) {
+    payload.updated_at =
+      typeof updatedAt === 'string' && updatedAt.length > 0 ? updatedAt : new Date().toISOString();
+  }
+  if (typeof incomingData.deleted === 'boolean' && allowedCols.has('deleted')) {
+    payload.deleted = incomingData.deleted;
+  }
+
+  if (variant === 'snake') {
+    if (allowedCols.has('selected_choice_id')) payload.selected_choice_id = selectedChoiceId ?? null;
+    if (allowedCols.has('decided_at')) payload.decided_at = decidedAt ?? null;
+  } else {
+    if (allowedCols.has('selectedchoiceid')) payload.selectedchoiceid = selectedChoiceId ?? null;
+    if (allowedCols.has('decidedat')) payload.decidedat = decidedAt ?? null;
+  }
+
+  return payload;
+}
+
+async function pushConsultAnswersRows(args: {
+  sb: ReturnType<typeof createAuthedClient>;
+  table: AllowedTable;
+  incoming: Array<{ data: Record<string, any>; updated_at?: string; deleted?: boolean }>;
+  allowedCols: Set<string>;
+  ownerId: string;
+}) {
+  const { sb, table, incoming, allowedCols, ownerId } = args;
+  let pushed = 0;
+
+  for (const change of incoming) {
+    const incomingData = { ...(change.data ?? {}) };
+    if (incomingData.updated_at == null && typeof change.updated_at === 'string') {
+      incomingData.updated_at = change.updated_at;
+    }
+    if (incomingData.deleted == null && typeof change.deleted === 'boolean') {
+      incomingData.deleted = change.deleted;
+    }
+    if (!incomingData.id) continue;
+
+    const variants: ConsultVariant[] = ['snake', 'compact'];
+    let handled = false;
+
+    for (let i = 0; i < variants.length; i += 1) {
+      const variant = variants[i];
+      const payload = buildConsultAnswerPayload(incomingData, variant, allowedCols, change.updated_at);
+      if (allowedCols.has('owner_id')) payload.owner_id = ownerId;
+
+      const { error } = await sb.from(table).insert(payload);
+      if (!error) {
+        pushed += 1;
+        handled = true;
+        break;
+      }
+      if (isUniqueViolation(error)) {
+        // first-write-wins: 既存回答が正。後着は no-op 扱い。
+        handled = true;
+        break;
+      }
+
+      const shouldFallback =
+        variant === 'snake'
+        && (
+          isMissingColumnError(error, 'selected_choice_id')
+          || isMissingColumnError(error, 'decided_at')
+        );
+      if (shouldFallback && i < variants.length - 1) continue;
+      throw error;
+    }
+
+    if (!handled) {
+      throw new Error('consult_answers row push failed');
+    }
+  }
+
+  return pushed;
+}
+
 // 許可リストを DB の snake_case カラム名に統一する
 
 // residents の許可カラム（DBにあるものだけ）
@@ -78,6 +201,17 @@ const WORLD_STATES_ALLOWED = new Set([
   'owner_id', 'updated_at', 'deleted'
 ]);
 
+// consult_answers のカラム表記ゆらぎ（snake/compact）をどちらも受ける
+const CONSULT_ANSWERS_ALLOWED = new Set([
+  'id',
+  'updated_at',
+  'deleted',
+  'selected_choice_id',
+  'decided_at',
+  'selectedchoiceid',
+  'decidedat',
+]);
+
 // 許可リストのマップ (キーは sync.ts と一致)
 const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
   residents: RESIDENTS_ALLOWED,
@@ -86,7 +220,7 @@ const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
   nicknames: NICKNAMES_ALLOWED,
   events: EVENTS_ALLOWED,
   presets: PRESETS_ALLOWED,
-  consult_answers: new Set(),
+  consult_answers: CONSULT_ANSWERS_ALLOWED,
   world_states: WORLD_STATES_ALLOWED,
 };
 
@@ -140,10 +274,18 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
         return jsonWithHeaders({ message: `table ${table} sync not configured` }, 500, requestId);
       }
 
-      // 2. 許可リストが空 (consult_answers など) の場合は upsert をスキップ
-      if (allowedCols.size === 0) {
+      // consult_answers は first-write-wins を守るため専用処理（insert + duplicate no-op）
+      if (table === 'consult_answers') {
+        pushed = await pushConsultAnswersRows({
+          sb,
+          table: table as AllowedTable,
+          incoming: incoming as Array<{ data: Record<string, any>; updated_at?: string; deleted?: boolean }>,
+          allowedCols,
+          ownerId: user.id,
+        });
+      // 2. 許可リストが空の場合は upsert をスキップ
+      } else if (allowedCols.size === 0) {
         console.warn(JSON.stringify({ lvl: 'warn', at: 'sync.skip', requestId, table, reason: 'allowed columns list is empty' }));
-
       } else {
         // 3. 許可リストがある場合、キーを変換して upsert
         const rows = incoming.map((c) => {
@@ -170,8 +312,10 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
             payload.deleted = incomingData.deleted;
           }
 
-          // 9. owner_id を強制上書き
-          payload.owner_id = user.id;
+          // 9. owner_id は対象テーブルが許可する場合のみ注入
+          if (allowedCols.has('owner_id')) {
+            payload.owner_id = user.id;
+          }
 
           return payload; // 最終的な payload は snake_case のキーを持つ
         });

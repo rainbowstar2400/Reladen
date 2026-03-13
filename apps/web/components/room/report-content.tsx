@@ -129,6 +129,7 @@ function isConversationPayload(p: any): p is {
 function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
   const src = apiData?.consult ?? apiData ?? {};
   const p = src?.payload ?? src?.data ?? src ?? {};
+  const serverAnswer = apiData?.answer ?? null;
 
   const updatedISO: string | undefined =
     src?.updated_at || p?.updated_at || p?.occurredAt || undefined;
@@ -176,7 +177,7 @@ function normalizeToConsultDetail(apiData: any, id: string): ConsultDetail {
     choices,
     replyByChoice,
     systemAfter,
-    selectedChoiceId: null,
+    selectedChoiceId: serverAnswer?.selectedChoiceId ?? null,
   };
 }
 
@@ -523,7 +524,7 @@ export function ReportContent() {
           ...base,
           prompt: { ...base.prompt, speaker: mappedSpeaker },
           systemAfter: mappedSystemAfter ?? base.systemAfter,
-          selectedChoiceId: stored?.selectedChoiceId ?? null,
+          selectedChoiceId: base.selectedChoiceId ?? stored?.selectedChoiceId ?? null,
         });
       } catch {
         try {

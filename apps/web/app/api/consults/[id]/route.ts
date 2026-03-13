@@ -36,6 +36,27 @@ function normalizeConsultRow(row: any) {
   };
 }
 
+function normalizeConsultAnswerRow(row: any) {
+  if (!row) return null;
+  const selectedChoiceId =
+    row.selected_choice_id
+    ?? row.selectedchoiceid
+    ?? row.selectedChoiceId
+    ?? null;
+  const decidedAt =
+    row.decided_at
+    ?? row.decidedat
+    ?? row.decidedAt
+    ?? null;
+
+  return {
+    id: row.id ?? null,
+    selectedChoiceId: selectedChoiceId != null ? String(selectedChoiceId) : null,
+    decidedAt: decidedAt != null ? String(decidedAt) : null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
 export async function GET(
   _req: Request,
   ctx: { params: { id: string } }
@@ -62,9 +83,26 @@ export async function GET(
       return NextResponse.json({ error: 'not found' }, { status: 404 });
     }
 
+    // consult_answers は存在すれば併せて返却（表示はサーバー回答を優先）
+    let answer: ReturnType<typeof normalizeConsultAnswerRow> = null;
+    try {
+      const { data: answerData, error: answerError } = await sb
+        .from('consult_answers')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (answerError) {
+        console.warn('[Consult API] Failed to load consult_answers row', answerError.message);
+      } else {
+        answer = normalizeConsultAnswerRow(answerData);
+      }
+    } catch (error) {
+      console.warn('[Consult API] Failed to read consult answer:', (error as any)?.message ?? String(error));
+    }
+
     // ダミー互換の形に正規化して返す
     const consult = normalizeConsultRow(data);
-    return NextResponse.json({ consult }, { status: 200 });
+    return NextResponse.json({ consult, answer }, { status: 200 });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? 'unexpected error' }, { status: 500 });
   }

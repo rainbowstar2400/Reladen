@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { X, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
+import { useConsultPresenceLock } from '@/lib/consults/use-consult-presence-lock'
 
 type Line = { speaker: string; text: string }
 type Choice = { id: string; label: string }
@@ -55,9 +56,12 @@ export function ConsultDetailPanelContent({
     setPicked(data?.selectedChoiceId ?? null)
   }, [data?.selectedChoiceId])
 
+  const { locked: lockedByPresence } = useConsultPresenceLock(data?.id)
+  const blockedByLock = !answered && lockedByPresence
+
   // 「回答する」— picked を確定させ、保存フックを呼ぶ
   const decide = () => {
-    if (!picked) return
+    if (!picked || blockedByLock) return
     setCommitted(picked)      // ここで確定
     onDecide?.(picked)        // ← 保存はこのタイミングだけ
   }
@@ -95,6 +99,15 @@ export function ConsultDetailPanelContent({
 
         {/* 選択肢 */}
         <div className="mt-2 space-y-2">
+          {blockedByLock && (
+            <div
+              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+              role="status"
+              aria-live="polite"
+            >
+              この相談は別端末で操作中のため、現在は回答できません。
+            </div>
+          )}
           {data.choices.map((c) => {
             const isCommitted = chosenForHighlight === c.id
             const isPicked = picked === c.id
@@ -102,11 +115,11 @@ export function ConsultDetailPanelContent({
               <button
                 key={c.id}
                 type="button"
-                disabled={answered} // 回答確定後は変更不可
+                disabled={answered || blockedByLock} // 回答確定後と排他ロック中は変更不可
                 onClick={() => setPicked(c.id)}
                 className={[
                   'w-full rounded-md border border-slate-300/80 bg-white/40 px-3 py-1.5 text-sm text-slate-700 transition',
-                  answered ? 'cursor-not-allowed' : 'hover:bg-white/55',
+                  answered || blockedByLock ? 'cursor-not-allowed' : 'hover:bg-white/55',
                   !answered && isPicked ? 'ring-2 ring-ring' : '',
                   answered && isCommitted ? 'border-slate-500/70 bg-white/65' : '',
                 ].join(' ')}
@@ -132,7 +145,7 @@ export function ConsultDetailPanelContent({
           {/* 回答ボタン：未確定時のみ表示。未選択なら無効 */}
           {!answered && (
             <div className="flex justify-end pt-2">
-              <Button size="sm" disabled={!picked} onClick={decide}>
+              <Button size="sm" disabled={!picked || blockedByLock} onClick={decide}>
                 回答する
               </Button>
             </div>
