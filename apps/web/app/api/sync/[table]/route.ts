@@ -147,11 +147,11 @@ async function pushConsultAnswersRows(args: {
           || isMissingColumnError(error, 'decided_at')
         );
       if (shouldFallback && i < variants.length - 1) continue;
-      throw error;
+      throw asHttpError('insert failed', error);
     }
 
     if (!handled) {
-      throw new Error('consult_answers row push failed');
+      throw asHttpError('insert failed', new Error('consult_answers row push failed'));
     }
   }
 

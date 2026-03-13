@@ -4,6 +4,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { supabaseClient } from '@/lib/db-cloud/supabase';
 import { bulkUpsert, since } from '@/lib/db-local';
 import { SyncPayload, syncPayloadSchema } from '@/types';
+import { normalizePulledRow } from '@/lib/sync/pull-normalizer';
 export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
 import { makeOutboxKey, listPendingByTable, markSent /* , markFailed */ } from '@/lib/sync/outbox';
 
@@ -140,7 +141,9 @@ function useSyncInternal() {
           since: pendingSince ?? undefined,
         });
 
-        const cloudChanges = payload.changes.map((c) => c.data);
+        const cloudChanges = payload.changes.map((c) =>
+          normalizePulledRow(table, c.data as Record<string, any>)
+        );
         if (cloudChanges.length > 0) {
           await bulkUpsert(table, cloudChanges as any);
           // 送信成功扱いの outbox を削除

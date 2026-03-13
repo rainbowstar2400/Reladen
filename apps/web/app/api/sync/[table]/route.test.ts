@@ -156,6 +156,76 @@ describe('POST /api/sync/[table]', () => {
     expect(compactPayload.owner_id).toBeUndefined();
   });
 
+  it('consult_answers insert の RLS エラーを 401 として返す', async () => {
+    mocks.insert.mockResolvedValue({
+      error: {
+        message: 'new row violates row-level security policy (USING expression) for table "consult_answers"',
+      },
+    });
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'consult_answers') return { insert: mocks.insert };
+      return { upsert: mocks.upsert, select: mocks.select };
+    });
+
+    const req = makeRequest('consult_answers', {
+      changes: [
+        {
+          data: {
+            id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            selectedChoiceId: 'choice_4',
+            decidedAt: '2026-03-14T03:00:00.000Z',
+            updated_at: '2026-03-14T03:00:00.000Z',
+            deleted: false,
+          },
+          updated_at: '2026-03-14T03:00:00.000Z',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'consult_answers' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(data.message).toContain('insert failed');
+    expect(data.message).toContain('row-level security policy');
+  });
+
+  it('consult_answers insert の非認可エラーを 400 として返す', async () => {
+    mocks.insert.mockResolvedValue({
+      error: {
+        message: 'invalid input syntax for type uuid: "not-a-uuid"',
+      },
+    });
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'consult_answers') return { insert: mocks.insert };
+      return { upsert: mocks.upsert, select: mocks.select };
+    });
+
+    const req = makeRequest('consult_answers', {
+      changes: [
+        {
+          data: {
+            id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            selectedChoiceId: 'choice_5',
+            decidedAt: '2026-03-14T04:00:00.000Z',
+            updated_at: '2026-03-14T04:00:00.000Z',
+            deleted: false,
+          },
+          updated_at: '2026-03-14T04:00:00.000Z',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'consult_answers' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.message).toContain('insert failed');
+    expect(data.message).toContain('invalid input syntax');
+  });
+
   it('row-level を含むRLSエラーを 401 として返す', async () => {
     mocks.upsert.mockResolvedValue({
       error: {
@@ -192,4 +262,3 @@ describe('POST /api/sync/[table]', () => {
     expect(data.message).toContain('row-level security policy');
   });
 });
-
