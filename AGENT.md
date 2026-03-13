@@ -3,13 +3,31 @@
 Reladen プロジェクトで作業するエージェント向けのガイドです。
 
 ## プロジェクト概要
-- Next.js (App Router) + TypeScript + Tailwind + shadcn/ui をベースにした PWA。オフラインは IndexedDB(web)/Tauri(app.db)、オンラインは Supabase に tombstone（`deleted` / `updated_at`）で同期。
-- ドメイン: 住民の会話や振り返りログを扱う。評価ロジックは `apps/web/lib/evaluation` に集約。
-- LLM 利用: GPT 出力を評価に活用。重みは `public/config/conversation-weights.json` と `apps/web/lib/evaluation/weights.ts` で管理。
+- Reladen は「自作キャラクター同士の内面・関係変化を観察する」ことが主目的のゲーム。プレイヤーは管理人として見守る立場で、介入は相談回答など最小限。
+- 技術スタックは Next.js (App Router) + TypeScript + Tailwind + Supabase + Drizzle。ローカルファースト（IndexedDB / Tauri）で、クラウドへ同期する構成。
+- LLMは役割分担を明確化: コードが「何を話すか」を決め、LLM が「どう話すか」を生成。会話生成は `GPT-5.1`、補助生成（シチュエーション/天気コメント/最近の出来事など）は `GPT-4o-mini` を使う。
+- 感情評価の重みは `public/config/conversation-weights.json` と `apps/web/lib/evaluation/weights.ts` で管理。
+
+## 仕様の参照優先順位
+- 正式な最新仕様は `documents/spec/00_目次.md` から始まる 00〜09 の連番ドキュメントを参照する。
+- 仕様の統治ルールは「SectionBの決定事項を優先」。現行実装との差分がある場合も、まず Spec の意図に沿って判断する。
+- `documents/memo` 配下は検討経緯・補助資料。実装判断の一次情報は `documents/spec` を優先する。
+
+## ドメイン理解（Spec準拠）
+- キャラクター定義: `residents` を中心に MBTI（認知）と5軸特性（行動）を分離。話し方プリセット・一人称・呼び方は会話品質に直結する。
+- 関係と感情: 関係（`relations.type`）は対称、印象/好感度（`feelings`）は非対称。`relation = none` は会話対象外。
+- 会話生成: 10段パイプラインで、話題選定（9ソース）→ 構造決定（主導者/スタンス/温度感/発話長）→ LLM生成 → バリデーション（最大1回再生成）→ 評価・永続化。
+- 世界シミュレーション: 睡眠・天候・共有スニペット・最近の出来事・知識伝播により、プレイヤー不在でも世界が進行する。
+- プレイヤー介入: 相談（consult）が中心。`trustToPlayer` は住人間好感度と別軸で、主に相談で変動する。
+- スケジューリング: 現行はクライアント側15分間隔（開発用）だが、仕様上はサーバー側1時間間隔へ移行予定。
 
 ## ディレクトリと役割
-- `apps/web/app`: 画面と API (`/api/sync` など)。
-- `apps/web/lib`: DB / 同期 / 永続化のロジック。特に `lib/persist/persist-conversation.ts`。
+- `apps/web/app`: 画面と API（`/api/conversations/start`, `/api/sync/[table]` など）。
+- `apps/web/lib`: DB / 同期 / 会話オーケストレーション / 評価 / スケジューラーの実装。
+- `apps/web/lib/conversation`: 会話パイプライン（`run-conversation.ts`）。
+- `apps/web/lib/evaluation`: favor・印象・thread進行の評価ロジック。
+- `apps/web/lib/scheduler`: 会話・天候スケジューラー。
+- `packages/shared/logic`: 会話構造決定、話題選定、バリデーション、知識伝播、睡眠/天候などの純粋ロジック。
 - `packages/shared/types`: Zod + 型定義。API/DB の型をここに追加・更新。
 - `public/manifest.json`, `sentry.*`: PWA と Sentry 設定。
 - `apps/desktop`: Tauri アプリ。Rust 経由で `app.db` を扱う。
@@ -26,11 +44,16 @@ Reladen プロジェクトで作業するエージェント向けのガイドで
 - Tombstone 同期: 全テーブルで `updated_at` と `deleted` を更新し、削除済みを失わせない。
 - オフライン対応: IndexedDB/Tauri KV（`apps/web/lib/db/kv-*`）に合わせる。API 経由の同期は `useSync` と `/app/api/sync` を確認。
 - 型とバリデーション: 追加/変更は Zod と型をセットで。`@/` は `apps/web`、`@repo/shared` は `packages/shared` を指す。
-- 会話永続化: `persist-conversation.ts` 周辺は慎重に変更。危険な場合はフィーチャーフラグを検討。
+- 会話可否の前提: `relation = none` のペアは会話対象にしない（候補選定とパイプライン双方で維持）。
+- 関係系の不変条件: 関係は対称、印象/好感度は非対称、`trustToPlayer` はプレイヤー向け別軸として扱う。
+- 会話品質保証: `packages/shared/logic/conversation-validator.ts` のルールベース検証（error）とヒューリスティクス（warning）を壊さない。
+- 会話永続化: `persist-conversation.ts` と評価エンジン（`evaluate-conversation.ts`）の整合を保って変更する。
 - Secrets: `.env` は手元のみ。公開 URL にハードコードしない。
 
 ## 変更時の指針
-- 仕様に迷ったら README・DB マイグレーションを確認し、UI は shadcn/ui + Tailwind のパターンに沿う。
+- 仕様に迷ったら `documents/spec`（00〜09）を先に確認し、次に README・DB マイグレーションを見る。
+- SectionB優先で仕様差分を吸収する。実装が追随していない場合は、コードを寄せるか TODO として明示する。
+- UIは既存の3面構成（`/home` `/office` `/reports`）とコンポーネントパターンを崩さない。
 - 大きな変更前に関連テーブルや API を確認し、`packages/shared/types` を更新して web/Tauri 双方で型を共有。
 
 ## コミュニケーション
