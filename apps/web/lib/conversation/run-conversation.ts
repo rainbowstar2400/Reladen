@@ -88,7 +88,9 @@ export type RunConversationResult = {
     topicCandidates: Array<{ source: string; label: string; score: number }>;
     selectedTopic: { source: string; label: string };
     structure: {
+      initiatorId: string;
       initiator: string;
+      responderId: string;
       responder: string;
       initiatorStance: string;
       responderStance: string;
@@ -175,6 +177,7 @@ type FeelingRow = {
   toId?: string;
   label?: string;
   score?: number;
+  recent_deltas?: number[];
   updated_at?: string;
   updatedAt?: string;
   deleted?: boolean;
@@ -416,15 +419,17 @@ async function loadRelationTypeForPair(
   return matches[0]?.type;
 }
 
+type FeelingData = { label: string; score: number; recentDeltas: number[] };
+
 /** 好感度を KV から読み込み */
 async function loadFeelingsForPair(
   participants: [string, string],
-): Promise<{ aToB: { label: string; score: number }; bToA: { label: string; score: number } }> {
+): Promise<{ aToB: FeelingData; bToA: FeelingData }> {
   const rows = (await listAny("feelings")) as unknown as FeelingRow[] | null;
   const [a, b] = participants;
 
-  const pickLatest = (fromId: string, toId: string): { label: string; score: number } => {
-    if (!Array.isArray(rows)) return { label: "none", score: 0 };
+  const pickLatest = (fromId: string, toId: string): FeelingData => {
+    if (!Array.isArray(rows)) return { label: "none", score: 0, recentDeltas: [] };
     const found = rows
       .filter((row) => {
         if (!row || row.deleted) return false;
@@ -435,6 +440,7 @@ async function loadFeelingsForPair(
     return {
       label: typeof found?.label === "string" ? found.label : "none",
       score: typeof found?.score === "number" && Number.isFinite(found.score) ? found.score : 0,
+      recentDeltas: Array.isArray(found?.recent_deltas) ? found.recent_deltas : [],
     };
   };
 
@@ -694,7 +700,9 @@ export async function runConversation(
         label: topic.label,
       },
       structure: {
+        initiatorId: structure.initiatorId,
         initiator: structure.initiatorName,
+        responderId: structure.responderId,
         responder: structure.responderName,
         initiatorStance: structure.initiatorStance,
         responderStance: structure.responderStance,
@@ -743,7 +751,10 @@ export async function runConversationFromApi(
   }
 
   // 3) 好感度読み込み
-  let feelings = { aToB: { label: "none", score: 0 }, bToA: { label: "none", score: 0 } };
+  let feelings: { aToB: FeelingData; bToA: FeelingData } = {
+    aToB: { label: "none", score: 0, recentDeltas: [] },
+    bToA: { label: "none", score: 0, recentDeltas: [] },
+  };
   try {
     feelings = await loadFeelingsForPair(participants);
   } catch (error) {
@@ -806,6 +817,30 @@ export async function runConversationFromApi(
       tags: result.output.meta.tags,
       signals: result.output.meta.signals,
       qualityHints: result.output.meta.qualityHints,
+    },
+    // Phase 2: A-5 3層乗算用
+    characterProfiles: Object.fromEntries(
+      participants.map((id) => [id, {
+        traits: characters[id].traits,
+        mbti: characters[id].mbti,
+      }]),
+    ),
+    stances: {
+      [result.debug.structure.initiatorId]: result.debug.structure.initiatorStance,
+      [result.debug.structure.responderId]: result.debug.structure.responderStance,
+    },
+    topicSource: result.debug.selectedTopic.source,
+    topicInitiatorId: result.debug.structure.initiatorId,
+    // Phase 2: A-3 2系列制
+    relationType: relationType ?? 'acquaintance',
+    currentImpression: {
+      aToB: feelings.aToB.label as import('@/lib/evaluation/weights').ImpressionBase,
+      bToA: feelings.bToA.label as import('@/lib/evaluation/weights').ImpressionBase,
+    },
+    // Phase 2: A-4 3件窓
+    recentDeltas: {
+      aToB: feelings.aToB.recentDeltas,
+      bToA: feelings.bToA.recentDeltas,
     },
   };
   const evalResult = evaluateConversation(evalInput);

@@ -85,6 +85,7 @@ const baseEvalResult: EvaluationResult = {
       },
     },
   },
+  recentDeltas: { aToB: [], bToA: [] },
   threadNextState: "ongoing",
   systemLine: "",
 };

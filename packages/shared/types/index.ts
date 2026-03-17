@@ -87,6 +87,7 @@ export const feelingSchema = baseEntitySchema.extend({
   to_id: z.string().uuid(),
   label: z.enum(['none', 'dislike', 'maybe_dislike', 'curious', 'maybe_like', 'like', 'love', 'awkward']),
   score: z.number().int().default(0),
+  recent_deltas: z.array(z.number()).default([]).optional(),
 });
 
 export const nicknameSchema = baseEntitySchema.extend({

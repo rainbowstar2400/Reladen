@@ -71,6 +71,7 @@ function makeEvalResult(
         },
       },
     },
+    recentDeltas: { aToB: [], bToA: [] },
     threadNextState: "ongoing",
     systemLine: "",
   };

@@ -103,6 +103,9 @@ export const feelings = pgTable(
     // 好感度スコア
     score: integer('score').notNull().default(30),
 
+    // 印象判定用: 直近3件のfavorデルタ窓 (newest-first)
+    recentDeltas: jsonb('recent_deltas').notNull().default([]),
+
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
     ownerId: uuid('owner_id'),

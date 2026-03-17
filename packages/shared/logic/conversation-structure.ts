@@ -91,6 +91,10 @@ export function determineStance(
   const stubbornness = character.traits.stubbornness ?? 3;
   const expressiveness = character.traits.expressiveness ?? 3;
 
+  // --- 話題関心度によるfavor減衰 (A-9) ---
+  // 話題に関心がない場合、好感度のスタンスへの寄与を×0.5に減衰
+  const effectiveFavorScore = topicInterest ? favorScore : favorScore * 0.5;
+
   // 基本スコアマップ: 各スタンスへの傾きを算出
   const scores: Record<EmotionalStance, number> = {
     enthusiastic: 0,
@@ -119,12 +123,12 @@ export function determineStance(
   }
 
   // empathy高 + 好感度高 → agreeable
-  if (empathy >= 4 && favorScore >= 50) scores.agreeable += 2;
+  if (empathy >= 4 && effectiveFavorScore >= 50) scores.agreeable += 2;
   // empathy低 → confrontational方向の閾値が下がる
   if (empathy <= 2) scores.confrontational += 1;
 
   // stubbornness高 + 好感度低 → confrontational
-  if (stubbornness >= 4 && favorScore < 40) scores.confrontational += 2;
+  if (stubbornness >= 4 && effectiveFavorScore < 40) scores.confrontational += 2;
   // stubbornness低 → agreeable
   if (stubbornness <= 2) scores.agreeable += 1;
 
@@ -137,10 +141,10 @@ export function determineStance(
   }
 
   // --- 関係性の影響 ---
-  if (favorScore >= 60) {
+  if (effectiveFavorScore >= 60) {
     scores.enthusiastic += 1;
     scores.agreeable += 1;
-  } else if (favorScore <= 25) {
+  } else if (effectiveFavorScore <= 25) {
     scores.reluctant += 1;
     scores.confrontational += 1;
   }

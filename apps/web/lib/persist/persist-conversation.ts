@@ -13,6 +13,7 @@ import type { Feeling } from "@/types";
 async function updateRelationsAndFeelings(params: {
   participants: [string, string];
   deltas: EvaluationResult["deltas"];
+  recentDeltas: EvaluationResult["recentDeltas"];
 }) {
   const [a, b] = params.participants;
   const now = new Date().toISOString();
@@ -30,6 +31,7 @@ async function updateRelationsAndFeelings(params: {
       curious: "curious",
       maybe_like: "maybe_like",
       like: "like",
+      love: "love",
     };
     return map[String(impression)] ?? fallback ?? "none";
   };
@@ -81,8 +83,8 @@ async function updateRelationsAndFeelings(params: {
     from_id: a,
     to_id: b,
     label: nextLabelAB,
-    // 数値を積み上げる簡易実装。プロジェクト本番ロジックが別にあれば差し替えてください。
     score: nextScoreAB,
+    recent_deltas: params.recentDeltas.aToB,
     updated_at: now,
     deleted: false,
   });
@@ -94,6 +96,7 @@ async function updateRelationsAndFeelings(params: {
     to_id: a,
     label: nextLabelBA,
     score: nextScoreBA,
+    recent_deltas: params.recentDeltas.bToA,
     updated_at: now,
     deleted: false,
   });
@@ -212,10 +215,11 @@ export async function persistConversation(params: {
     status: evalResult.threadNextState,
   });
 
-  // 3) relations / feelings を更新（簡易版）
+  // 3) relations / feelings を更新
   await updateRelationsAndFeelings({
     participants: gptOut.participants,
     deltas: evalResult.deltas,
+    recentDeltas: evalResult.recentDeltas,
   });
 
   // 4) 通知登録
