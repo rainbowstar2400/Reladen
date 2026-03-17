@@ -47,6 +47,8 @@ export type RunConversationArgs = {
   };
   /** 環境 */
   environment: { place: string; timeOfDay: string; weather?: string };
+  /** ゲーム内日付（例: "3月17日"） */
+  gameDate?: string;
   /** 前回の会話記憶 */
   previousMemory?: ConversationMemory | null;
   /** 最近の共有スニペット */
@@ -659,6 +661,7 @@ export async function runConversation(
     structure,
     topic,
     environment: args.environment,
+    gameDate: args.gameDate,
     recentSnippets: args.recentSnippets ?? [],
     previousMemory: args.previousMemory ?? null,
     threadId,
@@ -749,6 +752,8 @@ export async function runConversationFromApi(
 
   // 4) 環境決定
   const environment = determineEnvironment();
+  const now = new Date();
+  const gameDate = `${now.getMonth() + 1}月${now.getDate()}日`;
 
   // 5) 会話履歴読み込み（previousMemory + recentTopics）
   const { previousMemory, recentTopics } = await loadConversationHistory(participants);
@@ -782,6 +787,7 @@ export async function runConversationFromApi(
       feelingBtoA: feelings.bToA,
     },
     environment,
+    gameDate,
     threadId,
     previousMemory,
     recentTopics,

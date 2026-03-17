@@ -13,6 +13,33 @@ import { loadWorldWeather, saveWorldWeather, DEFAULT_WORLD_ID } from '@/lib/data
 
 const KEY = ['residents'];
 
+/**
+ * 性格パラメータとMBTIから信頼度初期値を算出
+ * 仕様: 03_関係・感情系.md
+ */
+function calculateInitialTrust(
+  traits?: Partial<{ sociability: number; empathy: number; expressiveness: number; activity: number; stubbornness: number }>,
+  mbti?: string | null,
+): number {
+  const s = traits?.sociability ?? 3;
+  const e = traits?.empathy ?? 3;
+  const ex = traits?.expressiveness ?? 3;
+  const a = traits?.activity ?? 3;
+  const st = traits?.stubbornness ?? 3;
+  let trust = 50
+    + (s - 3) * 2
+    + (e - 3) * 1.5
+    + (ex - 3) * 1
+    + (a - 3) * 0.5
+    + (st - 3) * -1;
+  if (mbti) {
+    if (mbti.startsWith('E')) trust += 2; else trust -= 2;
+    if (mbti.length >= 3 && mbti[2] === 'F') trust += 3; else trust -= 3;
+  }
+  trust += Math.round((Math.random() - 0.5) * 4); // jitter ±2
+  return Math.max(0, Math.min(100, Math.round(trust)));
+}
+
 function normalizeTrustToPlayer(value: unknown): number {
   const numeric =
     typeof value === 'number'
@@ -252,12 +279,18 @@ export function useUpsertResident() {
       // 既存のレコードを取得（updated_at などのため）
       const existing = (await listLocal<Resident>('residents')).find(r => r.id === id);
 
-      const trustToPlayer = normalizeTrustToPlayer(
+      // 新規作成時は性格から算出、既存 or 明示指定があればそれを使用
+      const explicitTrust =
         (residentInput as any)?.trustToPlayer ??
         (residentInput as any)?.trust_to_player ??
         (existing as any)?.trustToPlayer ??
-        (existing as any)?.trust_to_player
-      );
+        (existing as any)?.trust_to_player;
+      const trustToPlayer = explicitTrust != null
+        ? normalizeTrustToPlayer(explicitTrust)
+        : calculateInitialTrust(
+            (residentInput as any)?.traits,
+            (residentInput as any)?.mbti,
+          );
 
       const recordData = {
         ...existing, // 既存の値をベースに

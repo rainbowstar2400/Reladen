@@ -161,6 +161,18 @@ export function determineStance(
     }
   }
 
+  // --- 日常ノイズ: 25%の確率でスタンスを中立(agreeable)方向に1段階シフト ---
+  if (Math.random() < 0.25 && best !== "agreeable") {
+    const towardNeutral: Record<EmotionalStance, EmotionalStance> = {
+      enthusiastic: "agreeable",
+      confrontational: "reluctant",
+      reluctant: "indifferent",
+      indifferent: "agreeable",
+      agreeable: "agreeable",
+    };
+    best = towardNeutral[best];
+  }
+
   return best;
 }
 

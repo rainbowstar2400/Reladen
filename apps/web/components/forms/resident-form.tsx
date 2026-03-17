@@ -119,20 +119,20 @@ type ResidentFormValues = z.infer<typeof residentFormSchema>;
 
 // Relation_Sim の defaultAffections に相当
 const defaultScores: Record<RelationType, number> = {
-  none: 0,
-  acquaintance: 10,
-  friend: 20,
-  best_friend: 40,
-  lover: 60,
-  family: 60,
+  none: 30,
+  acquaintance: 35,
+  friend: 45,
+  best_friend: 65,
+  lover: 65,
+  family: 55,
 };
 
 const DEFAULT_TEMP_RELATION: TempRelationData = {
   relationType: 'none',
   feelingLabelTo: 'none',
-  feelingScoreTo: 50,
+  feelingScoreTo: 30,
   feelingLabelFrom: 'none',
-  feelingScoreFrom: 50,
+  feelingScoreFrom: 30,
   nicknameTo: '',
   nicknameFrom: '',
 };

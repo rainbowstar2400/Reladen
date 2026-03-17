@@ -45,6 +45,8 @@ export type PromptInput = {
   structure: ConversationStructure;
   topic: SelectedTopic;
   environment: { place: string; timeOfDay: string; weather?: string };
+  /** ゲーム内日付（例: "3月17日"） */
+  gameDate?: string;
   recentSnippets: SharedSnippet[];
   previousMemory: ConversationMemory | null;
   threadId: string;
@@ -330,7 +332,10 @@ export function buildUserPrompt(input: PromptInput): string {
     `${bName}→${aName}: ${feelingLabel(relation.feelingBtoA.label)} / スコア=${relation.feelingBtoA.score}`,
   ].join(" / ");
 
-  sections.push(`【会話設定】\n${settingParts[0]}\n${relationBlock}`);
+  const settingLines = [settingParts[0]];
+  if (input.gameDate) settingLines.push(`日付: ${input.gameDate}`);
+  settingLines.push(relationBlock);
+  sections.push(`【会話設定】\n${settingLines.join("\n")}`);
 
   // ====================================================================
   // 【直近の共有スニペット】（あれば）
@@ -368,7 +373,7 @@ export function buildUserPrompt(input: PromptInput): string {
   // 【生成ルール（厳守）】— プロンプト末尾で再強調（recency bias 活用）
   // ====================================================================
   const rules = [
-    "- 6〜8ターンの会話を生成",
+    "- 12〜16ターンの会話を生成",
     "- 1発話は短文2〜3文程度まで可。ただし長くなりすぎないこと",
     "- 意味的に区切れる箇所では句点（。）、感嘆符（！）、疑問符（？）で文を区切ること。読点（、）だけで複数の文をつなげないこと",
     "- 上記の構造（主導権、スタンス、温度感、ターンバランス）に従うこと",

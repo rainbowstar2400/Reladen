@@ -222,7 +222,7 @@ export async function persistConversation(params: {
   // gptOut.lines が null の場合を考慮
   const first = Array.isArray(gptOut.lines) ? gptOut.lines[0] : undefined;
   const snippet = first
-    ? `${first.speaker.slice(0, 4)}: ${first.text.slice(0, 28)}…`
+    ? `${first.speaker.slice(0, 4)}: ${first.text.slice(0, 60)}…`
     : undefined;
 
   await createNotification({

@@ -101,7 +101,7 @@ export const feelings = pgTable(
     label: feelingLabelEnum('label').notNull().default('none'),
 
     // 好感度スコア
-    score: integer('score').notNull().default(0),
+    score: integer('score').notNull().default(30),
 
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
