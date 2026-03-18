@@ -89,6 +89,9 @@ export const feelings = pgTable(
     // 印象判定用: 直近3件のfavorデルタ窓 (newest-first)
     recentDeltas: jsonb('recent_deltas').notNull().default([]),
 
+    // 最終接触日時（時間経過バッチ用）
+    lastContactedAt: timestamp('last_contacted_at', { withTimezone: true }),
+
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
     ownerId: uuid('owner_id'),

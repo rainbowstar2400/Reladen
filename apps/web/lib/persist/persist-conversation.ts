@@ -85,6 +85,7 @@ async function updateRelationsAndFeelings(params: {
     label: nextLabelAB,
     score: nextScoreAB,
     recent_deltas: params.recentDeltas.aToB,
+    last_contacted_at: now,
     updated_at: now,
     deleted: false,
   });
@@ -97,6 +98,7 @@ async function updateRelationsAndFeelings(params: {
     label: nextLabelBA,
     score: nextScoreBA,
     recent_deltas: params.recentDeltas.bToA,
+    last_contacted_at: now,
     updated_at: now,
     deleted: false,
   });
