@@ -175,7 +175,7 @@ export const topicThreads = pgTable('topic_threads', {
   id: uuid('id').primaryKey().defaultRandom(),
   topic: text('topic'),
   participants: jsonb('participants').notNull(), // [aId, bId]
-  status: text('status').notNull().default('ongoing'), // 'ongoing' | 'paused' | 'done'
+  status: text('status').notNull().default('ongoing'), // 'ongoing' | 'done'
   lastEventId: uuid('last_event_id'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
   deleted: boolean('deleted').notNull().default(false),

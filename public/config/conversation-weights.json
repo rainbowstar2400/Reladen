@@ -16,10 +16,5 @@
     "tone.gentle": 0.2,
     "tone.harsh": -0.4
   },
-  "signals": {
-    "continue": 0.1,
-    "close": 0.2,
-    "park": 0
-  },
   "favorClip": { "min": -2, "max": 2 }
 }

@@ -53,6 +53,8 @@ export type PromptInput = {
   threadId: string;
   /** シチュエーション描写（外部で生成済み） */
   situation?: string;
+  /** 会話タイプ（通常/約束生成/約束履行） */
+  conversationType?: 'normal' | 'promise_generation' | 'promise_fulfillment';
 };
 
 // ---------------------------------------------------------------------------
@@ -73,7 +75,6 @@ export const systemPromptConversation = `
   ],
   "meta": {
     "tags": string[],
-    "signals": ["continue"|"close"|"park"],
     "qualityHints": {
       "turnBalance": "balanced"|"skewed",
       "tone": string
@@ -372,6 +373,17 @@ export function buildUserPrompt(input: PromptInput): string {
     "- 汎用テンプレ台詞の連発は避ける",
     "- 会話の冒頭を毎回同じパターンにしないこと。「あ、〇〇じゃん」のような驚き型の挨拶だけでなく、既に隣にいる状態からの「そういえばさ」、相手の行動へのツッコミ「何読んでんの」、作業中の声かけ等、多様な始め方をすること",
   ];
+
+  // 会話タイプに応じた約束ルール
+  const convType = input.conversationType ?? 'normal';
+  if (convType === 'normal') {
+    rules.push("- 具体的な約束・予定は作らない。その場で完結する会話にすること");
+  } else if (convType === 'promise_generation') {
+    rules.push("- 会話の中で自然な約束・予定を1つ含めること（例: 「今度一緒に〜しよう」）");
+    rules.push("- meta.memory.unresolvedThreads に約束の内容を記述すること");
+  } else if (convType === 'promise_fulfillment') {
+    rules.push("- 前回の約束を遂行する/した内容にし、この会話で完結させること");
+  }
 
   // 話題ソースに応じた追加ルール
   if (topic.source === "continuation" && input.previousMemory) {

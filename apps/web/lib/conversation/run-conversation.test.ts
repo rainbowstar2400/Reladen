@@ -197,7 +197,6 @@ describe("run-conversation", () => {
         ],
         meta: {
           tags: [],
-          signals: ["continue"],
           qualityHints: {
             turnBalance: "balanced",
             tone: "neutral",

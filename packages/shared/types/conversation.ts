@@ -26,7 +26,6 @@ export const conversationLineSchema = z.object({
 
 const eventMetaSchema = z.object({
   tags: z.array(z.string()).max(12),
-  signals: z.array(z.enum(['continue', 'close', 'park'])).optional(),
   qualityHints: z.object({
     turnBalance: z.enum(['balanced', 'skewed']).optional(),
     tone: z.string().optional(),
@@ -103,7 +102,7 @@ export type EventLogStrict = z.infer<typeof eventSchemaStrict>;
 export const topicThreadSchema = baseEntitySchema.extend({
   topic: z.string().optional(),
   participants: z.tuple([z.string().uuid(), z.string().uuid()]),
-  status: z.enum(['ongoing', 'paused', 'done']).default('ongoing'),
+  status: z.enum(['ongoing', 'done']).default('ongoing'),
   lastEventId: z.string().uuid().optional(),
 });
 export type TopicThread = z.infer<typeof topicThreadSchema>;

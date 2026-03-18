@@ -38,7 +38,6 @@ describe("conversation response schema alignment", () => {
       lines: [{ speaker: A_ID, text: "こんにちは" }],
       meta: {
         tags: [],
-        signals: ["continue"],
         qualityHints: {
           turnBalance: "balanced",
           tone: "neutral",
@@ -69,7 +68,6 @@ describe("conversation response schema alignment", () => {
       lines: [{ speaker: A_ID, text: "" }],
       meta: {
         tags: [],
-        signals: ["continue"],
         qualityHints: {
           turnBalance: "balanced",
           tone: "neutral",
@@ -100,7 +98,6 @@ describe("conversation response schema alignment", () => {
       lines: [{ speaker: A_ID, text: "こんにちは" }],
       meta: {
         tags: [],
-        signals: ["continue"],
         qualityHints: {
           turnBalance: "balanced",
           tone: "neutral",

@@ -33,7 +33,6 @@ const baseGptOut: ConversationOutput = {
   ],
   meta: {
     tags: ["雑談・共通"],
-    signals: ["continue"],
     qualityHints: {
       turnBalance: "balanced",
       tone: "calm",

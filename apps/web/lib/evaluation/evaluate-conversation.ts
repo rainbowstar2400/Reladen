@@ -19,7 +19,6 @@ export type EvalInput = {
   lines: Array<{ speaker: string; text: string }>;
   meta?: {
     tags?: string[];
-    signals?: Array<'continue' | 'close' | 'park'>;
     qualityHints?: Record<string, unknown>;
     impressionSpecial?: { setAwkward?: boolean; clearAwkward?: boolean };
   };
@@ -37,6 +36,9 @@ export type EvalInput = {
   stances?: { [characterId: string]: string };
   topicSource?: string;
   topicInitiatorId?: string;
+  // --- Phase 4: A-7 約束フラグ ---
+  /** 約束フラグ（コード側で事前に決定済み） */
+  promiseFlag?: boolean;
   // --- Phase 2: A-3 2系列制 + A-4 3件窓 ---
   relationType?: string;
   recentDeltas?: {
@@ -55,7 +57,7 @@ export type EvaluationResult = {
     aToB: number[];
     bToA: number[];
   };
-  threadNextState: 'ongoing' | 'paused' | 'done';
+  threadNextState: 'ongoing' | 'done';
   systemLine: string;
 };
 
@@ -80,11 +82,6 @@ const QUALITY_WEIGHTS: Record<string, number> = {
   'tone.harsh': -0.4,
 };
 
-const SIGNAL_WEIGHTS: Record<'continue' | 'close' | 'park', number> = {
-  continue: 0.1,
-  close: 0.2,
-  park: 0,
-};
 
 // ===== A-5: 3層乗算の定数・関数 =====
 
@@ -128,7 +125,9 @@ function getTopicBonus(
   if (topicSource === 'self_experience' && characterId === topicInitiatorId) {
     return 1.2;
   }
-  // TODO Phase 3: 'self_disclosure' → 1.1 for both
+  if (topicSource === 'heart_to_heart') {
+    return 1.1;
+  }
   return 1.0;
 }
 
@@ -233,14 +232,9 @@ export function evaluateConversation(input: EvalInput): EvaluationResult {
   a2bFavor = clipFavor(a2bFavor);
   b2aFavor = clipFavor(b2aFavor);
 
-  // 6) signals によるスレッド進行
-  let threadScore = 0;
-  const sigs: Array<'continue' | 'close' | 'park'> = (meta.signals ?? []) as Array<'continue' | 'close' | 'park'>;
-  for (const s of sigs) {
-    threadScore += SIGNAL_WEIGHTS[s] ?? 0;
-  }
+  // 6) スレッド進行: 約束フラグベース
   const threadNextState: EvaluationResult['threadNextState'] =
-    threadScore >= 0.2 ? 'done' : threadScore > 0 ? 'ongoing' : 'paused';
+    input.promiseFlag ? 'ongoing' : 'done';
 
   // 7) A-4: 3件窓で印象判定
   const prevDeltasA2B = input.recentDeltas?.aToB ?? [];

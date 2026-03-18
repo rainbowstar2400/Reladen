@@ -24,7 +24,6 @@ export type Impression = ImpressionBase;
 export type WeightsConfig = {
   tags: Record<string, number>;
   qualityHints: Record<string, number>;
-  signals: Record<'continue' | 'close' | 'park', number>;
   favorClip: { min: number; max: number };
 };
 
@@ -47,7 +46,6 @@ const DefaultWeights: WeightsConfig = {
     'tone.gentle': 0.2,
     'tone.harsh': -0.4
   },
-  signals: { continue: 0.1, close: 0.2, park: 0 },
   favorClip: { min: -2, max: 2 },
 };
 
@@ -70,12 +68,8 @@ function validate(partial: any): WeightsConfig | null {
   try {
     if (!partial || typeof partial !== 'object') return null;
     const w = partial as WeightsConfig;
-    if (!w.tags || !w.qualityHints || !w.signals || !w.favorClip) return null;
+    if (!w.tags || !w.qualityHints || !w.favorClip) return null;
     if (typeof w.favorClip.min !== 'number' || typeof w.favorClip.max !== 'number') return null;
-    // signals キー検査（不足なら落とす）
-    for (const k of ['continue', 'close', 'park'] as const) {
-      if (typeof w.signals[k] !== 'number') return null;
-    }
     // 基本十分
     return w;
   } catch {

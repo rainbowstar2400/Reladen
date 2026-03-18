@@ -144,7 +144,6 @@ export type ConversationMemory = z.infer<typeof conversationMemorySchema>;
 
 export const conversationMetaSchema = z.object({
   tags: z.array(z.string()).max(12),
-  signals: z.array(z.enum(["continue", "close", "park"])),
   qualityHints: z.object({
     turnBalance: z.enum(["balanced", "skewed"]),
     tone: z.string(),

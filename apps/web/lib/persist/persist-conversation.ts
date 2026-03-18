@@ -112,24 +112,11 @@ async function updateThreadAfterEvent(params: {
   participants: [string, string];
   lastEventId: string;
   topic?: string;
-  signal?: "continue" | "close" | "park";
   status?: TopicThread["status"];
 }) {
   const now = new Date().toISOString();
 
-  let finalStatus: TopicThread["status"] = "ongoing";
-
-  if (params.status) {
-    // 1. status (評価側) があれば最優先
-    finalStatus = params.status;
-  } else if (params.signal === "close") {
-    // 2. signal (GPT側)
-    finalStatus = "done";
-  } else if (params.signal === "park") {
-    // 2. signal (GPT側)
-    finalStatus = "paused";
-  }
-  // (signal が 'continue' または undefined の場合は 'ongoing' のまま)
+  const finalStatus: TopicThread["status"] = params.status ?? "done";
 
   await putAny("topic_threads", {
     id: params.threadId,
@@ -210,8 +197,6 @@ export async function persistConversation(params: {
     participants: gptOut.participants,
     lastEventId: eventId,
     topic: gptOut.topic,
-    // gptOut.meta が null の場合を考慮
-    signal: gptOut.meta?.signals?.[0],
     status: evalResult.threadNextState,
   });
 

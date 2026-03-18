@@ -19,6 +19,7 @@ import type {
 } from "@repo/shared/types/conversation-generation";
 import { selectTopic, type TopicSelectionInput, type CharacterContext } from "@repo/shared/logic/topic-selection";
 import { buildConversationStructure, determineInitiator, type StructureInput } from "@repo/shared/logic/conversation-structure";
+import { shouldGeneratePromise, determineConversationType, type ConversationType } from "@repo/shared/logic/promise";
 import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
 import { callGptForSituation } from "@/lib/gpt/call-gpt-for-situation";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
@@ -92,6 +93,8 @@ export type RunConversationResult = {
   output: ConversationOutput;
   retried: boolean;
   violations: string[];
+  /** 約束フラグ（trueなら約束生成会話） */
+  promiseFlag: boolean;
   debug: {
     topicCandidates: Array<{ source: string; label: string; score: number }>;
     selectedTopic: { source: string; label: string };
@@ -692,6 +695,15 @@ export async function runConversation(
     seedResponder,
   );
 
+  // --- 1.5. 約束フラグ抽選 ---
+  const isContinuation = topic.source === 'continuation';
+  const promiseFlag = !isContinuation && shouldGeneratePromise({
+    relationType: args.relation.type,
+    topicSource: topic.source,
+    favorScore: args.relation.feelingAtoB.score,
+  });
+  const conversationType = determineConversationType(topic.source, promiseFlag);
+
   // --- 2. 会話構造決定 ---
   const structureInput: StructureInput = {
     characterA: ctxA,
@@ -714,6 +726,7 @@ export async function runConversation(
     previousMemory: args.previousMemory ?? null,
     threadId,
     situation: args.situation,
+    conversationType,
   };
 
   // 一人称マップ
@@ -732,6 +745,7 @@ export async function runConversation(
     output: gptResult.output,
     retried: gptResult.retried,
     violations: gptResult.violations,
+    promiseFlag,
     debug: {
       topicCandidates: topicCandidates.map((c) => ({
         source: c.source,
@@ -885,7 +899,6 @@ export async function runConversationFromApi(
     lines: result.output.lines,
     meta: {
       tags: result.output.meta.tags,
-      signals: result.output.meta.signals,
       qualityHints: result.output.meta.qualityHints,
     },
     // Phase 2: A-5 3層乗算用
@@ -901,6 +914,8 @@ export async function runConversationFromApi(
     },
     topicSource: result.debug.selectedTopic.source,
     topicInitiatorId: result.debug.structure.initiatorId,
+    // Phase 4: A-7 約束フラグ
+    promiseFlag: result.promiseFlag,
     // Phase 2: A-3 2系列制
     relationType: relationType ?? 'acquaintance',
     currentImpression: {
