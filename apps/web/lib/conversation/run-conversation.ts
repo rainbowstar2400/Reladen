@@ -20,6 +20,7 @@ import type {
 import { selectTopic, type TopicSelectionInput, type CharacterContext } from "@repo/shared/logic/topic-selection";
 import { buildConversationStructure, determineInitiator, type StructureInput } from "@repo/shared/logic/conversation-structure";
 import { shouldGeneratePromise, determineConversationType, type ConversationType } from "@repo/shared/logic/promise";
+import { checkRelationTransition, computeImpressionOnTransition, type TransitionResult } from "@repo/shared/logic/relation-transition";
 import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
 import { callGptForSituation } from "@/lib/gpt/call-gpt-for-situation";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
@@ -770,6 +771,113 @@ export async function runConversation(
 }
 
 // ---------------------------------------------------------------------------
+// 関係遷移の永続化
+// ---------------------------------------------------------------------------
+
+function clampScore(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+async function persistTransitionResult(params: {
+  participants: [string, string];
+  currentRelation: string;
+  transition: TransitionResult;
+  favorA: number;
+  favorB: number;
+  currentImpressionA: import("@repo/shared/types/conversation").ImpressionBase;
+  currentImpressionB: import("@repo/shared/types/conversation").ImpressionBase;
+}): Promise<void> {
+  const [a, b] = params.participants;
+  const now = new Date().toISOString();
+
+  if (params.transition.type === 'observation') {
+    const { newRelation, event } = params.transition;
+
+    // 印象リセット算出
+    const { newImpressionA, newImpressionB } = computeImpressionOnTransition({
+      currentRelation: params.currentRelation,
+      newRelation,
+      favorA: params.favorA,
+      favorB: params.favorB,
+      currentImpressionA: params.currentImpressionA,
+      currentImpressionB: params.currentImpressionB,
+    });
+
+    // relations テーブル更新
+    const relations = (await listAny("relations")) as unknown as RelationRow[] | null;
+    if (Array.isArray(relations)) {
+      const match = relations.find((rel) => {
+        if (!rel || rel.deleted) return false;
+        const { aId, bId } = pickRelationPair(rel);
+        return (aId === a && bId === b) || (aId === b && bId === a);
+      });
+      if (match) {
+        await putAny("relations", {
+          ...(match as any),
+          type: newRelation,
+          updated_at: now,
+        });
+      }
+    }
+
+    // feelings の印象リセット
+    const feelings = (await listAny("feelings")) as unknown as FeelingRow[] | null;
+    if (Array.isArray(feelings)) {
+      const fAB = feelings.find((f) => {
+        const pair = pickFeelingPair(f);
+        return pair.fromId === a && pair.toId === b && !f.deleted;
+      });
+      const fBA = feelings.find((f) => {
+        const pair = pickFeelingPair(f);
+        return pair.fromId === b && pair.toId === a && !f.deleted;
+      });
+      if (fAB) {
+        await putAny("feelings", { ...(fAB as any), label: newImpressionA, updated_at: now });
+      }
+      if (fBA) {
+        await putAny("feelings", { ...(fBA as any), label: newImpressionB, updated_at: now });
+      }
+    }
+
+    // system イベント記録
+    await putAny("events", {
+      id: newId(),
+      kind: "system",
+      updated_at: now,
+      deleted: false,
+      payload: {
+        type: "relation_transition",
+        subType: event,
+        participants: [a, b],
+        from: params.currentRelation,
+        to: newRelation,
+      },
+    } as any);
+  }
+
+  if (params.transition.type === 'intervention') {
+    const { trigger, subjectDirection } = params.transition;
+    const subjectId = subjectDirection === 'a' ? a : b;
+
+    // system イベントとして記録（Phase 5 の相談システムで処理）
+    await putAny("events", {
+      id: newId(),
+      kind: "system",
+      updated_at: now,
+      deleted: false,
+      payload: {
+        type: "relation_trigger",
+        trigger,
+        subjectId,
+        participants: [a, b],
+        currentRelation: params.currentRelation,
+      },
+    } as any);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // APIルート用エントリポイント（KVからデータ読み込み → パイプライン → 永続化）
 // ---------------------------------------------------------------------------
 
@@ -935,6 +1043,38 @@ export async function runConversationFromApi(
     gptOut: result.output,
     evalResult,
   });
+
+  // 12) 関係遷移チェック（会話評価後・永続化後）
+  const postFavorA = clampScore(feelings.aToB.score + Math.round(evalResult.deltas.aToB.favor));
+  const postFavorB = clampScore(feelings.bToA.score + Math.round(evalResult.deltas.bToA.favor));
+  const postImpressionA = evalResult.deltas.aToB.impressionState.base as import("@repo/shared/types/conversation").ImpressionBase;
+  const postImpressionB = evalResult.deltas.bToA.impressionState.base as import("@repo/shared/types/conversation").ImpressionBase;
+
+  const transition = checkRelationTransition({
+    relationType: relationType ?? 'acquaintance',
+    favorAtoB: postFavorA,
+    favorBtoA: postFavorB,
+    impressionAtoB: postImpressionA,
+    impressionBtoA: postImpressionB,
+    empathyA: characters[participants[0]]?.traits?.empathy,
+    empathyB: characters[participants[1]]?.traits?.empathy,
+  });
+
+  if (transition.type !== 'none') {
+    try {
+      await persistTransitionResult({
+        participants,
+        currentRelation: relationType ?? 'acquaintance',
+        transition,
+        favorA: postFavorA,
+        favorB: postFavorB,
+        currentImpressionA: postImpressionA,
+        currentImpressionB: postImpressionB,
+      });
+    } catch (error) {
+      console.warn("[runConversationFromApi] Failed to persist relation transition.", error);
+    }
+  }
 
   return { eventId, threadId: result.threadId };
 }
