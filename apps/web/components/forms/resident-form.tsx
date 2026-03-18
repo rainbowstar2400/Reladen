@@ -431,6 +431,7 @@ export function ResidentForm({
       // フォーム用の TempRelationData を構築
       initial[targetId] = {
         relationType: relation?.type ?? 'none',
+        familySubType: (relation as any)?.family_sub_type ?? null,
 
         feelingLabelTo: feelingTo?.label ?? 'none',
         feelingScoreTo: feelingTo?.score ?? 50,
@@ -1448,6 +1449,30 @@ export function ResidentForm({
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {/* F-3: 家族種別セレクト（type='family' のときのみ表示） */}
+                    {currentRel.relationType === 'family' && (
+                      <div className="space-y-2">
+                        <Label>家族種別</Label>
+                        <Select
+                          value={currentRel.familySubType ?? ''}
+                          onValueChange={(value: string) =>
+                            handleRelationChange(target.id, 'familySubType', value)
+                          }
+                        >
+                          <SelectTrigger className="w-[200px]">
+                            <SelectValue placeholder="選択してください" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {['兄', '姉', '弟', '妹', '父', '母', '祖父', '祖母', 'その他'].map((sub) => (
+                              <SelectItem key={sub} value={sub}>
+                                {sub}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
                     {/*  好感度と呼び方を縦二段組にする Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-8">

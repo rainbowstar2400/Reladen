@@ -42,6 +42,7 @@ export type RunConversationArgs = {
   /** ペアの関係性 */
   relation: {
     type: "none" | "acquaintance" | "friend" | "best_friend" | "lover" | "family";
+    familySubType?: string | null;
     feelingAtoB: { label: string; score: number };
     feelingBtoA: { label: string; score: number };
   };
@@ -400,9 +401,9 @@ async function resolveParticipantsFromThread(
 }
 
 /** 関係性タイプを KV から読み込み */
-async function loadRelationTypeForPair(
+async function loadRelationForPair(
   participants: [string, string],
-): Promise<string | undefined> {
+): Promise<{ type: string; familySubType?: string | null } | undefined> {
   const rows = (await listAny("relations")) as unknown as RelationRow[] | null;
   if (!Array.isArray(rows)) return undefined;
   const [a, b] = participants;
@@ -416,7 +417,12 @@ async function loadRelationTypeForPair(
     })
     .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs));
 
-  return matches[0]?.type;
+  const match = matches[0];
+  if (!match?.type) return undefined;
+  return {
+    type: match.type,
+    familySubType: (match as any).family_sub_type ?? null,
+  };
 }
 
 type FeelingData = { label: string; score: number; recentDeltas: number[] };
@@ -740,12 +746,13 @@ export async function runConversationFromApi(
   }
 
   // 2) 関係性読み込み
-  let relationType: string | undefined;
+  let relationData: { type: string; familySubType?: string | null } | undefined;
   try {
-    relationType = await loadRelationTypeForPair(participants);
+    relationData = await loadRelationForPair(participants);
   } catch (error) {
     console.warn("[runConversationFromApi] Failed to load relation.", error);
   }
+  const relationType = relationData?.type;
   if (relationType === "none") {
     throw new Error("[runConversationFromApi] Conversation aborted because relation is 'none'.");
   }
@@ -794,6 +801,7 @@ export async function runConversationFromApi(
     characters,
     relation: {
       type: (relationType ?? "acquaintance") as RunConversationArgs["relation"]["type"],
+      familySubType: relationData?.familySubType ?? null,
       feelingAtoB: feelings.aToB,
       feelingBtoA: feelings.bToA,
     },

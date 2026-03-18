@@ -12,24 +12,6 @@ export const feelingLabelEnum = pgEnum('feeling_label', [
   'love',
   'awkward',
 ]);
-export const experienceSourceTypeEnum = pgEnum('experience_source_type', [
-  'lifestyle',
-  'work',
-  'interpersonal',
-  'environment',
-]);
-export const experienceAwarenessEnum = pgEnum('experience_awareness', [
-  'direct',
-  'witnessed',
-  'heard',
-]);
-export const hookIntentEnum = pgEnum('hook_intent', [
-  'invite',
-  'share',
-  'complain',
-  'consult',
-  'reflect',
-]);
 
 export const presetCategoryEnum = pgEnum('preset_category', [
   'speech',
@@ -83,6 +65,7 @@ export const relations = pgTable(
     aId: uuid('a_id').notNull(), // 参照元 (将来的に residents.id を参照)
     bId: uuid('b_id').notNull(), // 参照先 (将来的に residents.id を参照)
     type: relationTypeEnum('type').notNull().default('none'), // 関係性
+    familySubType: text('family_sub_type'), // F-3: 家族種別（兄/姉/父/母等）。type='family'時のみ使用
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
     ownerId: uuid('owner_id'),
@@ -202,43 +185,16 @@ export const topicThreads = pgTable('topic_threads', {
   updatedIdx: index('topic_threads_updated_idx').on(t.updatedAt),
 }));
 
-export const experienceEvents = pgTable('experience_events', {
+// E-4: consult_answers テーブル（相談回答の永続化）
+export const consultAnswers = pgTable('consult_answers', {
   id: uuid('id').primaryKey().defaultRandom(),
-  ownerId: uuid('owner_id'),
-  sourceType: experienceSourceTypeEnum('source_type').notNull(),
-  sourceRef: text('source_ref'),
-  factSummary: text('fact_summary').notNull(),
-  factDetail: jsonb('fact_detail'),
-  tags: jsonb('tags').notNull().default([]),
-  significance: integer('significance').notNull().default(0),
-  signature: text('signature').notNull(),
-  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  eventId: uuid('event_id'),
+  selectedChoiceId: text('selected_choice_id'),
+  decidedAt: timestamp('decided_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
-}, (t) => ({
-  byOwnerOccurredAt: index('experience_events_owner_occurred_idx').on(t.ownerId, t.occurredAt),
-  byOwnerSignatureOccurredAt: index('experience_events_owner_signature_occurred_idx').on(t.ownerId, t.signature, t.occurredAt),
-}));
-
-export const residentExperiences = pgTable('resident_experiences', {
-  id: uuid('id').primaryKey().defaultRandom(),
   ownerId: uuid('owner_id'),
-  experienceId: uuid('experience_id').notNull().references(() => experienceEvents.id, { onDelete: 'cascade' }),
-  residentId: uuid('resident_id').notNull(),
-  awareness: experienceAwarenessEnum('awareness').notNull(),
-  appraisal: text('appraisal').notNull(),
-  hookIntent: hookIntentEnum('hook_intent').notNull(),
-  confidence: integer('confidence').notNull().default(0),
-  salience: integer('salience').notNull().default(0),
-  learnedAt: timestamp('learned_at', { withTimezone: true }).notNull().defaultNow(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  deleted: boolean('deleted').notNull().default(false),
-}, (t) => ({
-  byOwnerResidentSalienceLearnedAt: index('resident_experiences_owner_resident_salience_learned_idx').on(t.ownerId, t.residentId, t.salience, t.learnedAt),
-  byOwnerExperienceResident: index('resident_experiences_owner_experience_resident_idx').on(t.ownerId, t.experienceId, t.residentId),
-  uniqueOwnerExperienceResident: { columns: [t.ownerId, t.experienceId, t.residentId], isUnique: true },
-}));
+});
 
 export const notifications = pgTable('notifications', {
   id: uuid('id').primaryKey().defaultRandom(),

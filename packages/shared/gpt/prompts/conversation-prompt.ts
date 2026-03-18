@@ -39,6 +39,7 @@ export type PromptInput = {
   characters: [CharacterProfile, CharacterProfile];
   relation: {
     type: string;
+    familySubType?: string | null;
     feelingAtoB: { label: string; score: number };
     feelingBtoA: { label: string; score: number };
   };
@@ -326,11 +327,12 @@ export function buildUserPrompt(input: PromptInput): string {
   // 関係性もここに統合
   const aName = charA.name;
   const bName = charB.name;
-  const relationBlock = [
-    `関係性: ${relationLabel(relation.type)}`,
+  const relationParts = [
+    `関係性: ${relationLabel(relation.type)}${relation.type === 'family' && relation.familySubType ? `（${aName}は${bName}の${relation.familySubType}）` : ''}`,
     `${aName}→${bName}: ${feelingLabel(relation.feelingAtoB.label)} / スコア=${relation.feelingAtoB.score}`,
     `${bName}→${aName}: ${feelingLabel(relation.feelingBtoA.label)} / スコア=${relation.feelingBtoA.score}`,
-  ].join(" / ");
+  ];
+  const relationBlock = relationParts.join(" / ");
 
   const settingLines = [settingParts[0]];
   if (input.gameDate) settingLines.push(`日付: ${input.gameDate}`);

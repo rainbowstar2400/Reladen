@@ -80,6 +80,7 @@ export const relationSchema = baseEntitySchema.extend({
   a_id: z.string().uuid(),
   b_id: z.string().uuid(),
   type: z.enum(['none', 'acquaintance', 'friend', 'best_friend', 'lover', 'family']),
+  family_sub_type: z.string().nullable().optional(), // F-3: 家族種別（兄/姉/父/母等）
 });
 
 export const feelingSchema = baseEntitySchema.extend({
@@ -193,6 +194,7 @@ export type FeelingLabel = z.infer<typeof feelingSchema>['label'];
 export type TempRelationData = {
   // relations テーブル
   relationType: RelationType;
+  familySubType?: string | null; // F-3: 家族種別（type='family'時のみ）
   // feelings テーブル
   feelingLabelTo: FeelingLabel;
   feelingScoreTo: number;

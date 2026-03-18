@@ -189,6 +189,7 @@ async function saveAllRelationData(
       a_id: currentId,
       b_id: targetId,
       type: data.relationType,
+      family_sub_type: data.relationType === 'family' ? (data.familySubType ?? null) : null,
       updated_at: now,
       deleted: false,
       owner_id: ownerId,
