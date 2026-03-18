@@ -20,6 +20,7 @@ import type {
 import { selectTopic, type TopicSelectionInput, type CharacterContext } from "@repo/shared/logic/topic-selection";
 import { buildConversationStructure, determineInitiator, type StructureInput } from "@repo/shared/logic/conversation-structure";
 import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
+import { callGptForSituation } from "@/lib/gpt/call-gpt-for-situation";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
 import { KvUnauthenticatedError, listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
@@ -68,6 +69,8 @@ export type RunConversationArgs = {
   recentEventsByCharacter?: Record<string, import("@repo/shared/types/conversation-generation").RecentEvent[]>;
   /** 現在の日付（seasonal用、例: "2026-03-18"） */
   currentDate?: string;
+  /** シチュエーション描写（GPT生成済み） */
+  situation?: string;
 };
 
 export type RunCharacterProfile = {
@@ -710,6 +713,7 @@ export async function runConversation(
     recentSnippets: args.recentSnippets ?? [],
     previousMemory: args.previousMemory ?? null,
     threadId,
+    situation: args.situation,
   };
 
   // 一人称マップ
@@ -830,7 +834,24 @@ export async function runConversationFromApi(
     loadRecentEventsForCharacter(participants[1]),
   ]);
 
-  // 8) パイプライン実行
+  // 8) シチュエーション生成（GPT）
+  let situation: string | undefined;
+  try {
+    const charA = characters[participants[0]];
+    const charB = characters[participants[1]];
+    situation = await callGptForSituation({
+      characterA: { name: charA.name, occupation: charA.occupation, interests: charA.interests },
+      characterB: { name: charB.name, occupation: charB.occupation, interests: charB.interests },
+      relationType: relationType ?? "acquaintance",
+      timeOfDay: environment.timeOfDay,
+      date: gameDate,
+      recentSituations: recentTopics.slice(0, 5),
+    });
+  } catch (error) {
+    console.warn("[runConversationFromApi] Failed to generate situation.", error);
+  }
+
+  // 9) パイプライン実行
   const result = await runConversation({
     participants,
     characters,
@@ -854,9 +875,10 @@ export async function runConversationFromApi(
       [participants[1]]: eventsB,
     },
     currentDate: now.toISOString().slice(0, 10),
+    situation,
   });
 
-  // 9) 評価
+  // 10) 評価
   const evalInput: EvalInput = {
     threadId: result.threadId,
     participants,
@@ -893,7 +915,7 @@ export async function runConversationFromApi(
   };
   const evalResult = evaluateConversation(evalInput);
 
-  // 10) 永続化
+  // 11) 永続化
   const { eventId } = await persistConversation({
     gptOut: result.output,
     evalResult,

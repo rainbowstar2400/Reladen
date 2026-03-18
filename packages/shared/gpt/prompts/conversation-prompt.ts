@@ -51,6 +51,8 @@ export type PromptInput = {
   recentSnippets: SharedSnippet[];
   previousMemory: ConversationMemory | null;
   threadId: string;
+  /** シチュエーション描写（外部で生成済み） */
+  situation?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -114,22 +116,6 @@ B: 一人称「私」、語尾「〜だよね」「〜かな」
 - 具体物（アボカド、98円、3つ）で会話が展開している
 - 語尾が自然に使われ、一人称の表記揺れがない
 `.trim();
-
-// ---------------------------------------------------------------------------
-// シチュエーション候補（冒頭のバリエーション用）
-// ---------------------------------------------------------------------------
-
-const ENCOUNTER_SITUATIONS = [
-  "偶然鉢合わせ",
-  "同じ場所に居合わせた",
-  "向こうから歩いてきた",
-  "隣にいることに気づいた",
-  "近くを通りかかった",
-] as const;
-
-function pickRandom<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 // ---------------------------------------------------------------------------
 // ヘルパー
@@ -321,7 +307,7 @@ export function buildUserPrompt(input: PromptInput): string {
   // ====================================================================
   // 【会話設定】
   // ====================================================================
-  const encounter = pickRandom(ENCOUNTER_SITUATIONS);
+  const encounter = input.situation ?? "偶然鉢合わせ";
   const settingParts = [`場所: ${environment.place}（${environment.timeOfDay}`];
   if (environment.weather) settingParts[0] += `、${environment.weather}`;
   settingParts[0] += `、${encounter}）`;
