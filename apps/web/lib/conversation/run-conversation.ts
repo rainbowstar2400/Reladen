@@ -64,6 +64,10 @@ export type RunConversationArgs = {
   threadId?: string;
   /** キャラクターID → 名前のマップ（third_party 名前解決用） */
   nameMap?: Map<string, string>;
+  /** 各キャラの最近の出来事（self_experience用） */
+  recentEventsByCharacter?: Record<string, import("@repo/shared/types/conversation-generation").RecentEvent[]>;
+  /** 現在の日付（seasonal用、例: "2026-03-18"） */
+  currentDate?: string;
 };
 
 export type RunCharacterProfile = {
@@ -588,6 +592,33 @@ async function loadOffscreenKnowledge(
     }));
 }
 
+/** 指定キャラクターの最近の出来事を KV から読み込み */
+async function loadRecentEventsForCharacter(
+  characterId: string,
+): Promise<import("@repo/shared/types/conversation-generation").RecentEvent[]> {
+  let rows: Array<Record<string, any>> | null = null;
+  try {
+    rows = (await listAny("recent_events")) as unknown as Array<Record<string, any>> | null;
+  } catch (error) {
+    console.warn("[loadRecentEventsForCharacter] Failed to load recent_events.", error);
+    return [];
+  }
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .filter((r) => {
+      if (!r || r.deleted) return false;
+      return r.character_id === characterId;
+    })
+    .map((r) => ({
+      id: r.id ?? "",
+      characterId: r.character_id ?? "",
+      fact: r.fact ?? "",
+      generatedAt: r.generated_at ?? new Date().toISOString(),
+      sharedWith: Array.isArray(r.shared_with) ? r.shared_with : [],
+    }));
+}
+
 /** 時間帯に基づく環境情報を決定 */
 function determineEnvironment(): { place: string; timeOfDay: string } {
   const now = new Date();
@@ -630,7 +661,7 @@ export async function runConversation(
 
   // 話題選定と会話構造の主導者を一致させるため、先に主導者シードを確定する。
   const seedTopic: SelectedTopic = {
-    source: "environmental",
+    source: "small_talk",
     label: `${args.environment.place}での出来事`,
     detail: `${args.environment.timeOfDay}の${args.environment.place}`,
   };
@@ -648,6 +679,8 @@ export async function runConversation(
     recentTopics: args.recentTopics ?? [],
     environment: args.environment,
     nameMap: args.nameMap,
+    recentEventsA: args.recentEventsByCharacter?.[seedInitiator.id],
+    currentDate: args.currentDate,
   };
 
   const { selected: topic, candidates: topicCandidates } = selectTopic(
@@ -788,11 +821,13 @@ export async function runConversationFromApi(
     console.warn("[runConversationFromApi] Failed to generate recent events.", error);
   }
 
-  // 7) スニペット + オフスクリーン知識の取得
+  // 7) スニペット + オフスクリーン知識 + 最近の出来事の取得
   const recentSnippets = await loadRecentSnippets(participants);
-  const [knowledgeByA, knowledgeByB] = await Promise.all([
+  const [knowledgeByA, knowledgeByB, eventsA, eventsB] = await Promise.all([
     loadOffscreenKnowledge(participants[0]),
     loadOffscreenKnowledge(participants[1]),
+    loadRecentEventsForCharacter(participants[0]),
+    loadRecentEventsForCharacter(participants[1]),
   ]);
 
   // 8) パイプライン実行
@@ -814,6 +849,11 @@ export async function runConversationFromApi(
     knowledgeByA,
     knowledgeByB,
     nameMap,
+    recentEventsByCharacter: {
+      [participants[0]]: eventsA,
+      [participants[1]]: eventsB,
+    },
+    currentDate: now.toISOString().slice(0, 10),
   });
 
   // 9) 評価

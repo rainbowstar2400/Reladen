@@ -189,8 +189,10 @@ function topicSourceLabel(source: string): string {
     case "continuation": return "前回の続き";
     case "snippet": return "共有の出来事";
     case "third_party": return "第三者の話題";
-    case "feeling_shift": return "関係性の変化";
-    case "environmental": return "環境";
+    case "self_experience": return "自分の最近の出来事";
+    case "heart_to_heart": return "お互いを知る";
+    case "small_talk": return "世間話";
+    case "seasonal": return "季節の話題";
     default: return source;
   }
 }

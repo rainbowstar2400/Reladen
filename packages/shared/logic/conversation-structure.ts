@@ -339,11 +339,17 @@ function hasTopicInterest(
     case "third_party":
       // 第三者話題 → 知識を持っている側は興味あり
       return true;
-    case "feeling_shift":
-      // 感情変化 → 両者に関わるので興味あり
+    case "self_experience":
+      // 自分の最近の出来事 → 話す側は関心あり
       return true;
-    case "environmental":
-      // 環境話題 → 基本的に興味薄（フォールバック）
+    case "heart_to_heart":
+      // 自己開示・質問 → 両者とも関心あり
+      return true;
+    case "small_talk":
+      // 世間話 → 基本的に興味薄（フォールバック）
+      return false;
+    case "seasonal":
+      // 季節・時事 → 基本的に興味薄
       return false;
   }
 }
