@@ -337,8 +337,8 @@ function hasTopicInterest(
       // 共有した出来事 → 両者とも関心あり
       return true;
     case "third_party":
-      // 第三者話題 → 知識を持っている側は興味あり
-      return true;
+      // 第三者話題は低関心扱い（favor寄与を減衰）
+      return false;
     case "self_experience":
       // 自分の最近の出来事 → 話す側は関心あり
       return true;

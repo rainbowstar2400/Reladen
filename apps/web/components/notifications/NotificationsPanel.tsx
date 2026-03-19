@@ -79,9 +79,7 @@ export default function NotificationsPanel() {
 
       // --- 相談: /?consult=<eventId> へ ---
       if (kind === 'consult') {
-        const consultId =
-          n.linkedEventId ??
-          (n as any)?.payload?.eventId;
+        const consultId = n.linkedEventId;
 
         if (consultId) {
           const url = new URL(window.location.href);

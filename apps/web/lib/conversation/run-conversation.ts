@@ -52,7 +52,7 @@ export type RunConversationArgs = {
     feelingBtoA: { label: string; score: number };
   };
   /** 環境 */
-  environment: { place: string; timeOfDay: string; weather?: string };
+  environment: { timeOfDay: string; weather?: string; place?: string };
   /** ゲーム内日付（例: "3月17日"） */
   gameDate?: string;
   /** 前回の会話記憶 */
@@ -481,15 +481,16 @@ async function loadConversationHistory(
 ): Promise<{
   previousMemory: ConversationMemory | null;
   recentTopics: string[];
+  recentSituations: string[];
 }> {
   let allEvents: Array<Record<string, any>> | null = null;
   try {
     allEvents = (await listAny("events")) as unknown as Array<Record<string, any>> | null;
   } catch (error) {
     console.warn("[loadConversationHistory] Failed to load events.", error);
-    return { previousMemory: null, recentTopics: [] };
+    return { previousMemory: null, recentTopics: [], recentSituations: [] };
   }
-  if (!Array.isArray(allEvents)) return { previousMemory: null, recentTopics: [] };
+  if (!Array.isArray(allEvents)) return { previousMemory: null, recentTopics: [], recentSituations: [] };
 
   const [a, b] = participants;
   const pairConvEvents = allEvents
@@ -513,6 +514,7 @@ async function loadConversationHistory(
 
   // recentTopics: 直近5件のイベントから話題を集約
   const recentTopics: string[] = [];
+  const recentSituations: string[] = [];
   for (const e of pairConvEvents.slice(0, 5)) {
     const covered = e.payload?.meta?.memory?.topicsCovered;
     if (Array.isArray(covered)) {
@@ -522,9 +524,14 @@ async function loadConversationHistory(
         }
       }
     }
+
+    const situation = e.payload?.situation;
+    if (typeof situation === "string" && situation.length > 0 && !recentSituations.includes(situation)) {
+      recentSituations.push(situation);
+    }
   }
 
-  return { previousMemory, recentTopics };
+  return { previousMemory, recentTopics, recentSituations };
 }
 
 // ---------------------------------------------------------------------------
@@ -631,7 +638,7 @@ async function loadRecentEventsForCharacter(
 }
 
 /** 時間帯に基づく環境情報を決定 */
-function determineEnvironment(): { place: string; timeOfDay: string } {
+function determineEnvironment(): { timeOfDay: string } {
   const now = new Date();
   const hourText = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Tokyo",
@@ -640,10 +647,10 @@ function determineEnvironment(): { place: string; timeOfDay: string } {
   }).format(now);
   const hour = Number(hourText);
   const effectiveHour = Number.isFinite(hour) ? hour : now.getUTCHours();
-  if (effectiveHour >= 6 && effectiveHour < 11) return { place: "駅前カフェ", timeOfDay: "朝" };
-  if (effectiveHour >= 11 && effectiveHour < 16) return { place: "商店街", timeOfDay: "昼" };
-  if (effectiveHour >= 16 && effectiveHour < 20) return { place: "川沿い公園", timeOfDay: "夕方" };
-  return { place: "コンビニ", timeOfDay: "夜" };
+  if (effectiveHour >= 6 && effectiveHour < 11) return { timeOfDay: "朝" };
+  if (effectiveHour >= 11 && effectiveHour < 16) return { timeOfDay: "昼" };
+  if (effectiveHour >= 16 && effectiveHour < 20) return { timeOfDay: "夕方" };
+  return { timeOfDay: "夜" };
 }
 
 // ---------------------------------------------------------------------------
@@ -671,10 +678,11 @@ export async function runConversation(
   const ctxB = toCharacterContext(charB);
 
   // 話題選定と会話構造の主導者を一致させるため、先に主導者シードを確定する。
+  const seedSituation = typeof args.situation === "string" ? args.situation.trim() : "";
   const seedTopic: SelectedTopic = {
     source: "small_talk",
-    label: `${args.environment.place}での出来事`,
-    detail: `${args.environment.timeOfDay}の${args.environment.place}`,
+    label: seedSituation.length > 0 ? seedSituation : `${args.environment.timeOfDay}の雑談`,
+    detail: seedSituation.length > 0 ? `${args.environment.timeOfDay}の出来事` : `${args.environment.timeOfDay}の何気ない会話`,
   };
   const { initiator: seedInitiator, responder: seedResponder } = determineInitiator(ctxA, ctxB, seedTopic);
 
@@ -689,6 +697,7 @@ export async function runConversation(
     knowledgeByB: args.knowledgeByB ?? [],
     recentTopics: args.recentTopics ?? [],
     environment: args.environment,
+    situation: args.situation,
     nameMap: args.nameMap,
     recentEventsA: args.recentEventsByCharacter?.[seedInitiator.id],
     currentDate: args.currentDate,
@@ -979,21 +988,21 @@ async function persistTransitionResult(params: {
   }
 
   if (params.transition.type === 'intervention') {
-    const { trigger, subjectDirection } = params.transition;
-    const subjectId = subjectDirection === 'a' ? a : b;
+    const { trigger, residentId, targetId } = params.transition;
 
-    // system イベントとして記録（Phase 5 の相談システムで処理）
+    // relation_trigger イベントとして記録（相談システムで処理）
     await putAny("events", {
       id: newId(),
-      kind: "system",
+      kind: "relation_trigger",
       updated_at: now,
       deleted: false,
       payload: {
-        type: "relation_trigger",
         trigger,
-        subjectId,
-        participants: [a, b],
+        residentId,
+        targetId,
+        participants: [residentId, targetId],
         currentRelation: params.currentRelation,
+        handled: false,
       },
     } as any);
   }
@@ -1054,8 +1063,8 @@ export async function runConversationFromApi(
   const now = new Date();
   const gameDate = `${now.getMonth() + 1}月${now.getDate()}日`;
 
-  // 5) 会話履歴読み込み（previousMemory + recentTopics）
-  const { previousMemory, recentTopics } = await loadConversationHistory(participants);
+  // 5) 会話履歴読み込み（previousMemory + recentTopics + recentSituations）
+  const { previousMemory, recentTopics, recentSituations } = await loadConversationHistory(participants);
 
   // 6) バッチ生成（スニペット + 最近の出来事）
   try {
@@ -1116,7 +1125,7 @@ export async function runConversationFromApi(
       relationType: relationType ?? "acquaintance",
       timeOfDay: environment.timeOfDay,
       date: gameDate,
-      recentSituations: recentTopics.slice(0, 5),
+      recentSituations: recentSituations.slice(0, 5),
     });
   } catch (error) {
     console.warn("[runConversationFromApi] Failed to generate situation.", error);
@@ -1192,6 +1201,7 @@ export async function runConversationFromApi(
   const { eventId } = await persistConversation({
     gptOut: result.output,
     evalResult,
+    situation,
   });
 
   // 12) 関係遷移チェック（会話評価後・永続化後）
@@ -1201,6 +1211,8 @@ export async function runConversationFromApi(
   const postImpressionB = evalResult.deltas.bToA.impressionState.base as import("@repo/shared/types/conversation").ImpressionBase;
 
   const transition = checkRelationTransition({
+    participantAId: participants[0],
+    participantBId: participants[1],
     relationType: relationType ?? 'acquaintance',
     favorAtoB: postFavorA,
     favorBtoA: postFavorB,

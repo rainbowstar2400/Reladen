@@ -296,8 +296,7 @@ export function HomeContent() {
   const openConsult = useCallback(
     (n: NotificationRecord) => {
       try {
-        const consultId =
-          (n as any).linkedConsultId ?? (n as any)?.payload?.consultId ?? (n as any)?.consultId;
+        const consultId = n.linkedEventId;
         if (!consultId) return;
         setActiveConsultId(String(consultId));
         setActiveConversationId(null);
@@ -683,9 +682,7 @@ export function HomeContent() {
       try { await sync(); } catch { /* noop */ }
 
       const notif = consultNotifications.find(
-        (n) =>
-          (n as any).linkedConsultId === activeConsultId ||
-          (n as any).linkedEventId === activeConsultId
+        (n) => n.linkedEventId === activeConsultId
       );
       if (notif && notif.status !== 'read') {
         markRead.mutate(notif.id);

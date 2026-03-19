@@ -3,8 +3,10 @@ import type { EvalInput, EvaluationResult } from "@/lib/evaluation/evaluate-conv
 
 const mocks = vi.hoisted(() => ({
   listKV: vi.fn(),
+  putKV: vi.fn(),
   MockKvUnauthenticatedError: class MockKvUnauthenticatedError extends Error {},
   callGptForConversation: vi.fn(),
+  callGptForSituation: vi.fn(),
   evaluateConversation: vi.fn(),
   persistConversation: vi.fn(),
   newId: vi.fn(),
@@ -14,11 +16,16 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/db/kv-server", () => ({
   listKV: mocks.listKV,
+  putKV: mocks.putKV,
   KvUnauthenticatedError: mocks.MockKvUnauthenticatedError,
 }));
 
 vi.mock("@/lib/gpt/call-gpt-for-conversation", () => ({
   callGptForConversation: mocks.callGptForConversation,
+}));
+
+vi.mock("@/lib/gpt/call-gpt-for-situation", () => ({
+  callGptForSituation: mocks.callGptForSituation,
 }));
 
 vi.mock("@/lib/evaluation/evaluate-conversation", () => ({
@@ -126,6 +133,8 @@ describe("run-conversation", () => {
     vi.clearAllMocks();
 
     mocks.newId.mockReturnValue(THREAD_ID);
+    mocks.putKV.mockResolvedValue(undefined);
+    mocks.callGptForSituation.mockResolvedValue("駅前の信号待ちで隣に立ち、自然に会話が始まった");
 
     mocks.listKV.mockImplementation(async (table: string) => {
       switch (table) {
@@ -147,6 +156,8 @@ describe("run-conversation", () => {
             },
           ];
         case "feelings":
+          return [];
+        case "events":
           return [];
         default:
           return [];
@@ -320,7 +331,7 @@ describe("run-conversation", () => {
     );
   });
 
-  it("runConversation は話題選定の主導者を構造決定にも引き継ぐ", async () => {
+  it("runConversation は place なし環境でも話題選定の主導者を構造決定へ引き継ぐ", async () => {
     const result = await runConversation({
       participants: [A_ID, B_ID],
       characters: {
@@ -343,17 +354,165 @@ describe("run-conversation", () => {
         feelingBtoA: { label: "like", score: 70 },
       },
       environment: {
-        place: "商店街",
         timeOfDay: "昼",
       },
       threadId: THREAD_ID,
+      situation: "昼休みの廊下で同時に足を止め、目が合った",
     });
 
     const selectedInitiator = mocks.selectTopic.mock.calls[0]?.[1];
+    const topicInput = mocks.selectTopic.mock.calls[0]?.[0];
     const structureInput = mocks.buildConversationStructure.mock.calls[0]?.[0];
 
     expect(selectedInitiator?.id).toBe(B_ID);
+    expect(topicInput?.situation).toBe("昼休みの廊下で同時に足を止め、目が合った");
     expect(structureInput?.initiatorOverrideId).toBe(selectedInitiator?.id);
     expect(result.debug.structure.initiator).toBe("Bob");
+  });
+
+  it("runConversationFromApi は会話履歴の situation を recentSituations として渡す", async () => {
+    mocks.listKV.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "topic_threads":
+          return [];
+        case "residents":
+          return baseResidents();
+        case "presets":
+          return [];
+        case "relations":
+          return [{ a_id: A_ID, b_id: B_ID, type: "friend", deleted: false }];
+        case "feelings":
+          return [];
+        case "events":
+          return [
+            {
+              id: "e3",
+              kind: "conversation",
+              updated_at: "2026-03-20T10:00:00.000Z",
+              deleted: false,
+              payload: {
+                participants: [A_ID, B_ID],
+                situation: "雨宿りの軒先で並んだ瞬間、互いに気づいた",
+                meta: {
+                  memory: {
+                    summary: "会話した",
+                    topicsCovered: ["天気"],
+                    unresolvedThreads: [],
+                    knowledgeGained: [],
+                  },
+                },
+              },
+            },
+            {
+              id: "e2",
+              kind: "conversation",
+              updated_at: "2026-03-20T09:00:00.000Z",
+              deleted: false,
+              payload: {
+                participants: [A_ID, B_ID],
+                situation: "昼休みの廊下で同時に足を止め、目が合った",
+                meta: {
+                  memory: {
+                    summary: "会話した",
+                    topicsCovered: ["昼休み"],
+                    unresolvedThreads: [],
+                    knowledgeGained: [],
+                  },
+                },
+              },
+            },
+            {
+              id: "e1",
+              kind: "conversation",
+              updated_at: "2026-03-20T08:00:00.000Z",
+              deleted: false,
+              payload: {
+                participants: [A_ID, B_ID],
+                situation: "雨宿りの軒先で並んだ瞬間、互いに気づいた",
+                meta: {
+                  memory: {
+                    summary: "会話した",
+                    topicsCovered: ["帰り道"],
+                    unresolvedThreads: [],
+                    knowledgeGained: [],
+                  },
+                },
+              },
+            },
+          ];
+        default:
+          return [];
+      }
+    });
+
+    await runConversationFromApi({ participants: [A_ID, B_ID] });
+
+    expect(mocks.callGptForSituation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recentSituations: [
+          "雨宿りの軒先で並んだ瞬間、互いに気づいた",
+          "昼休みの廊下で同時に足を止め、目が合った",
+        ],
+      }),
+    );
+  });
+
+  it("runConversationFromApi は relation_trigger を residentId/targetId 形式で保存する", async () => {
+    mocks.listKV.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "topic_threads":
+          return [];
+        case "residents":
+          return baseResidents();
+        case "presets":
+          return [];
+        case "relations":
+          return [{ a_id: A_ID, b_id: B_ID, type: "friend", deleted: false }];
+        case "feelings":
+          return [
+            { id: "f1", from_id: A_ID, to_id: B_ID, label: "maybe_like", score: 60, deleted: false },
+            { id: "f2", from_id: B_ID, to_id: A_ID, label: "curious", score: 40, deleted: false },
+          ];
+        case "events":
+          return [];
+        default:
+          return [];
+      }
+    });
+    mocks.evaluateConversation.mockReturnValueOnce({
+      ...baseEvalResult,
+      deltas: {
+        aToB: {
+          favor: 0,
+          impression: "maybe_like",
+          impressionState: { base: "maybe_like", special: null, baseBeforeSpecial: null },
+        },
+        bToA: {
+          favor: 0,
+          impression: "curious",
+          impressionState: { base: "curious", special: null, baseBeforeSpecial: null },
+        },
+      },
+    });
+
+    await runConversationFromApi({ participants: [A_ID, B_ID] });
+
+    const relationTriggerWrite = mocks.putKV.mock.calls.find(
+      ([table, value]) => table === "events" && value?.kind === "relation_trigger",
+    );
+    expect(relationTriggerWrite).toBeTruthy();
+    expect(relationTriggerWrite?.[1]).toMatchObject({
+      kind: "relation_trigger",
+      payload: {
+        trigger: "confession",
+        residentId: A_ID,
+        targetId: B_ID,
+        participants: [A_ID, B_ID],
+        currentRelation: "friend",
+        handled: false,
+      },
+    });
+    expect(relationTriggerWrite?.[1]?.payload?.subjectDirection).toBeUndefined();
+    expect(relationTriggerWrite?.[1]?.payload?.type).toBeUndefined();
   });
 });

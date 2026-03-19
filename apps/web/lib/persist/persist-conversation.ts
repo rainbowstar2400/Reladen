@@ -173,8 +173,9 @@ async function createNotification(params: {
 export async function persistConversation(params: {
   gptOut: ConversationOutput;
   evalResult: EvaluationResult;
+  situation?: string;
 }) {
-  const { gptOut, evalResult } = params;
+  const { gptOut, evalResult, situation } = params;
   const now = new Date().toISOString();
 
   // 1) events へ保存
@@ -189,6 +190,7 @@ export async function persistConversation(params: {
       ...gptOut,
       deltas: evalResult.deltas,      // impression はラベル型でOK（数値ではない）
       systemLine: evalResult.systemLine,
+      situation,
     },
   } as any);
 

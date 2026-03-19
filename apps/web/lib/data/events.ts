@@ -1,12 +1,13 @@
 'use client';
 
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EventLog } from '@/types';
 import { listLocal, putLocal } from '@/lib/db-local';
 import { newId } from '@/lib/newId';
 import { eventSchemaStrict, EventLogStrict } from '@repo/shared/types';
 
 const PAGE_SIZE = 20;
+const RESIDENT_EVENT_LIMIT = 15;
 
 async function fetchEvents({ pageParam = 0 }: { pageParam?: number }) {
   const items = (await listLocal<EventLog>('events'))
@@ -19,12 +20,53 @@ async function fetchEvents({ pageParam = 0 }: { pageParam?: number }) {
   };
 }
 
+function includesResident(value: unknown, residentId: string): boolean {
+  return Array.isArray(value) && value.some((entry) => entry === residentId);
+}
+
+function isResidentRelated(item: EventLog, residentId: string): boolean {
+  const payload = (item as any)?.payload ?? {};
+  if (includesResident(payload?.participants, residentId)) return true;
+  if (payload?.residentId === residentId) return true;
+  if (payload?.fromId === residentId || payload?.toId === residentId) return true;
+  if (payload?.from_id === residentId || payload?.to_id === residentId) return true;
+  return false;
+}
+
+export async function fetchResidentRelatedEvents(
+  residentId: string,
+  limit = RESIDENT_EVENT_LIMIT,
+): Promise<EventLogStrict[]> {
+  if (!residentId) return [];
+  const parsedLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : RESIDENT_EVENT_LIMIT;
+  const items = (await listLocal<EventLog>('events'))
+    .filter((item) => !item.deleted)
+    .filter((item) => isResidentRelated(item, residentId))
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .slice(0, parsedLimit)
+    .map((item) => eventSchemaStrict.safeParse(item))
+    .filter((result): result is { success: true; data: EventLogStrict } => result.success)
+    .map((result) => result.data);
+  return items;
+}
+
 export function useEvents() {
   return useInfiniteQuery({
     queryKey: ['events'],
     queryFn: fetchEvents,
     initialPageParam: 0,
     getNextPageParam: (lastPage) => lastPage.nextPage,
+  });
+}
+
+export function useResidentRelatedEvents(
+  residentId: string,
+  limit = RESIDENT_EVENT_LIMIT,
+) {
+  return useQuery({
+    queryKey: ['events', 'resident-related', residentId, limit],
+    queryFn: () => fetchResidentRelatedEvents(residentId, limit),
+    enabled: Boolean(residentId),
   });
 }
 

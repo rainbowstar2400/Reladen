@@ -196,6 +196,17 @@ function heuristicCheckStance(
 ): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
 
+  // 1発話あたりの上限チェック（仕様: 40文字上限）
+  for (const line of output.lines) {
+    if (line.text.length > 40) {
+      violations.push({
+        rule: "heuristic_over_length",
+        message: `${line.speaker}の発話が40文字を超えています（${line.text.length}文字）`,
+        severity: "warning",
+      });
+    }
+  }
+
   // キャラごとの発話を集計
   const linesByChar: Record<string, string[]> = {};
   for (const line of output.lines) {
@@ -234,7 +245,7 @@ function heuristicCheckStance(
     switch (stance) {
       case "enthusiastic":
         // 乗り気なのに発話が極端に短い
-        if (avg < 8) {
+        if (avg < 12) {
           violations.push({
             rule: "heuristic_enthusiastic_short",
             message: `${charName}はenthusiasticですが、平均文字数(${avg.toFixed(1)})が短すぎます`,
@@ -264,7 +275,7 @@ function heuristicCheckStance(
           });
         }
         // 興味薄なのに発話が長い
-        if (avg > 20) {
+        if (avg > 30) {
           violations.push({
             rule: "heuristic_indifferent_long",
             message: `${charName}はindifferentですが、平均文字数(${avg.toFixed(1)})が長すぎます`,

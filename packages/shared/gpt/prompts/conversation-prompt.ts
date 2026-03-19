@@ -53,7 +53,7 @@ export type PromptInput = {
   };
   structure: ConversationStructure;
   topic: SelectedTopic;
-  environment: { place: string; timeOfDay: string; weather?: string };
+  environment: { timeOfDay: string; weather?: string; place?: string };
   /** ゲーム内日付（例: "3月17日"） */
   gameDate?: string;
   recentSnippets: SharedSnippet[];
@@ -106,6 +106,7 @@ export const systemPromptConversation = `
 - 「避ける表現」に記載された表現は絶対に使わないこと
 - 一人称は指定表記を厳守し、表記揺れ・別表記への変換を行わないこと
 - 「会話の方向」セクションの主導権・スタンス・温度感・ターンバランスに従うこと
+- 各発話は20〜30文字を目安にし、40文字を超えないこと
 - memoryは会話内容から正確に抽出すること
 
 【理想の会話例】
@@ -319,9 +320,14 @@ export function buildUserPrompt(input: PromptInput): string {
   // 【会話設定】
   // ====================================================================
   const encounter = input.situation ?? "偶然鉢合わせ";
-  const settingParts = [`場所: ${environment.place}（${environment.timeOfDay}`];
-  if (environment.weather) settingParts[0] += `、${environment.weather}`;
-  settingParts[0] += `、${encounter}）`;
+  const settingLines = [`シチュエーション: ${encounter}`];
+  const timeAndWeather = environment.weather
+    ? `時間帯: ${environment.timeOfDay} / 天候: ${environment.weather}`
+    : `時間帯: ${environment.timeOfDay}`;
+  settingLines.push(timeAndWeather);
+  if (environment.place) {
+    settingLines.push(`場所メモ: ${environment.place}`);
+  }
 
   // 関係性もここに統合
   const aName = charA.name;
@@ -333,7 +339,6 @@ export function buildUserPrompt(input: PromptInput): string {
   ];
   const relationBlock = relationParts.join(" / ");
 
-  const settingLines = [settingParts[0]];
   if (input.gameDate) settingLines.push(`日付: ${input.gameDate}`);
   settingLines.push(relationBlock);
 
@@ -388,7 +393,7 @@ export function buildUserPrompt(input: PromptInput): string {
   // ====================================================================
   const rules = [
     "- 12〜16ターンの会話を生成",
-    "- 1発話は短文2〜3文程度まで可。ただし長くなりすぎないこと",
+    "- 1発話は20〜30文字を目安にし、40文字を超えないこと",
     "- 意味的に区切れる箇所では句点（。）、感嘆符（！）、疑問符（？）で文を区切ること。読点（、）だけで複数の文をつなげないこと",
     "- 上記の構造（主導権、スタンス、温度感、ターンバランス）に従うこと",
     "- 相手の直前発話を受けた返答を優先する",

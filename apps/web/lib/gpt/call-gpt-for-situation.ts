@@ -18,15 +18,19 @@ export type SituationInput = {
 
 /** フォールバック用の固定パターン */
 const FALLBACK_SITUATIONS = [
-  "偶然鉢合わせ",
-  "同じ場所に居合わせた",
-  "向こうから歩いてきた",
-  "隣にいることに気づいた",
-  "近くを通りかかった",
+  "夕暮れの帰り道、角を曲がった先でばったり会った",
+  "昼休みの廊下で同時に足を止め、目が合った",
+  "雨宿りの軒先で並んだ瞬間、互いに気づいた",
+  "本棚の前で同じ本に手を伸ばし、顔を見合わせた",
+  "駅前の信号待ちで隣に立ち、自然に会話が始まった",
 ] as const;
 
 function pickRandom<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function charLength(value: string): number {
+  return Array.from(value).length;
 }
 
 /**
@@ -50,6 +54,11 @@ export async function callGptForSituation(input: SituationInput): Promise<string
 
 20〜30文字の状況描写を1つだけ生成してください。`;
 
+  const pickFallbackSituation = () => {
+    const candidates = FALLBACK_SITUATIONS.filter((s) => !input.recentSituations.includes(s));
+    return pickRandom(candidates.length > 0 ? candidates : FALLBACK_SITUATIONS);
+  };
+
   try {
     const res = await client.responses.create({
       model: "gpt-5-mini",
@@ -65,18 +74,13 @@ export async function callGptForSituation(input: SituationInput): Promise<string
       ? res.output_text.trim()
       : null;
 
-    if (text && text.length > 0 && text.length <= 50) {
+    if (text && charLength(text) >= 20 && charLength(text) <= 30) {
       return text;
     }
 
-    // 長すぎる場合は最初の30文字を切り出す
-    if (text && text.length > 50) {
-      return text.slice(0, 30);
-    }
-
-    return pickRandom(FALLBACK_SITUATIONS);
+    return pickFallbackSituation();
   } catch (error) {
     console.warn("[callGptForSituation] GPT call failed, using fallback.", error);
-    return pickRandom(FALLBACK_SITUATIONS);
+    return pickFallbackSituation();
   }
 }

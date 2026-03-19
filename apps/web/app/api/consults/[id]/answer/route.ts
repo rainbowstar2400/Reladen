@@ -13,6 +13,14 @@ import {
   CONSULT_COOLDOWN_DAYS,
   type Favorability,
 } from "@repo/shared/logic/consult";
+import {
+  calculateConfessionSuccessRate,
+  computeImpressionOnTransition,
+} from "@repo/shared/logic/relation-transition";
+import {
+  relationTriggerEventPayloadSchema,
+  type ImpressionBase,
+} from "@repo/shared/types/conversation";
 import { newId } from "@/lib/newId";
 
 const answerRequestSchema = z.object({
@@ -104,8 +112,14 @@ export async function POST(
       selectedChoiceLabel: selectedChoice.label,
     });
 
-    // trustDelta をコード側で算出
-    const favorability = replyResult.favorability as Favorability;
+    // 判定基準は「選択肢定義の favorability」を正とする
+    const selectedFavorability =
+      selectedChoice?.favorability === "positive" ||
+      selectedChoice?.favorability === "neutral" ||
+      selectedChoice?.favorability === "negative"
+        ? selectedChoice.favorability
+        : undefined;
+    const favorability = (selectedFavorability ?? replyResult.favorability ?? "neutral") as Favorability;
     const trustDelta = calcTrustDelta({
       favorability,
       traits: {
@@ -153,14 +167,15 @@ export async function POST(
       deleted: false,
     } as any);
 
-    // 関係遷移相談 + 「止める」の場合の処理
-    if (consultPayload.triggerEventId && favorability === "negative") {
-      await handleNegativeTransitionAnswer(
+    // 関係遷移相談の回答後確定処理（trust更新の後段）
+    if (consultPayload.triggerEventId) {
+      await handleTransitionConsultAnswer({
         consultPayload,
-        residents ?? [],
-        events ?? [],
+        residents: residents ?? [],
+        events: events ?? [],
+        favorability,
         now,
-      );
+      });
     }
 
     return NextResponse.json({
@@ -180,68 +195,248 @@ export async function POST(
 }
 
 /**
+ * 関係遷移相談の回答後に、関係・印象を確定する。
+ */
+async function handleTransitionConsultAnswer(params: {
+  consultPayload: any;
+  residents: any[];
+  events: any[];
+  favorability: Favorability;
+  now: string;
+}) {
+  const triggerEvent = params.events.find(
+    (e) => e.id === params.consultPayload.triggerEventId && e.kind === "relation_trigger" && !e.deleted,
+  );
+  if (!triggerEvent) return;
+
+  const parsed = relationTriggerEventPayloadSchema.safeParse(triggerEvent.payload ?? {});
+  if (!parsed.success) return;
+
+  const triggerPayload = parsed.data;
+  const { trigger, residentId, targetId } = triggerPayload;
+
+  // negative は現行維持（印象リセット + 7日クールダウン）
+  if (params.favorability === "negative") {
+    await handleNegativeTransitionAnswer({
+      triggerPayload,
+      now: params.now,
+    });
+    return;
+  }
+
+  const relations = (await listAny("relations")) as any[] | null;
+  const feelings = (await listAny("feelings")) as any[] | null;
+
+  const relation = (relations ?? []).find((r) => {
+    const ra = r.a_id ?? r.aId;
+    const rb = r.b_id ?? r.bId;
+    return !r.deleted && ((ra === residentId && rb === targetId) || (ra === targetId && rb === residentId));
+  });
+  const currentRelation = String(relation?.type ?? triggerPayload.currentRelation ?? "friend");
+
+  const feelingResidentToTarget = (feelings ?? []).find(
+    (f) => !f.deleted && f.from_id === residentId && f.to_id === targetId,
+  );
+  const feelingTargetToResident = (feelings ?? []).find(
+    (f) => !f.deleted && f.from_id === targetId && f.to_id === residentId,
+  );
+
+  const favorResidentToTarget = Number(feelingResidentToTarget?.score ?? 0);
+  const favorTargetToResident = Number(feelingTargetToResident?.score ?? 0);
+
+  const impressionResidentToTarget = normalizeImpressionBase(feelingResidentToTarget?.label);
+  const impressionTargetToResident = normalizeImpressionBase(feelingTargetToResident?.label);
+
+  if (trigger === "confession") {
+    const targetResident = params.residents.find((r) => r.id === targetId && !r.deleted);
+    const targetEmpathy = Number(targetResident?.traits?.empathy ?? 3);
+
+    const baseRate = calculateConfessionSuccessRate({
+      targetFavor: favorTargetToResident,
+      targetImpression: impressionTargetToResident,
+      targetEmpathy,
+    });
+    const boostedRate = params.favorability === "positive" ? baseRate + 0.1 : baseRate;
+    const successRate = Math.max(0, Math.min(1, boostedRate));
+    const success = Math.random() < successRate;
+
+    if (success) {
+      await updateRelationType({
+        relation,
+        residentId,
+        targetId,
+        newType: "lover",
+        now: params.now,
+      });
+      await updateFeelingLabel(feelingResidentToTarget, residentId, targetId, "like", params.now);
+      await updateFeelingLabel(feelingTargetToResident, targetId, residentId, "like", params.now);
+      await recordRelationTransitionEvent({
+        participants: [residentId, targetId],
+        from: currentRelation,
+        to: "lover",
+        subType: "confession_success",
+        now: params.now,
+      });
+    } else {
+      await updateFeelingLabel(feelingResidentToTarget, residentId, targetId, "awkward", params.now);
+      await updateFeelingLabel(feelingTargetToResident, targetId, residentId, "awkward", params.now);
+    }
+    return;
+  }
+
+  // breakup: positive / neutral で friend へ降格
+  const { newImpressionA, newImpressionB } = computeImpressionOnTransition({
+    currentRelation,
+    newRelation: "friend",
+    favorA: favorResidentToTarget,
+    favorB: favorTargetToResident,
+    currentImpressionA: impressionResidentToTarget,
+    currentImpressionB: impressionTargetToResident,
+  });
+
+  await updateRelationType({
+    relation,
+    residentId,
+    targetId,
+    newType: "friend",
+    now: params.now,
+  });
+  await updateFeelingLabel(feelingResidentToTarget, residentId, targetId, newImpressionA, params.now);
+  await updateFeelingLabel(feelingTargetToResident, targetId, residentId, newImpressionB, params.now);
+  await recordRelationTransitionEvent({
+    participants: [residentId, targetId],
+    from: currentRelation,
+    to: "friend",
+    subType: "breakup_success",
+    now: params.now,
+  });
+}
+
+function normalizeImpressionBase(value: unknown): ImpressionBase {
+  const allowed: ImpressionBase[] = [
+    "dislike",
+    "maybe_dislike",
+    "none",
+    "curious",
+    "maybe_like",
+    "like",
+    "love",
+  ];
+  if (typeof value === "string" && (allowed as string[]).includes(value)) {
+    return value as ImpressionBase;
+  }
+  return "none";
+}
+
+async function updateRelationType(params: {
+  relation: any;
+  residentId: string;
+  targetId: string;
+  newType: string;
+  now: string;
+}) {
+  const base = params.relation ?? {
+    id: newId(),
+    a_id: params.residentId,
+    b_id: params.targetId,
+    deleted: false,
+  };
+  await putAny("relations", {
+    ...base,
+    type: params.newType,
+    updated_at: params.now,
+  });
+}
+
+async function updateFeelingLabel(
+  feeling: any,
+  fromId: string,
+  toId: string,
+  label: string,
+  now: string,
+) {
+  const base = feeling ?? {
+    id: newId(),
+    from_id: fromId,
+    to_id: toId,
+    score: 0,
+    deleted: false,
+  };
+  await putAny("feelings", {
+    ...base,
+    from_id: fromId,
+    to_id: toId,
+    label,
+    updated_at: now,
+  });
+}
+
+async function recordRelationTransitionEvent(params: {
+  participants: [string, string];
+  from: string;
+  to: string;
+  subType: string;
+  now: string;
+}) {
+  await putAny("events", {
+    id: newId(),
+    kind: "system",
+    payload: {
+      type: "relation_transition",
+      subType: params.subType,
+      participants: params.participants,
+      from: params.from,
+      to: params.to,
+    },
+    updated_at: params.now,
+    deleted: false,
+  } as any);
+}
+
+/**
  * 関係遷移相談で「止める」を選択した場合の処理:
  * 1. 印象リセット（告白: maybe_like → curious、別れ: dislike → none）
  * 2. クールダウン記録（7日間再発行しない）
  */
-async function handleNegativeTransitionAnswer(
-  consultPayload: any,
-  residents: any[],
-  events: any[],
-  now: string,
-) {
-  const triggerEvent = events.find(
-    (e) => e.id === consultPayload.triggerEventId && !e.deleted,
-  );
-  if (!triggerEvent) return;
+async function handleNegativeTransitionAnswer(params: {
+  triggerPayload: z.infer<typeof relationTriggerEventPayloadSchema>;
+  now: string;
+}) {
+  const { trigger, residentId, targetId } = params.triggerPayload;
 
-  const trigger = triggerEvent.payload?.trigger;
-  const participants = Array.isArray(consultPayload.participants)
-    ? consultPayload.participants
-    : [];
-
-  if (participants.length < 2) return;
-
-  // 印象リセット
+  // 印象リセット（主体→相手）
   const feelings = (await listAny("feelings")) as any[] | null;
-  if (feelings) {
-    const subjectDir = triggerEvent.payload?.subjectDirection;
-    const [a, b] = participants;
-    const subjectId = subjectDir === "b" ? b : a;
+  const feeling = (feelings ?? []).find(
+    (f) => !f.deleted && f.from_id === residentId && f.to_id === targetId,
+  );
+  if (feeling) {
+    let newLabel: string | null = null;
+    if (trigger === "confession" && feeling.label === "maybe_like") {
+      newLabel = "curious";
+    } else if (trigger === "breakup" && feeling.label === "dislike") {
+      newLabel = "none";
+    }
 
-    const feeling = feelings.find(
-      (f) => f.from_id === subjectId && participants.includes(f.to_id) && !f.deleted,
-    );
-
-    if (feeling) {
-      let newLabel: string | null = null;
-      if (trigger === "confession" && feeling.label === "maybe_like") {
-        newLabel = "curious";
-      } else if (trigger === "breakup" && feeling.label === "dislike") {
-        newLabel = "none";
-      }
-
-      if (newLabel) {
-        await putAny("feelings", {
-          ...feeling,
-          label: newLabel,
-          updated_at: now,
-        });
-      }
+    if (newLabel) {
+      await putAny("feelings", {
+        ...feeling,
+        label: newLabel,
+        updated_at: params.now,
+      });
     }
   }
 
   // クールダウン記録
-  const pair = [...participants].sort().join(":");
+  const pair = [residentId, targetId].sort().join(":");
   const expiresAt = new Date(
-    new Date(now).getTime() + CONSULT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000,
+    new Date(params.now).getTime() + CONSULT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
 
   await putAny("events", {
     id: newId(),
     kind: "consult_cooldown",
     payload: { pair, trigger, expiresAt },
-    updated_at: now,
+    updated_at: params.now,
     deleted: false,
   } as any);
 }

@@ -6,7 +6,7 @@ import { baseEntitySchema } from './base';
 import { conversationMemorySchema } from './conversation-generation';
 
 // 印象（base）と special（気まずさ等）の分離
-export const impressionBaseEnum = z.enum(['dislike', 'maybe_dislike', 'none', 'curious', 'maybe_like', 'like']);
+export const impressionBaseEnum = z.enum(['dislike', 'maybe_dislike', 'none', 'curious', 'maybe_like', 'like', 'love']);
 export type ImpressionBase = z.infer<typeof impressionBaseEnum>;
 
 export const impressionSpecialEnum = z.enum(['awkward']);
@@ -38,6 +38,7 @@ export const conversationEventPayloadSchema = z.object({
   threadId: z.string().uuid(),
   participants: z.tuple([z.string().uuid(), z.string().uuid()]),
   topic: z.string().optional(),
+  situation: z.string().optional(),
   lines: z.array(conversationLineSchema).min(1),
   meta: eventMetaSchema,
   deltas: z.object({
@@ -77,8 +78,36 @@ export const feelingChangeEventPayloadSchema = z.object({
 });
 export type FeelingChangeEventPayload = z.infer<typeof feelingChangeEventPayloadSchema>;
 
+export const relationTriggerEventPayloadSchema = z.object({
+  trigger: z.enum(['confession', 'breakup']),
+  residentId: z.string().uuid(),
+  targetId: z.string().uuid(),
+  participants: z.tuple([z.string().uuid(), z.string().uuid()]).optional(),
+  currentRelation: z.string().optional(),
+  handled: z.boolean().optional(),
+}).superRefine((value, ctx) => {
+  if (value.residentId === value.targetId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'residentId and targetId must be different',
+      path: ['targetId'],
+    });
+  }
+
+  if (value.participants) {
+    if (value.participants[0] !== value.residentId || value.participants[1] !== value.targetId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'participants must be [residentId, targetId]',
+        path: ['participants'],
+      });
+    }
+  }
+});
+export type RelationTriggerEventPayload = z.infer<typeof relationTriggerEventPayloadSchema>;
+
 export const eventKindEnum = z.enum([
-  'conversation', 'favor_change', 'feeling_change', 'system', 'consult',
+  'conversation', 'favor_change', 'feeling_change', 'system', 'consult', 'relation_trigger',
 ]);
 
 export const eventSchemaStrict = baseEntitySchema.and(
@@ -89,6 +118,7 @@ export const eventSchemaStrict = baseEntitySchema.and(
       conversationEventPayloadSchema,
       favorChangeEventPayloadSchema,
       feelingChangeEventPayloadSchema,
+      relationTriggerEventPayloadSchema,
       z.record(z.any()),  // system/consult は緩い開始
     ]),
   })

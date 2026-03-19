@@ -46,8 +46,10 @@ export type TopicSelectionInput = {
   knowledgeByB: OffscreenKnowledge[];
   /** 最近の会話で使われた話題（重複回避用） */
   recentTopics: string[];
-  /** 天気・場所（small_talk用） */
-  environment: { place: string; timeOfDay: string; weather?: string };
+  /** 時間帯・天候（small_talk用） */
+  environment: { timeOfDay: string; weather?: string };
+  /** その会話のシチュエーション描写（small_talk優先に使用） */
+  situation?: string;
   /** キャラクターID → 名前のマップ（third_party 名前解決用） */
   nameMap?: Map<string, string>;
   /** 主導者の最近の出来事（self_experience用） */
@@ -209,15 +211,14 @@ function generateHeartToHeartCandidates(
 function generateSmallTalkCandidates(
   input: TopicSelectionInput,
 ): TopicCandidate[] {
-  const { place, timeOfDay, weather } = input.environment;
-  const candidates: TopicCandidate[] = [
-    {
-      source: "small_talk" as TopicSource,
-      label: `${place}での出来事`,
-      detail: `${timeOfDay}の${place}`,
-      score: 0,
-    },
-  ];
+  const { timeOfDay, weather } = input.environment;
+  const situation = typeof input.situation === "string" ? input.situation.trim() : "";
+  const candidates: TopicCandidate[] = [{
+    source: "small_talk" as TopicSource,
+    label: situation.length > 0 ? situation : `${timeOfDay}の雑談`,
+    detail: situation.length > 0 ? `${timeOfDay}の出来事` : `${timeOfDay}の何気ない会話`,
+    score: 0,
+  }];
   if (weather) {
     candidates.push({
       source: "small_talk" as TopicSource,
@@ -373,10 +374,11 @@ export function selectTopic(
 
   if (!best) {
     // フォールバック: small_talk
+    const situation = typeof input.situation === "string" ? input.situation.trim() : "";
     const fallback: SelectedTopic = {
       source: "small_talk",
-      label: `${input.environment.place}での出来事`,
-      detail: `${input.environment.timeOfDay}の${input.environment.place}`,
+      label: situation.length > 0 ? situation : `${input.environment.timeOfDay}の雑談`,
+      detail: situation.length > 0 ? `${input.environment.timeOfDay}の出来事` : `${input.environment.timeOfDay}の何気ない会話`,
     };
     return { selected: fallback, candidates: scored };
   }

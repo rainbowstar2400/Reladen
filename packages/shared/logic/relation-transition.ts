@@ -9,6 +9,8 @@ import type { ImpressionBase } from "../types/conversation";
 // ---------------------------------------------------------------------------
 
 export type TransitionCheckInput = {
+  participantAId: string;
+  participantBId: string;
   relationType: string;
   favorAtoB: number;
   favorBtoA: number;
@@ -33,8 +35,10 @@ export type TransitionResult =
   | {
       type: 'intervention';
       trigger: 'confession' | 'breakup';
-      /** 告白/別れを申し出るキャラのID方向 ('a' or 'b') */
-      subjectDirection: 'a' | 'b';
+      /** 告白/別れを申し出る主体 */
+      residentId: string;
+      /** 申し出の相手 */
+      targetId: string;
     };
 
 // ---------------------------------------------------------------------------
@@ -79,11 +83,21 @@ function checkFriendToBestFriend(input: TransitionCheckInput): boolean {
 function checkConfessionTrigger(input: TransitionCheckInput): TransitionResult {
   // A側が告白する場合
   if (input.impressionAtoB === 'maybe_like' && input.favorAtoB >= 55) {
-    return { type: 'intervention', trigger: 'confession', subjectDirection: 'a' };
+    return {
+      type: 'intervention',
+      trigger: 'confession',
+      residentId: input.participantAId,
+      targetId: input.participantBId,
+    };
   }
   // B側が告白する場合
   if (input.impressionBtoA === 'maybe_like' && input.favorBtoA >= 55) {
-    return { type: 'intervention', trigger: 'confession', subjectDirection: 'b' };
+    return {
+      type: 'intervention',
+      trigger: 'confession',
+      residentId: input.participantBId,
+      targetId: input.participantAId,
+    };
   }
   return { type: 'none' };
 }
@@ -94,10 +108,20 @@ function checkConfessionTrigger(input: TransitionCheckInput): TransitionResult {
  */
 function checkBreakupTrigger(input: TransitionCheckInput): TransitionResult {
   if (input.impressionAtoB === 'dislike' && input.favorAtoB <= 15) {
-    return { type: 'intervention', trigger: 'breakup', subjectDirection: 'a' };
+    return {
+      type: 'intervention',
+      trigger: 'breakup',
+      residentId: input.participantAId,
+      targetId: input.participantBId,
+    };
   }
   if (input.impressionBtoA === 'dislike' && input.favorBtoA <= 15) {
-    return { type: 'intervention', trigger: 'breakup', subjectDirection: 'b' };
+    return {
+      type: 'intervention',
+      trigger: 'breakup',
+      residentId: input.participantBId,
+      targetId: input.participantAId,
+    };
   }
   return { type: 'none' };
 }
