@@ -20,6 +20,8 @@ export type ConsultDetail = {
   prompt: Line
   choices: Choice[]
   replyByChoice?: Record<string, string>
+  /** API から返された返答テキスト（回答後に設定） */
+  reply?: string | null
   systemAfter?: string[]
   selectedChoiceId?: string | null // ← ここは「確定済み」を示す入力値
 }
@@ -28,11 +30,14 @@ export function ConsultDetailPanelContent({
   data,
   onDecide,
   onClose,
+  answering,
 }: {
   data: ConsultDetail
   /** 「回答する」押下で確定したときだけ呼ぶ（永続化は親側で） */
   onDecide?: (choiceId: string) => void
   onClose?: () => void
+  /** 回答処理中のローディング状態 */
+  answering?: boolean
 }) {
   const router = useRouter()
   const bubbleBg = 'rgba(255,255,255,0.6)'
@@ -68,10 +73,9 @@ export function ConsultDetailPanelContent({
 
   // 強調・バッジ・返答は「確定済み」のみ対象
   const chosenForHighlight = committed
-  const reply =
-    committed && data.replyByChoice?.[committed]
-      ? { speaker: data.prompt.speaker, text: data.replyByChoice[committed] }
-      : null
+  // 新方式: data.reply（API 返却）を優先。後方互換で replyByChoice も参照。
+  const replyText = data.reply ?? (committed ? data.replyByChoice?.[committed] : null) ?? null
+  const reply = replyText ? { speaker: data.prompt.speaker, text: replyText } : null
 
   return (
     <>
@@ -145,12 +149,20 @@ export function ConsultDetailPanelContent({
           {/* 回答ボタン：未確定時のみ表示。未選択なら無効 */}
           {!answered && (
             <div className="flex justify-end pt-2">
-              <Button size="sm" disabled={!picked || blockedByLock} onClick={decide}>
-                回答する
+              <Button size="sm" disabled={!picked || blockedByLock || answering} onClick={decide}>
+                {answering ? '回答中…' : '回答する'}
               </Button>
             </div>
           )}
         </div>
+
+        {/* ローディング状態（回答処理中） */}
+        {answered && answering && !reply && (
+          <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
+            返答を待っています…
+          </div>
+        )}
 
         {/* 住人の返答（確定後） */}
         {reply && (
@@ -177,11 +189,13 @@ export default function ConsultDetailPanel({
   open,
   data,
   onDecide,
+  answering,
 }: {
   open: boolean
   data: ConsultDetail | null
   /** 「回答する」押下で確定したときだけ呼ぶ（永続化は親側で） */
   onDecide?: (choiceId: string) => void
+  answering?: boolean
 }) {
   const router = useRouter()
   useEffect(() => {
@@ -212,6 +226,7 @@ export default function ConsultDetailPanel({
             data={data}
             onDecide={onDecide}
             onClose={() => router.back()}
+            answering={answering}
           />
         </motion.aside>
       </div>

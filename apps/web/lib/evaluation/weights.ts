@@ -11,6 +11,7 @@ export type ImpressionBase =
   | 'curious'
   | 'maybe_like'
   | 'like'
+  | 'love'
   | 'dislike'
   | 'maybe_dislike';
 
@@ -23,9 +24,7 @@ export type Impression = ImpressionBase;
 export type WeightsConfig = {
   tags: Record<string, number>;
   qualityHints: Record<string, number>;
-  signals: Record<'continue' | 'close' | 'park', number>;
   favorClip: { min: number; max: number };
-  impressionOrder: ImpressionBase[];
 };
 
 // ===== デフォルト（JSONが壊れても動く安全網） ================================
@@ -38,7 +37,7 @@ const DefaultWeights: WeightsConfig = {
     '否定': -0.8,
     '皮肉': -0.5,
     '非難': -1.2,
-    '情報共有': 0.1,
+    '雑談・共通': 0.1,
     '軽い冗談': 0.2
   },
   qualityHints: {
@@ -47,20 +46,10 @@ const DefaultWeights: WeightsConfig = {
     'tone.gentle': 0.2,
     'tone.harsh': -0.4
   },
-  signals: { continue: 0.1, close: 0.2, park: 0 },
   favorClip: { min: -2, max: 2 },
-  impressionOrder: ['dislike', 'maybe_dislike', 'none', 'curious', 'maybe_like', 'like']
 };
 
 // ===== 共有ユーティリティ =====================================================
-export function nextImpression(current: Impression, deltaSign: number, order?: Impression[]): Impression {
-  const ladder = order && order.length >= 2 ? order : DefaultWeights.impressionOrder;
-  if (deltaSign === 0) return current;
-  const idx = ladder.indexOf(current);
-  if (idx < 0) return current;
-  if (deltaSign > 0) return ladder[Math.min(idx + 1, ladder.length - 1)];
-  return ladder[Math.max(idx - 1, 0)];
-}
 
 export function clipFavor(x: number, clip?: { min: number; max: number }): number {
   const c = clip ?? DefaultWeights.favorClip;
@@ -79,12 +68,8 @@ function validate(partial: any): WeightsConfig | null {
   try {
     if (!partial || typeof partial !== 'object') return null;
     const w = partial as WeightsConfig;
-    if (!w.tags || !w.qualityHints || !w.signals || !w.favorClip || !w.impressionOrder) return null;
+    if (!w.tags || !w.qualityHints || !w.favorClip) return null;
     if (typeof w.favorClip.min !== 'number' || typeof w.favorClip.max !== 'number') return null;
-    // signals キー検査（不足なら落とす）
-    for (const k of ['continue', 'close', 'park'] as const) {
-      if (typeof w.signals[k] !== 'number') return null;
-    }
     // 基本十分
     return w;
   } catch {

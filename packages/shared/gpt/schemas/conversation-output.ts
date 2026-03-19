@@ -48,10 +48,6 @@ export const conversationResponseSchema = {
             items: { type: "string" },
             maxItems: 12,
           },
-          signals: {
-            type: "array",
-            items: { enum: ["continue", "close", "park"] },
-          },
           qualityHints: {
             type: "object",
             additionalProperties: false,
@@ -94,7 +90,7 @@ export const conversationResponseSchema = {
             required: ["summary", "topicsCovered", "unresolvedThreads", "knowledgeGained"],
           },
         },
-        required: ["tags", "signals", "qualityHints", "debug", "memory"],
+        required: ["tags", "qualityHints", "debug", "memory"],
       },
     },
     required: ["threadId", "participants", "topic", "lines", "meta"],

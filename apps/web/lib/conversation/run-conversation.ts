@@ -19,7 +19,12 @@ import type {
 } from "@repo/shared/types/conversation-generation";
 import { selectTopic, type TopicSelectionInput, type CharacterContext } from "@repo/shared/logic/topic-selection";
 import { buildConversationStructure, determineInitiator, type StructureInput } from "@repo/shared/logic/conversation-structure";
+import { shouldGeneratePromise, determineConversationType, type ConversationType } from "@repo/shared/logic/promise";
+import { checkRelationTransition, computeImpressionOnTransition, type TransitionResult } from "@repo/shared/logic/relation-transition";
 import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
+import { callGptForSituation } from "@/lib/gpt/call-gpt-for-situation";
+import { callGptForNickname } from "@/lib/gpt/call-gpt-for-nickname";
+import { shouldGenerateNickname, type NicknameGenerationInput, type NicknameTendency } from "@repo/shared/logic/nickname";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
 import { KvUnauthenticatedError, listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
@@ -42,11 +47,14 @@ export type RunConversationArgs = {
   /** ペアの関係性 */
   relation: {
     type: "none" | "acquaintance" | "friend" | "best_friend" | "lover" | "family";
+    familySubType?: string | null;
     feelingAtoB: { label: string; score: number };
     feelingBtoA: { label: string; score: number };
   };
   /** 環境 */
   environment: { place: string; timeOfDay: string; weather?: string };
+  /** ゲーム内日付（例: "3月17日"） */
+  gameDate?: string;
   /** 前回の会話記憶 */
   previousMemory?: ConversationMemory | null;
   /** 最近の共有スニペット */
@@ -61,6 +69,14 @@ export type RunConversationArgs = {
   threadId?: string;
   /** キャラクターID → 名前のマップ（third_party 名前解決用） */
   nameMap?: Map<string, string>;
+  /** 各キャラの最近の出来事（self_experience用） */
+  recentEventsByCharacter?: Record<string, import("@repo/shared/types/conversation-generation").RecentEvent[]>;
+  /** 現在の日付（seasonal用、例: "2026-03-18"） */
+  currentDate?: string;
+  /** シチュエーション描写（GPT生成済み） */
+  situation?: string;
+  /** ニックネーム情報（D-3） */
+  nicknames?: { aCallsB?: string | null; bCallsA?: string | null };
 };
 
 export type RunCharacterProfile = {
@@ -82,11 +98,15 @@ export type RunConversationResult = {
   output: ConversationOutput;
   retried: boolean;
   violations: string[];
+  /** 約束フラグ（trueなら約束生成会話） */
+  promiseFlag: boolean;
   debug: {
     topicCandidates: Array<{ source: string; label: string; score: number }>;
     selectedTopic: { source: string; label: string };
     structure: {
+      initiatorId: string;
       initiator: string;
+      responderId: string;
       responder: string;
       initiatorStance: string;
       responderStance: string;
@@ -173,6 +193,7 @@ type FeelingRow = {
   toId?: string;
   label?: string;
   score?: number;
+  recent_deltas?: number[];
   updated_at?: string;
   updatedAt?: string;
   deleted?: boolean;
@@ -395,9 +416,9 @@ async function resolveParticipantsFromThread(
 }
 
 /** 関係性タイプを KV から読み込み */
-async function loadRelationTypeForPair(
+async function loadRelationForPair(
   participants: [string, string],
-): Promise<string | undefined> {
+): Promise<{ type: string; familySubType?: string | null } | undefined> {
   const rows = (await listAny("relations")) as unknown as RelationRow[] | null;
   if (!Array.isArray(rows)) return undefined;
   const [a, b] = participants;
@@ -411,18 +432,25 @@ async function loadRelationTypeForPair(
     })
     .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs));
 
-  return matches[0]?.type;
+  const match = matches[0];
+  if (!match?.type) return undefined;
+  return {
+    type: match.type,
+    familySubType: (match as any).family_sub_type ?? null,
+  };
 }
+
+type FeelingData = { label: string; score: number; recentDeltas: number[] };
 
 /** 好感度を KV から読み込み */
 async function loadFeelingsForPair(
   participants: [string, string],
-): Promise<{ aToB: { label: string; score: number }; bToA: { label: string; score: number } }> {
+): Promise<{ aToB: FeelingData; bToA: FeelingData }> {
   const rows = (await listAny("feelings")) as unknown as FeelingRow[] | null;
   const [a, b] = participants;
 
-  const pickLatest = (fromId: string, toId: string): { label: string; score: number } => {
-    if (!Array.isArray(rows)) return { label: "none", score: 0 };
+  const pickLatest = (fromId: string, toId: string): FeelingData => {
+    if (!Array.isArray(rows)) return { label: "none", score: 0, recentDeltas: [] };
     const found = rows
       .filter((row) => {
         if (!row || row.deleted) return false;
@@ -433,6 +461,7 @@ async function loadFeelingsForPair(
     return {
       label: typeof found?.label === "string" ? found.label : "none",
       score: typeof found?.score === "number" && Number.isFinite(found.score) ? found.score : 0,
+      recentDeltas: Array.isArray(found?.recent_deltas) ? found.recent_deltas : [],
     };
   };
 
@@ -574,6 +603,33 @@ async function loadOffscreenKnowledge(
     }));
 }
 
+/** 指定キャラクターの最近の出来事を KV から読み込み */
+async function loadRecentEventsForCharacter(
+  characterId: string,
+): Promise<import("@repo/shared/types/conversation-generation").RecentEvent[]> {
+  let rows: Array<Record<string, any>> | null = null;
+  try {
+    rows = (await listAny("recent_events")) as unknown as Array<Record<string, any>> | null;
+  } catch (error) {
+    console.warn("[loadRecentEventsForCharacter] Failed to load recent_events.", error);
+    return [];
+  }
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .filter((r) => {
+      if (!r || r.deleted) return false;
+      return r.character_id === characterId;
+    })
+    .map((r) => ({
+      id: r.id ?? "",
+      characterId: r.character_id ?? "",
+      fact: r.fact ?? "",
+      generatedAt: r.generated_at ?? new Date().toISOString(),
+      sharedWith: Array.isArray(r.shared_with) ? r.shared_with : [],
+    }));
+}
+
 /** 時間帯に基づく環境情報を決定 */
 function determineEnvironment(): { place: string; timeOfDay: string } {
   const now = new Date();
@@ -616,7 +672,7 @@ export async function runConversation(
 
   // 話題選定と会話構造の主導者を一致させるため、先に主導者シードを確定する。
   const seedTopic: SelectedTopic = {
-    source: "environmental",
+    source: "small_talk",
     label: `${args.environment.place}での出来事`,
     detail: `${args.environment.timeOfDay}の${args.environment.place}`,
   };
@@ -634,6 +690,8 @@ export async function runConversation(
     recentTopics: args.recentTopics ?? [],
     environment: args.environment,
     nameMap: args.nameMap,
+    recentEventsA: args.recentEventsByCharacter?.[seedInitiator.id],
+    currentDate: args.currentDate,
   };
 
   const { selected: topic, candidates: topicCandidates } = selectTopic(
@@ -641,6 +699,15 @@ export async function runConversation(
     seedInitiator,
     seedResponder,
   );
+
+  // --- 1.5. 約束フラグ抽選 ---
+  const isContinuation = topic.source === 'continuation';
+  const promiseFlag = !isContinuation && shouldGeneratePromise({
+    relationType: args.relation.type,
+    topicSource: topic.source,
+    favorScore: args.relation.feelingAtoB.score,
+  });
+  const conversationType = determineConversationType(topic.source, promiseFlag);
 
   // --- 2. 会話構造決定 ---
   const structureInput: StructureInput = {
@@ -659,9 +726,13 @@ export async function runConversation(
     structure,
     topic,
     environment: args.environment,
+    gameDate: args.gameDate,
     recentSnippets: args.recentSnippets ?? [],
     previousMemory: args.previousMemory ?? null,
     threadId,
+    situation: args.situation,
+    conversationType,
+    nicknames: args.nicknames,
   };
 
   // 一人称マップ
@@ -680,6 +751,7 @@ export async function runConversation(
     output: gptResult.output,
     retried: gptResult.retried,
     violations: gptResult.violations,
+    promiseFlag,
     debug: {
       topicCandidates: topicCandidates.map((c) => ({
         source: c.source,
@@ -691,7 +763,9 @@ export async function runConversation(
         label: topic.label,
       },
       structure: {
+        initiatorId: structure.initiatorId,
         initiator: structure.initiatorName,
+        responderId: structure.responderId,
         responder: structure.responderName,
         initiatorStance: structure.initiatorStance,
         responderStance: structure.responderStance,
@@ -699,6 +773,230 @@ export async function runConversation(
       },
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// 関係遷移の永続化
+// ---------------------------------------------------------------------------
+
+function clampScore(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+// ---------------------------------------------------------------------------
+// D-3: ニックネーム自動生成
+// ---------------------------------------------------------------------------
+
+type NicknameRow = {
+  id?: string;
+  from_id?: string;
+  to_id?: string;
+  fromId?: string;
+  toId?: string;
+  nickname?: string;
+  locked?: boolean;
+  deleted?: boolean;
+};
+
+async function generateNicknamesOnTransition(params: {
+  participants: [string, string];
+  trigger: 'initial' | 'upgrade';
+  newRelation: string;
+  now: string;
+}): Promise<void> {
+  const [a, b] = params.participants;
+
+  // 住人情報を取得（nicknameTendency 含む）
+  const residents = (await listAny("residents")) as unknown as Array<Record<string, any>> | null;
+  if (!Array.isArray(residents)) return;
+
+  const resA = residents.find((r) => r?.id === a && !r?.deleted);
+  const resB = residents.find((r) => r?.id === b && !r?.deleted);
+  if (!resA || !resB) return;
+
+  // 既存ニックネーム確認（locked チェック）
+  const nicknames = (await listAny("nicknames")) as unknown as NicknameRow[] | null;
+  const existingAtoB = Array.isArray(nicknames)
+    ? nicknames.find((n) => {
+        const from = n.from_id ?? n.fromId;
+        const to = n.to_id ?? n.toId;
+        return from === a && to === b && !n.deleted;
+      })
+    : undefined;
+  const existingBtoA = Array.isArray(nicknames)
+    ? nicknames.find((n) => {
+        const from = n.from_id ?? n.fromId;
+        const to = n.to_id ?? n.toId;
+        return from === b && to === a && !n.deleted;
+      })
+    : undefined;
+
+  // 両方 locked なら何もしない
+  const lockedAtoB = existingAtoB?.locked === true;
+  const lockedBtoA = existingBtoA?.locked === true;
+  if (lockedAtoB && lockedBtoA) return;
+
+  // GPT で生成
+  const input: NicknameGenerationInput = {
+    trigger: params.trigger,
+    characterA: {
+      id: a,
+      name: resA.name ?? '不明',
+      gender: resA.gender ?? null,
+      age: typeof resA.age === 'number' ? resA.age : null,
+      nicknameTendency: (resA.nickname_tendency ?? resA.nicknameTendency ?? 'san') as NicknameTendency,
+    },
+    characterB: {
+      id: b,
+      name: resB.name ?? '不明',
+      gender: resB.gender ?? null,
+      age: typeof resB.age === 'number' ? resB.age : null,
+      nicknameTendency: (resB.nickname_tendency ?? resB.nicknameTendency ?? 'san') as NicknameTendency,
+    },
+    newRelation: params.newRelation,
+    currentNicknameAtoB: existingAtoB?.nickname ?? null,
+    currentNicknameBtoA: existingBtoA?.nickname ?? null,
+  };
+
+  const result = await callGptForNickname(input);
+
+  // 保存（locked でないもののみ）
+  if (!lockedAtoB) {
+    await putAny("nicknames", {
+      id: existingAtoB?.id ?? newId(),
+      from_id: a,
+      to_id: b,
+      nickname: result.nicknameAtoB,
+      locked: false,
+      updated_at: params.now,
+      deleted: false,
+    });
+  }
+  if (!lockedBtoA) {
+    await putAny("nicknames", {
+      id: existingBtoA?.id ?? newId(),
+      from_id: b,
+      to_id: a,
+      nickname: result.nicknameBtoA,
+      locked: false,
+      updated_at: params.now,
+      deleted: false,
+    });
+  }
+}
+
+async function persistTransitionResult(params: {
+  participants: [string, string];
+  currentRelation: string;
+  transition: TransitionResult;
+  favorA: number;
+  favorB: number;
+  currentImpressionA: import("@repo/shared/types/conversation").ImpressionBase;
+  currentImpressionB: import("@repo/shared/types/conversation").ImpressionBase;
+}): Promise<void> {
+  const [a, b] = params.participants;
+  const now = new Date().toISOString();
+
+  if (params.transition.type === 'observation') {
+    const { newRelation, event } = params.transition;
+
+    // 印象リセット算出
+    const { newImpressionA, newImpressionB } = computeImpressionOnTransition({
+      currentRelation: params.currentRelation,
+      newRelation,
+      favorA: params.favorA,
+      favorB: params.favorB,
+      currentImpressionA: params.currentImpressionA,
+      currentImpressionB: params.currentImpressionB,
+    });
+
+    // relations テーブル更新
+    const relations = (await listAny("relations")) as unknown as RelationRow[] | null;
+    if (Array.isArray(relations)) {
+      const match = relations.find((rel) => {
+        if (!rel || rel.deleted) return false;
+        const { aId, bId } = pickRelationPair(rel);
+        return (aId === a && bId === b) || (aId === b && bId === a);
+      });
+      if (match) {
+        await putAny("relations", {
+          ...(match as any),
+          type: newRelation,
+          updated_at: now,
+        });
+      }
+    }
+
+    // feelings の印象リセット
+    const feelings = (await listAny("feelings")) as unknown as FeelingRow[] | null;
+    if (Array.isArray(feelings)) {
+      const fAB = feelings.find((f) => {
+        const pair = pickFeelingPair(f);
+        return pair.fromId === a && pair.toId === b && !f.deleted;
+      });
+      const fBA = feelings.find((f) => {
+        const pair = pickFeelingPair(f);
+        return pair.fromId === b && pair.toId === a && !f.deleted;
+      });
+      if (fAB) {
+        await putAny("feelings", { ...(fAB as any), label: newImpressionA, updated_at: now });
+      }
+      if (fBA) {
+        await putAny("feelings", { ...(fBA as any), label: newImpressionB, updated_at: now });
+      }
+    }
+
+    // system イベント記録
+    await putAny("events", {
+      id: newId(),
+      kind: "system",
+      updated_at: now,
+      deleted: false,
+      payload: {
+        type: "relation_transition",
+        subType: event,
+        participants: [a, b],
+        from: params.currentRelation,
+        to: newRelation,
+      },
+    } as any);
+
+    // D-3: ニックネーム自動生成
+    const nicknameTrigger = shouldGenerateNickname(params.currentRelation, newRelation);
+    if (nicknameTrigger) {
+      try {
+        await generateNicknamesOnTransition({
+          participants: [a, b],
+          trigger: nicknameTrigger,
+          newRelation,
+          now,
+        });
+      } catch (error) {
+        console.warn("[persistTransitionResult] Failed to generate nicknames.", error);
+      }
+    }
+  }
+
+  if (params.transition.type === 'intervention') {
+    const { trigger, subjectDirection } = params.transition;
+    const subjectId = subjectDirection === 'a' ? a : b;
+
+    // system イベントとして記録（Phase 5 の相談システムで処理）
+    await putAny("events", {
+      id: newId(),
+      kind: "system",
+      updated_at: now,
+      deleted: false,
+      payload: {
+        type: "relation_trigger",
+        trigger,
+        subjectId,
+        participants: [a, b],
+        currentRelation: params.currentRelation,
+      },
+    } as any);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -729,18 +1027,22 @@ export async function runConversationFromApi(
   }
 
   // 2) 関係性読み込み
-  let relationType: string | undefined;
+  let relationData: { type: string; familySubType?: string | null } | undefined;
   try {
-    relationType = await loadRelationTypeForPair(participants);
+    relationData = await loadRelationForPair(participants);
   } catch (error) {
     console.warn("[runConversationFromApi] Failed to load relation.", error);
   }
+  const relationType = relationData?.type;
   if (relationType === "none") {
     throw new Error("[runConversationFromApi] Conversation aborted because relation is 'none'.");
   }
 
   // 3) 好感度読み込み
-  let feelings = { aToB: { label: "none", score: 0 }, bToA: { label: "none", score: 0 } };
+  let feelings: { aToB: FeelingData; bToA: FeelingData } = {
+    aToB: { label: "none", score: 0, recentDeltas: [] },
+    bToA: { label: "none", score: 0, recentDeltas: [] },
+  };
   try {
     feelings = await loadFeelingsForPair(participants);
   } catch (error) {
@@ -749,6 +1051,8 @@ export async function runConversationFromApi(
 
   // 4) 環境決定
   const environment = determineEnvironment();
+  const now = new Date();
+  const gameDate = `${now.getMonth() + 1}月${now.getDate()}日`;
 
   // 5) 会話履歴読み込み（previousMemory + recentTopics）
   const { previousMemory, recentTopics } = await loadConversationHistory(participants);
@@ -765,23 +1069,71 @@ export async function runConversationFromApi(
     console.warn("[runConversationFromApi] Failed to generate recent events.", error);
   }
 
-  // 7) スニペット + オフスクリーン知識の取得
+  // 7) スニペット + オフスクリーン知識 + 最近の出来事の取得
   const recentSnippets = await loadRecentSnippets(participants);
-  const [knowledgeByA, knowledgeByB] = await Promise.all([
+  const [knowledgeByA, knowledgeByB, eventsA, eventsB] = await Promise.all([
     loadOffscreenKnowledge(participants[0]),
     loadOffscreenKnowledge(participants[1]),
+    loadRecentEventsForCharacter(participants[0]),
+    loadRecentEventsForCharacter(participants[1]),
   ]);
 
-  // 8) パイプライン実行
+  // 7.5) ニックネーム読み込み（D-3: プロンプト注入用）
+  let nicknameInfo: { aCallsB?: string | null; bCallsA?: string | null } | undefined;
+  try {
+    const nicknameRows = (await listAny("nicknames")) as unknown as NicknameRow[] | null;
+    if (Array.isArray(nicknameRows)) {
+      const [pa, pb] = participants;
+      const aToB = nicknameRows.find((n) => {
+        const from = n.from_id ?? n.fromId;
+        const to = n.to_id ?? n.toId;
+        return from === pa && to === pb && !n.deleted;
+      });
+      const bToA = nicknameRows.find((n) => {
+        const from = n.from_id ?? n.fromId;
+        const to = n.to_id ?? n.toId;
+        return from === pb && to === pa && !n.deleted;
+      });
+      if (aToB?.nickname || bToA?.nickname) {
+        nicknameInfo = {
+          aCallsB: aToB?.nickname ?? null,
+          bCallsA: bToA?.nickname ?? null,
+        };
+      }
+    }
+  } catch (error) {
+    console.warn("[runConversationFromApi] Failed to load nicknames.", error);
+  }
+
+  // 8) シチュエーション生成（GPT）
+  let situation: string | undefined;
+  try {
+    const charA = characters[participants[0]];
+    const charB = characters[participants[1]];
+    situation = await callGptForSituation({
+      characterA: { name: charA.name, occupation: charA.occupation, interests: charA.interests },
+      characterB: { name: charB.name, occupation: charB.occupation, interests: charB.interests },
+      relationType: relationType ?? "acquaintance",
+      timeOfDay: environment.timeOfDay,
+      date: gameDate,
+      recentSituations: recentTopics.slice(0, 5),
+    });
+  } catch (error) {
+    console.warn("[runConversationFromApi] Failed to generate situation.", error);
+  }
+
+  // 9) パイプライン実行
   const result = await runConversation({
     participants,
     characters,
     relation: {
       type: (relationType ?? "acquaintance") as RunConversationArgs["relation"]["type"],
+      familySubType: relationData?.familySubType ?? null,
       feelingAtoB: feelings.aToB,
       feelingBtoA: feelings.bToA,
     },
     environment,
+    gameDate,
     threadId,
     previousMemory,
     recentTopics,
@@ -789,26 +1141,90 @@ export async function runConversationFromApi(
     knowledgeByA,
     knowledgeByB,
     nameMap,
+    recentEventsByCharacter: {
+      [participants[0]]: eventsA,
+      [participants[1]]: eventsB,
+    },
+    currentDate: now.toISOString().slice(0, 10),
+    situation,
+    nicknames: nicknameInfo,
   });
 
-  // 9) 評価
+  // 10) 評価
   const evalInput: EvalInput = {
     threadId: result.threadId,
     participants,
     lines: result.output.lines,
     meta: {
       tags: result.output.meta.tags,
-      signals: result.output.meta.signals,
       qualityHints: result.output.meta.qualityHints,
+    },
+    // Phase 2: A-5 3層乗算用
+    characterProfiles: Object.fromEntries(
+      participants.map((id) => [id, {
+        traits: characters[id].traits,
+        mbti: characters[id].mbti,
+      }]),
+    ),
+    stances: {
+      [result.debug.structure.initiatorId]: result.debug.structure.initiatorStance,
+      [result.debug.structure.responderId]: result.debug.structure.responderStance,
+    },
+    topicSource: result.debug.selectedTopic.source,
+    topicInitiatorId: result.debug.structure.initiatorId,
+    // Phase 4: A-7 約束フラグ
+    promiseFlag: result.promiseFlag,
+    // Phase 2: A-3 2系列制
+    relationType: relationType ?? 'acquaintance',
+    currentImpression: {
+      aToB: feelings.aToB.label as import('@/lib/evaluation/weights').ImpressionBase,
+      bToA: feelings.bToA.label as import('@/lib/evaluation/weights').ImpressionBase,
+    },
+    // Phase 2: A-4 3件窓
+    recentDeltas: {
+      aToB: feelings.aToB.recentDeltas,
+      bToA: feelings.bToA.recentDeltas,
     },
   };
   const evalResult = evaluateConversation(evalInput);
 
-  // 10) 永続化
+  // 11) 永続化
   const { eventId } = await persistConversation({
     gptOut: result.output,
     evalResult,
   });
+
+  // 12) 関係遷移チェック（会話評価後・永続化後）
+  const postFavorA = clampScore(feelings.aToB.score + Math.round(evalResult.deltas.aToB.favor));
+  const postFavorB = clampScore(feelings.bToA.score + Math.round(evalResult.deltas.bToA.favor));
+  const postImpressionA = evalResult.deltas.aToB.impressionState.base as import("@repo/shared/types/conversation").ImpressionBase;
+  const postImpressionB = evalResult.deltas.bToA.impressionState.base as import("@repo/shared/types/conversation").ImpressionBase;
+
+  const transition = checkRelationTransition({
+    relationType: relationType ?? 'acquaintance',
+    favorAtoB: postFavorA,
+    favorBtoA: postFavorB,
+    impressionAtoB: postImpressionA,
+    impressionBtoA: postImpressionB,
+    empathyA: characters[participants[0]]?.traits?.empathy,
+    empathyB: characters[participants[1]]?.traits?.empathy,
+  });
+
+  if (transition.type !== 'none') {
+    try {
+      await persistTransitionResult({
+        participants,
+        currentRelation: relationType ?? 'acquaintance',
+        transition,
+        favorA: postFavorA,
+        favorB: postFavorB,
+        currentImpressionA: postImpressionA,
+        currentImpressionB: postImpressionB,
+      });
+    } catch (error) {
+      console.warn("[runConversationFromApi] Failed to persist relation transition.", error);
+    }
+  }
 
   return { eventId, threadId: result.threadId };
 }

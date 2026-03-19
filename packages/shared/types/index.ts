@@ -74,12 +74,16 @@ export const residentSchema = baseEntitySchema.extend({
   interests: z.array(z.string()).max(20).optional(),
 
   sleepProfile: sleepProfileSchema.optional(),
+
+  // D-3: 呼び方の傾向プリセット
+  nickname_tendency: z.enum(['nickname', 'bare', 'san', 'kun_chan', 'hierarchy']).default('san').optional(),
 });
 
 export const relationSchema = baseEntitySchema.extend({
   a_id: z.string().uuid(),
   b_id: z.string().uuid(),
   type: z.enum(['none', 'acquaintance', 'friend', 'best_friend', 'lover', 'family']),
+  family_sub_type: z.string().nullable().optional(), // F-3: 家族種別（兄/姉/父/母等）
 });
 
 export const feelingSchema = baseEntitySchema.extend({
@@ -87,12 +91,14 @@ export const feelingSchema = baseEntitySchema.extend({
   to_id: z.string().uuid(),
   label: z.enum(['none', 'dislike', 'maybe_dislike', 'curious', 'maybe_like', 'like', 'love', 'awkward']),
   score: z.number().int().default(0),
+  recent_deltas: z.array(z.number()).default([]).optional(),
 });
 
 export const nicknameSchema = baseEntitySchema.extend({
   from_id: z.string().uuid(),
   to_id: z.string().uuid(),
   nickname: z.string().min(1).max(50),
+  locked: z.boolean().default(false).optional(),
 });
 
 // --- Weather / World state --------------------------------------------------
@@ -192,6 +198,7 @@ export type FeelingLabel = z.infer<typeof feelingSchema>['label'];
 export type TempRelationData = {
   // relations テーブル
   relationType: RelationType;
+  familySubType?: string | null; // F-3: 家族種別（type='family'時のみ）
   // feelings テーブル
   feelingLabelTo: FeelingLabel;
   feelingScoreTo: number;

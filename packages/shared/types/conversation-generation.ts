@@ -71,13 +71,15 @@ export type ConversationTemperature = z.infer<typeof conversationTemperatureEnum
 // ---------------------------------------------------------------------------
 
 export const topicSourceEnum = z.enum([
-  "shared_interest",    // 共通の興味
-  "personal_interest",  // 片方の興味
-  "continuation",       // 前回の会話の続き
-  "snippet",            // 共有スニペット
-  "third_party",        // その場にいないキャラの話題
-  "feeling_shift",      // 感情変化
-  "environmental",      // 環境（天気・場所等）
+  "shared_interest",    // 共通の趣味
+  "personal_interest",  // 片方の趣味
+  "continuation",       // 前回の続き
+  "snippet",            // 共有体験
+  "third_party",        // 第三者の噂
+  "self_experience",    // 自分の最近の出来事
+  "heart_to_heart",     // 自己開示・質問
+  "small_talk",         // 世間話（旧 environmental）
+  "seasonal",           // 季節・時事
 ]);
 export type TopicSource = z.infer<typeof topicSourceEnum>;
 
@@ -142,7 +144,6 @@ export type ConversationMemory = z.infer<typeof conversationMemorySchema>;
 
 export const conversationMetaSchema = z.object({
   tags: z.array(z.string()).max(12),
-  signals: z.array(z.enum(["continue", "close", "park"])),
   qualityHints: z.object({
     turnBalance: z.enum(["balanced", "skewed"]),
     tone: z.string(),

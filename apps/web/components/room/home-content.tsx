@@ -124,6 +124,13 @@ export function HomeContent() {
   const [peekInteraction, setPeekInteraction] = useState<{ partnerName: string; kind: string } | null>(
     null
   );
+  const [peekResult, setPeekResult] = useState<{
+    residentId: string;
+    situation: string;
+    monologue: string;
+    fetchedAt: number;
+  } | null>(null);
+  const [peekLoading, setPeekLoading] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'trust'>('name');
   const [searchTerm, setSearchTerm] = useState('');
   const [conversationLineMap, setConversationLineMap] = useState<
@@ -576,20 +583,105 @@ export function HomeContent() {
     return { name, score: top.score ?? 0 };
   }, [feelings, activePeekResidentId, residentNameMap]);
 
+  // --- 覗く API 呼び出し（30分キャッシュ） ---
+  useEffect(() => {
+    if (!activePeekResidentId || panelMode !== 'right-peek') return;
+
+    // キャッシュチェック: 同じ住人で30分以内ならスキップ
+    const CACHE_TTL_MS = 30 * 60 * 1000;
+    if (
+      peekResult &&
+      peekResult.residentId === activePeekResidentId &&
+      Date.now() - peekResult.fetchedAt < CACHE_TTL_MS
+    ) {
+      return;
+    }
+
+    let alive = true;
+    setPeekLoading(true);
+
+    const timeOfDay = (() => {
+      const hour = now ? now.getHours() : new Date().getHours();
+      if (hour < 6) return '深夜';
+      if (hour < 10) return '朝';
+      if (hour < 14) return '昼';
+      if (hour < 18) return '夕方';
+      return '夜';
+    })();
+
+    fetch('/api/peeks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        residentId: activePeekResidentId,
+        timeOfDay,
+        weather: weatherState?.current?.kind,
+      }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!alive || !data) return;
+        setPeekResult({
+          residentId: activePeekResidentId,
+          situation: data.situation,
+          monologue: data.monologue,
+          fetchedAt: Date.now(),
+        });
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setPeekLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePeekResidentId, panelMode]);
+
+  const [consultAnswering, setConsultAnswering] = useState(false);
   const handleConsultDecide = useCallback(
     async (choiceId: string) => {
       if (!activeConsultId) return;
-      const result = await saveConsultAnswer(activeConsultId, choiceId);
-      const selected = result.selectedChoiceId ?? choiceId;
-      setConsultDetail((prev) => (prev ? { ...prev, selectedChoiceId: selected } : prev));
-      if (result.applied) {
-        await queryClient.invalidateQueries({ queryKey: ['residents'] });
-      }
+
+      // 1. ローカル保存
+      await saveConsultAnswer(activeConsultId, choiceId);
+      setConsultDetail((prev) => (prev ? { ...prev, selectedChoiceId: choiceId } : prev));
+
+      // 2. Answer API 呼び出し
+      setConsultAnswering(true);
       try {
-        await sync();
+        const res = await fetch(`/api/consults/${activeConsultId}/answer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ selectedChoiceId: choiceId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setConsultDetail((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  reply: data.reply,
+                  systemAfter: [
+                    ...(prev.systemAfter ?? []),
+                    ...(data.trustDelta > 0 ? ['信頼度：↑'] : data.trustDelta < 0 ? ['信頼度：↓'] : []),
+                  ],
+                }
+              : prev,
+          );
+          await queryClient.invalidateQueries({ queryKey: ['residents'] });
+        }
       } catch {
         // noop
+      } finally {
+        setConsultAnswering(false);
       }
+
+      try { await sync(); } catch { /* noop */ }
+
       const notif = consultNotifications.find(
         (n) =>
           (n as any).linkedConsultId === activeConsultId ||
@@ -942,6 +1034,7 @@ export function HomeContent() {
                       data={consultDetail}
                       onDecide={handleConsultDecide}
                       onClose={closePanel}
+                      answering={consultAnswering}
                     />
                     </div>
                   </motion.aside>
@@ -990,15 +1083,31 @@ export function HomeContent() {
                       ✕
                     </button>
                   </div>
-                  <div className="space-y-2 p-4 text-base text-slate-700">
-                    <div>信頼度：{peekResident?.trustToPlayer ?? '—'}</div>
-                    <div>仲良し：{peekTopFavor ? peekTopFavor.name : '—'}</div>
-                    <div>
-                      最近：
-                      {peekInteraction ? `${peekInteraction.partnerName}と${peekInteraction.kind}した` : '—'}
+                  <div className="space-y-3 p-4 text-base text-slate-700">
+                    <div className="flex gap-4 text-sm text-slate-500">
+                      <span>信頼度：{peekResident?.trustToPlayer ?? '—'}</span>
+                      <span>仲良し：{peekTopFavor ? peekTopFavor.name : '—'}</span>
                     </div>
-                    <div>今は（準備中）ようです。</div>
-                    <div>「（準備中）」</div>
+                    {peekInteraction && (
+                      <div className="text-sm text-slate-500">
+                        最近：{peekInteraction.partnerName}と{peekInteraction.kind}した
+                      </div>
+                    )}
+                    {peekLoading ? (
+                      <div className="flex items-center gap-2 py-4 text-sm text-slate-400">
+                        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
+                        様子を見ています…
+                      </div>
+                    ) : peekResult && peekResult.residentId === activePeekResidentId ? (
+                      <>
+                        <div className="leading-relaxed">{peekResult.situation}</div>
+                        <div className="mt-2 rounded-lg border border-white/50 bg-white/30 px-3 py-2 text-sm italic">
+                          「{peekResult.monologue}」
+                        </div>
+                      </>
+                    ) : (
+                      <div className="py-4 text-sm text-slate-400">読み込み中…</div>
+                    )}
                   </div>
                   </div>
                 </motion.aside>

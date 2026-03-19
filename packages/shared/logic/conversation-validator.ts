@@ -78,11 +78,11 @@ function validateTurnCount(
   output: ConversationOutput,
 ): ValidationViolation | null {
   const count = output.lines.length;
-  if (count < 6 || count > 8) {
+  if (count < 12 || count > 16) {
     return {
       rule: "turn_count",
-      message: `発話数は6〜8であるべきですが、${count}発話です`,
-      severity: count < 4 || count > 10 ? "error" : "warning",
+      message: `発話数は12〜16であるべきですが、${count}発話です`,
+      severity: count < 8 || count > 20 ? "error" : "warning",
     };
   }
   return null;

@@ -23,8 +23,7 @@ type Table =
   | "events"
   | "topic_threads"
   | "notifications"
-  | "experience_events"
-  | "resident_experiences"
+  | "consult_answers"
   | "feelings"
   | "residents"
   | "presets"
@@ -32,15 +31,15 @@ type Table =
   | "world_states"
   | "shared_snippets"
   | "recent_events"
-  | "offscreen_knowledge";
+  | "offscreen_knowledge"
+  | "nicknames";
 
 type OwnerColumnConfig =
   | { type: "fixed"; column: string }
   | { type: "candidates"; columns: string[] };
 
 const TABLE_OWNER_COLUMNS: Partial<Record<Table, OwnerColumnConfig>> = {
-  experience_events: { type: "fixed", column: "owner_id" },
-  resident_experiences: { type: "fixed", column: "owner_id" },
+  consult_answers: { type: "fixed", column: "owner_id" },
   events: { type: "fixed", column: "owner_id" },
   feelings: { type: "fixed", column: "owner_id" },
   residents: { type: "fixed", column: "owner_id" },

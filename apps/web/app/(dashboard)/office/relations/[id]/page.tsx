@@ -228,6 +228,11 @@ export default function RelationDetailPage({ params }: { params: { id: string } 
                     <p className="text-base font-medium text-muted-foreground">関係</p>
                     <p className="text-lg font-semibold">
                         {relationLabel}
+                        {relationType === 'family' && (relation as any).family_sub_type && (
+                            <span className="text-base font-normal text-muted-foreground ml-2">
+                                ({(relation as any).family_sub_type})
+                            </span>
+                        )}
                     </p>
                 </CardContent>
             </Card>

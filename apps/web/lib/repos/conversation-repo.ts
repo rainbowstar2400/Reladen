@@ -30,7 +30,6 @@ export type ConversationPayloadStrict = {
   lines: { speaker: string; text: string }[];
   meta: {
     tags: string[];
-    signals?: ('continue' | 'close' | 'park')[];
     qualityHints?: { [k: string]: unknown };
     debug?: string[];
     memory?: {

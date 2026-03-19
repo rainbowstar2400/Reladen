@@ -7,6 +7,7 @@ import { SyncPayload, syncPayloadSchema } from '@/types';
 import { normalizePulledRow } from '@/lib/sync/pull-normalizer';
 export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
 import { makeOutboxKey, listPendingByTable, markSent /* , markFailed */ } from '@/lib/sync/outbox';
+import { useSettings } from '@/lib/use-settings';
 
 const TABLES: SyncPayload['table'][] = [
   'presets',
@@ -67,6 +68,11 @@ function useSyncInternal() {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 設定からsyncEnabledを取得（refで保持してcallback内から参照）
+  const { s: settings } = useSettings();
+  const syncEnabledRef = useRef(settings.syncEnabled);
+  useEffect(() => { syncEnabledRef.current = settings.syncEnabled; }, [settings.syncEnabled]);
+
   // リトライ回数（指数バックオフ用）
   const retryCountRef = useRef(0);
 
@@ -86,6 +92,12 @@ function useSyncInternal() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const syncAll = useCallback(async (): Promise<SyncResult> => {
+    // 同期がOFFならスキップ
+    if (!syncEnabledRef.current) {
+      setPhase('online');
+      return { ok: true };
+    }
+
     // すでに実行中ならスキップ
     if (syncingRef.current) return { ok: true };
 

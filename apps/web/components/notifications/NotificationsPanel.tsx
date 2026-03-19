@@ -77,12 +77,11 @@ export default function NotificationsPanel() {
         (n as any)?.payload?.kind ??
         'conversation';
 
-      // --- 相談: /?consult=<consultId> へ ---
+      // --- 相談: /?consult=<eventId> へ ---
       if (kind === 'consult') {
         const consultId =
-          (n as any).linkedConsultId ??
-          (n as any)?.payload?.consultId ??
-          (n as any)?.consultId;
+          n.linkedEventId ??
+          (n as any)?.payload?.eventId;
 
         if (consultId) {
           const url = new URL(window.location.href);

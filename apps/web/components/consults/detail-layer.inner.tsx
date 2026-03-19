@@ -48,8 +48,9 @@ async function fetchConsultDetailForPanel(id: string): Promise<ConsultDetail> {
     },
     choices,
     replyByChoice: p?.replyByChoice ?? p?.replies ?? {},
+    reply: p?.reply ?? null,
     systemAfter: p?.systemAfter ?? [],
-    selectedChoiceId: serverAnswer?.selectedChoiceId ?? null,
+    selectedChoiceId: serverAnswer?.selectedChoiceId ?? p?.selectedChoiceId ?? null,
   };
 }
 
@@ -60,6 +61,7 @@ export default function ConsultDetailLayerInner() {
   const consultId = sp.get('consult')
   const [detail, setDetail] = useState<ConsultDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [answering, setAnswering] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -97,16 +99,55 @@ export default function ConsultDetailLayerInner() {
     <ConsultDetailPanel
       open={!!consultId}
       data={detail}
+      answering={answering}
       onDecide={async (choiceId) => {
         if (!consultId) return
-        const result = await saveConsultAnswer(consultId, choiceId)
+
+        // 1. ローカルに回答を保存（consult_answers テーブル）
+        await saveConsultAnswer(consultId, choiceId)
         setDetail((prev) =>
-          prev ? { ...prev, selectedChoiceId: result.selectedChoiceId ?? choiceId ?? null } : prev
-        ) // UIへ即反映
-        if (result.applied) {
-          await queryClient.invalidateQueries({ queryKey: ['residents'] })
+          prev ? { ...prev, selectedChoiceId: choiceId } : prev
+        )
+
+        // 2. Answer API を呼び出し — GPT 返答生成 + trustDelta 計算
+        setAnswering(true)
+        try {
+          const res = await fetch(`/api/consults/${consultId}/answer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ selectedChoiceId: choiceId }),
+          })
+          if (res.ok) {
+            const data = await res.json()
+            setDetail((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    reply: data.reply,
+                    systemAfter: [
+                      ...(prev.systemAfter ?? []),
+                      ...(data.trustDelta > 0
+                        ? ['信頼度：↑']
+                        : data.trustDelta < 0
+                          ? ['信頼度：↓']
+                          : []),
+                    ],
+                  }
+                : prev,
+            )
+            await queryClient.invalidateQueries({ queryKey: ['residents'] })
+          }
+        } catch {
+          // API 失敗時はローカル保存は済んでいるので致命的ではない
+        } finally {
+          setAnswering(false)
         }
-        // 必要ならトーストやSentry送信などをここに
+
+        // 同期リクエスト
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('reladen:request-sync'))
+        }
       }}
     />
   )

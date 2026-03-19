@@ -13,6 +13,7 @@ import type { Feeling } from "@/types";
 async function updateRelationsAndFeelings(params: {
   participants: [string, string];
   deltas: EvaluationResult["deltas"];
+  recentDeltas: EvaluationResult["recentDeltas"];
 }) {
   const [a, b] = params.participants;
   const now = new Date().toISOString();
@@ -30,6 +31,7 @@ async function updateRelationsAndFeelings(params: {
       curious: "curious",
       maybe_like: "maybe_like",
       like: "like",
+      love: "love",
     };
     return map[String(impression)] ?? fallback ?? "none";
   };
@@ -81,8 +83,9 @@ async function updateRelationsAndFeelings(params: {
     from_id: a,
     to_id: b,
     label: nextLabelAB,
-    // 数値を積み上げる簡易実装。プロジェクト本番ロジックが別にあれば差し替えてください。
     score: nextScoreAB,
+    recent_deltas: params.recentDeltas.aToB,
+    last_contacted_at: now,
     updated_at: now,
     deleted: false,
   });
@@ -94,6 +97,8 @@ async function updateRelationsAndFeelings(params: {
     to_id: a,
     label: nextLabelBA,
     score: nextScoreBA,
+    recent_deltas: params.recentDeltas.bToA,
+    last_contacted_at: now,
     updated_at: now,
     deleted: false,
   });
@@ -109,24 +114,11 @@ async function updateThreadAfterEvent(params: {
   participants: [string, string];
   lastEventId: string;
   topic?: string;
-  signal?: "continue" | "close" | "park";
   status?: TopicThread["status"];
 }) {
   const now = new Date().toISOString();
 
-  let finalStatus: TopicThread["status"] = "ongoing";
-
-  if (params.status) {
-    // 1. status (評価側) があれば最優先
-    finalStatus = params.status;
-  } else if (params.signal === "close") {
-    // 2. signal (GPT側)
-    finalStatus = "done";
-  } else if (params.signal === "park") {
-    // 2. signal (GPT側)
-    finalStatus = "paused";
-  }
-  // (signal が 'continue' または undefined の場合は 'ongoing' のまま)
+  const finalStatus: TopicThread["status"] = params.status ?? "done";
 
   await putAny("topic_threads", {
     id: params.threadId,
@@ -207,22 +199,21 @@ export async function persistConversation(params: {
     participants: gptOut.participants,
     lastEventId: eventId,
     topic: gptOut.topic,
-    // gptOut.meta が null の場合を考慮
-    signal: gptOut.meta?.signals?.[0],
     status: evalResult.threadNextState,
   });
 
-  // 3) relations / feelings を更新（簡易版）
+  // 3) relations / feelings を更新
   await updateRelationsAndFeelings({
     participants: gptOut.participants,
     deltas: evalResult.deltas,
+    recentDeltas: evalResult.recentDeltas,
   });
 
   // 4) 通知登録
   // gptOut.lines が null の場合を考慮
   const first = Array.isArray(gptOut.lines) ? gptOut.lines[0] : undefined;
   const snippet = first
-    ? `${first.speaker.slice(0, 4)}: ${first.text.slice(0, 28)}…`
+    ? `${first.speaker.slice(0, 4)}: ${first.text.slice(0, 60)}…`
     : undefined;
 
   await createNotification({

@@ -46,10 +46,14 @@ export type TopicSelectionInput = {
   knowledgeByB: OffscreenKnowledge[];
   /** 最近の会話で使われた話題（重複回避用） */
   recentTopics: string[];
-  /** 天気・場所（environmental用） */
+  /** 天気・場所（small_talk用） */
   environment: { place: string; timeOfDay: string; weather?: string };
   /** キャラクターID → 名前のマップ（third_party 名前解決用） */
   nameMap?: Map<string, string>;
+  /** 主導者の最近の出来事（self_experience用） */
+  recentEventsA?: RecentEvent[];
+  /** 現在の日付（seasonal用、例: "2026-03-18"） */
+  currentDate?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -178,30 +182,37 @@ function generateThirdPartyCandidates(
   return candidates;
 }
 
-function generateFeelingShiftCandidates(
+function generateSelfExperienceCandidates(
   input: TopicSelectionInput,
 ): TopicCandidate[] {
-  const candidates: TopicCandidate[] = [];
-  // 好感度が高めの場合は距離感の変化が話題になりうる
-  const avgScore = (input.relation.feelingAtoB.score + input.relation.feelingBtoA.score) / 2;
-  if (avgScore >= 60 || avgScore <= 20) {
-    candidates.push({
-      source: "feeling_shift" as TopicSource,
-      label: "最近の距離感の変化",
-      detail: avgScore >= 60 ? "親しみが増している" : "ぎこちなさがある",
-      score: 0,
-    });
-  }
-  return candidates;
+  const events = input.recentEventsA ?? [];
+  return events.map((ev) => ({
+    source: "self_experience" as TopicSource,
+    label: ev.fact ?? "最近の出来事",
+    detail: "自分の最近の体験",
+    score: 0,
+  }));
 }
 
-function generateEnvironmentalCandidates(
+function generateHeartToHeartCandidates(
+  input: TopicSelectionInput,
+): TopicCandidate[] {
+  // カテゴリのみ選定。具体的な内容はGPTに委ねる
+  return [{
+    source: "heart_to_heart" as TopicSource,
+    label: "内面の話・お互いを知る",
+    detail: "自己開示や相手への質問",
+    score: 0,
+  }];
+}
+
+function generateSmallTalkCandidates(
   input: TopicSelectionInput,
 ): TopicCandidate[] {
   const { place, timeOfDay, weather } = input.environment;
   const candidates: TopicCandidate[] = [
     {
-      source: "environmental" as TopicSource,
+      source: "small_talk" as TopicSource,
       label: `${place}での出来事`,
       detail: `${timeOfDay}の${place}`,
       score: 0,
@@ -209,13 +220,35 @@ function generateEnvironmentalCandidates(
   ];
   if (weather) {
     candidates.push({
-      source: "environmental" as TopicSource,
+      source: "small_talk" as TopicSource,
       label: `${weather}の話`,
       detail: `今日の天気: ${weather}`,
       score: 0,
     });
   }
   return candidates;
+}
+
+/** 現在日付から季節を判定 */
+function getSeason(dateStr?: string): string {
+  if (!dateStr) return "季節の話題";
+  const month = new Date(dateStr).getMonth() + 1; // 1-12
+  if (month >= 3 && month <= 5) return "春";
+  if (month >= 6 && month <= 8) return "夏";
+  if (month >= 9 && month <= 11) return "秋";
+  return "冬";
+}
+
+function generateSeasonalCandidates(
+  input: TopicSelectionInput,
+): TopicCandidate[] {
+  const season = getSeason(input.currentDate);
+  return [{
+    source: "seasonal" as TopicSource,
+    label: `${season}の話題`,
+    detail: `季節・時事ネタ（${season}）`,
+    score: 0,
+  }];
 }
 
 // ---------------------------------------------------------------------------
@@ -261,14 +294,24 @@ function scoreCandidate(
       if (intimacy <= 1) score -= 3;
       break;
 
-    case "feeling_shift":
-      // 関係性の変化は親密度高い場合のみ
-      score = 1 + intimacy * 0.6 + expressiveness * 0.3;
-      if (intimacy <= 2) score -= 2;
+    case "self_experience":
+      // 自分の最近の出来事。中程度の基礎スコア
+      score = 4 + intimacy * 0.4;
       break;
 
-    case "environmental":
-      // フォールバック用。基礎点低め
+    case "heart_to_heart":
+      // 自己開示・質問。高親密度で強い
+      score = 2 + intimacy * 0.8;
+      if (intimacy <= 1) score -= 3;
+      break;
+
+    case "small_talk":
+      // 世間話。低親密度でもOK
+      score = 3;
+      break;
+
+    case "seasonal":
+      // 季節・時事。低親密度でもOK
       score = 2;
       break;
   }
@@ -294,32 +337,44 @@ export function selectTopic(
   initiator: CharacterContext,
   responder: CharacterContext,
 ): { selected: SelectedTopic; candidates: TopicCandidate[] } {
-  // 全候補を生成
+  // 全候補を生成（9種ソース）
   const rawCandidates: TopicCandidate[] = [
     ...generateSharedInterestCandidates(input),
     ...generatePersonalInterestCandidates(input, initiator),
     ...generateContinuationCandidates(input),
     ...generateSnippetCandidates(input),
     ...generateThirdPartyCandidates(input, initiator, responder),
-    ...generateFeelingShiftCandidates(input),
-    ...generateEnvironmentalCandidates(input),
+    ...generateSelfExperienceCandidates(input),
+    ...generateHeartToHeartCandidates(input),
+    ...generateSmallTalkCandidates(input),
+    ...generateSeasonalCandidates(input),
   ];
 
   // スコアリング
   const scored = rawCandidates.map((c) => scoreCandidate(c, input, initiator));
 
-  // スコア降順ソート
+  // スコア降順ソート（デバッグ・ログ用）
   scored.sort((a, b) => b.score - a.score);
 
-  // 最高スコアの候補群からランダム選択（同スコア候補が偏らないように）
-  const topScore = scored[0]?.score ?? 0;
-  const topCandidates = scored.filter((c) => c.score === topScore);
-  const best = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+  // 重み付きランダム選択（スコア>0の候補のみ）
+  const eligible = scored.filter((c) => c.score > 0);
 
-  if (!best || best.score <= 0) {
-    // フォールバック: environmental
+  let best: TopicCandidate | undefined;
+  if (eligible.length > 0) {
+    const totalWeight = eligible.reduce((sum, c) => sum + c.score, 0);
+    let r = Math.random() * totalWeight;
+    for (const c of eligible) {
+      r -= c.score;
+      if (r <= 0) { best = c; break; }
+    }
+    // 浮動小数点誤差対策
+    if (!best) best = eligible[eligible.length - 1];
+  }
+
+  if (!best) {
+    // フォールバック: small_talk
     const fallback: SelectedTopic = {
-      source: "environmental",
+      source: "small_talk",
       label: `${input.environment.place}での出来事`,
       detail: `${input.environment.timeOfDay}の${input.environment.place}`,
     };

@@ -34,20 +34,37 @@ export type CharacterProfile = {
   speechProfile?: SpeechProfile | null;
 };
 
+/** ペア間のニックネーム情報 */
+export type NicknameInfo = {
+  /** A が B を呼ぶ呼び名 */
+  aCallsB?: string | null;
+  /** B が A を呼ぶ呼び名 */
+  bCallsA?: string | null;
+};
+
 /** プロンプト構築の全入力 */
 export type PromptInput = {
   characters: [CharacterProfile, CharacterProfile];
   relation: {
     type: string;
+    familySubType?: string | null;
     feelingAtoB: { label: string; score: number };
     feelingBtoA: { label: string; score: number };
   };
   structure: ConversationStructure;
   topic: SelectedTopic;
   environment: { place: string; timeOfDay: string; weather?: string };
+  /** ゲーム内日付（例: "3月17日"） */
+  gameDate?: string;
   recentSnippets: SharedSnippet[];
   previousMemory: ConversationMemory | null;
   threadId: string;
+  /** シチュエーション描写（外部で生成済み） */
+  situation?: string;
+  /** 会話タイプ（通常/約束生成/約束履行） */
+  conversationType?: 'normal' | 'promise_generation' | 'promise_fulfillment';
+  /** ニックネーム情報（D-3） */
+  nicknames?: NicknameInfo;
 };
 
 // ---------------------------------------------------------------------------
@@ -68,7 +85,6 @@ export const systemPromptConversation = `
   ],
   "meta": {
     "tags": string[],
-    "signals": ["continue"|"close"|"park"],
     "qualityHints": {
       "turnBalance": "balanced"|"skewed",
       "tone": string
@@ -111,22 +127,6 @@ B: 一人称「私」、語尾「〜だよね」「〜かな」
 - 具体物（アボカド、98円、3つ）で会話が展開している
 - 語尾が自然に使われ、一人称の表記揺れがない
 `.trim();
-
-// ---------------------------------------------------------------------------
-// シチュエーション候補（冒頭のバリエーション用）
-// ---------------------------------------------------------------------------
-
-const ENCOUNTER_SITUATIONS = [
-  "偶然鉢合わせ",
-  "同じ場所に居合わせた",
-  "向こうから歩いてきた",
-  "隣にいることに気づいた",
-  "近くを通りかかった",
-] as const;
-
-function pickRandom<T>(arr: readonly T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 // ---------------------------------------------------------------------------
 // ヘルパー
@@ -186,8 +186,10 @@ function topicSourceLabel(source: string): string {
     case "continuation": return "前回の続き";
     case "snippet": return "共有の出来事";
     case "third_party": return "第三者の話題";
-    case "feeling_shift": return "関係性の変化";
-    case "environmental": return "環境";
+    case "self_experience": return "自分の最近の出来事";
+    case "heart_to_heart": return "お互いを知る";
+    case "small_talk": return "世間話";
+    case "seasonal": return "季節の話題";
     default: return source;
   }
 }
@@ -316,7 +318,7 @@ export function buildUserPrompt(input: PromptInput): string {
   // ====================================================================
   // 【会話設定】
   // ====================================================================
-  const encounter = pickRandom(ENCOUNTER_SITUATIONS);
+  const encounter = input.situation ?? "偶然鉢合わせ";
   const settingParts = [`場所: ${environment.place}（${environment.timeOfDay}`];
   if (environment.weather) settingParts[0] += `、${environment.weather}`;
   settingParts[0] += `、${encounter}）`;
@@ -324,13 +326,30 @@ export function buildUserPrompt(input: PromptInput): string {
   // 関係性もここに統合
   const aName = charA.name;
   const bName = charB.name;
-  const relationBlock = [
-    `関係性: ${relationLabel(relation.type)}`,
+  const relationParts = [
+    `関係性: ${relationLabel(relation.type)}${relation.type === 'family' && relation.familySubType ? `（${aName}は${bName}の${relation.familySubType}）` : ''}`,
     `${aName}→${bName}: ${feelingLabel(relation.feelingAtoB.label)} / スコア=${relation.feelingAtoB.score}`,
     `${bName}→${aName}: ${feelingLabel(relation.feelingBtoA.label)} / スコア=${relation.feelingBtoA.score}`,
-  ].join(" / ");
+  ];
+  const relationBlock = relationParts.join(" / ");
 
-  sections.push(`【会話設定】\n${settingParts[0]}\n${relationBlock}`);
+  const settingLines = [settingParts[0]];
+  if (input.gameDate) settingLines.push(`日付: ${input.gameDate}`);
+  settingLines.push(relationBlock);
+
+  // D-3: ニックネーム注入
+  if (input.nicknames?.aCallsB || input.nicknames?.bCallsA) {
+    const nickLines: string[] = [];
+    if (input.nicknames.aCallsB) {
+      nickLines.push(`${aName}は${bName}を「${input.nicknames.aCallsB}」と呼ぶ`);
+    }
+    if (input.nicknames.bCallsA) {
+      nickLines.push(`${bName}は${aName}を「${input.nicknames.bCallsA}」と呼ぶ`);
+    }
+    settingLines.push(`呼び名: ${nickLines.join(" / ")}`);
+  }
+
+  sections.push(`【会話設定】\n${settingLines.join("\n")}`);
 
   // ====================================================================
   // 【直近の共有スニペット】（あれば）
@@ -368,7 +387,7 @@ export function buildUserPrompt(input: PromptInput): string {
   // 【生成ルール（厳守）】— プロンプト末尾で再強調（recency bias 活用）
   // ====================================================================
   const rules = [
-    "- 6〜8ターンの会話を生成",
+    "- 12〜16ターンの会話を生成",
     "- 1発話は短文2〜3文程度まで可。ただし長くなりすぎないこと",
     "- 意味的に区切れる箇所では句点（。）、感嘆符（！）、疑問符（？）で文を区切ること。読点（、）だけで複数の文をつなげないこと",
     "- 上記の構造（主導権、スタンス、温度感、ターンバランス）に従うこと",
@@ -377,6 +396,22 @@ export function buildUserPrompt(input: PromptInput): string {
     "- 汎用テンプレ台詞の連発は避ける",
     "- 会話の冒頭を毎回同じパターンにしないこと。「あ、〇〇じゃん」のような驚き型の挨拶だけでなく、既に隣にいる状態からの「そういえばさ」、相手の行動へのツッコミ「何読んでんの」、作業中の声かけ等、多様な始め方をすること",
   ];
+
+  // ニックネームルール
+  if (input.nicknames?.aCallsB || input.nicknames?.bCallsA) {
+    rules.push("- 【呼び名】会話設定で指定された呼び名を使うこと。相手の名前をそのまま使わないこと");
+  }
+
+  // 会話タイプに応じた約束ルール
+  const convType = input.conversationType ?? 'normal';
+  if (convType === 'normal') {
+    rules.push("- 具体的な約束・予定は作らない。その場で完結する会話にすること");
+  } else if (convType === 'promise_generation') {
+    rules.push("- 会話の中で自然な約束・予定を1つ含めること（例: 「今度一緒に〜しよう」）");
+    rules.push("- meta.memory.unresolvedThreads に約束の内容を記述すること");
+  } else if (convType === 'promise_fulfillment') {
+    rules.push("- 前回の約束を遂行する/した内容にし、この会話で完結させること");
+  }
 
   // 話題ソースに応じた追加ルール
   if (topic.source === "continuation" && input.previousMemory) {

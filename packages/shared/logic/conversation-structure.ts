@@ -91,6 +91,10 @@ export function determineStance(
   const stubbornness = character.traits.stubbornness ?? 3;
   const expressiveness = character.traits.expressiveness ?? 3;
 
+  // --- 話題関心度によるfavor減衰 (A-9) ---
+  // 話題に関心がない場合、好感度のスタンスへの寄与を×0.5に減衰
+  const effectiveFavorScore = topicInterest ? favorScore : favorScore * 0.5;
+
   // 基本スコアマップ: 各スタンスへの傾きを算出
   const scores: Record<EmotionalStance, number> = {
     enthusiastic: 0,
@@ -119,12 +123,12 @@ export function determineStance(
   }
 
   // empathy高 + 好感度高 → agreeable
-  if (empathy >= 4 && favorScore >= 50) scores.agreeable += 2;
+  if (empathy >= 4 && effectiveFavorScore >= 50) scores.agreeable += 2;
   // empathy低 → confrontational方向の閾値が下がる
   if (empathy <= 2) scores.confrontational += 1;
 
   // stubbornness高 + 好感度低 → confrontational
-  if (stubbornness >= 4 && favorScore < 40) scores.confrontational += 2;
+  if (stubbornness >= 4 && effectiveFavorScore < 40) scores.confrontational += 2;
   // stubbornness低 → agreeable
   if (stubbornness <= 2) scores.agreeable += 1;
 
@@ -137,10 +141,10 @@ export function determineStance(
   }
 
   // --- 関係性の影響 ---
-  if (favorScore >= 60) {
+  if (effectiveFavorScore >= 60) {
     scores.enthusiastic += 1;
     scores.agreeable += 1;
-  } else if (favorScore <= 25) {
+  } else if (effectiveFavorScore <= 25) {
     scores.reluctant += 1;
     scores.confrontational += 1;
   }
@@ -159,6 +163,18 @@ export function determineStance(
       bestScore = score;
       best = stance as EmotionalStance;
     }
+  }
+
+  // --- 日常ノイズ: 25%の確率でスタンスを中立(agreeable)方向に1段階シフト ---
+  if (Math.random() < 0.25 && best !== "agreeable") {
+    const towardNeutral: Record<EmotionalStance, EmotionalStance> = {
+      enthusiastic: "agreeable",
+      confrontational: "reluctant",
+      reluctant: "indifferent",
+      indifferent: "agreeable",
+      agreeable: "agreeable",
+    };
+    best = towardNeutral[best];
   }
 
   return best;
@@ -323,11 +339,17 @@ function hasTopicInterest(
     case "third_party":
       // 第三者話題 → 知識を持っている側は興味あり
       return true;
-    case "feeling_shift":
-      // 感情変化 → 両者に関わるので興味あり
+    case "self_experience":
+      // 自分の最近の出来事 → 話す側は関心あり
       return true;
-    case "environmental":
-      // 環境話題 → 基本的に興味薄（フォールバック）
+    case "heart_to_heart":
+      // 自己開示・質問 → 両者とも関心あり
+      return true;
+    case "small_talk":
+      // 世間話 → 基本的に興味薄（フォールバック）
+      return false;
+    case "seasonal":
+      // 季節・時事 → 基本的に興味薄
       return false;
   }
 }

@@ -17,15 +17,17 @@ export function useNicknames() {
   return useQuery({ queryKey: KEY, queryFn: fetchNicknames });
 }
 
-// （参考）今後ニックネームを登録・更新するための Upsert フック
+// ニックネーム登録・更新フック（手動設定時は自動的に locked=true）
 export function useUpsertNickname() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: Partial<Nickname>) => {
+    mutationFn: async (input: Partial<Nickname> & { locked?: boolean }) => {
       const id = input.id ?? newId();
       const record = await putLocal('nicknames', {
         ...input,
         id,
+        // D-3: 手動設定時は自動的に locked=true（明示指定がなければ）
+        locked: input.locked ?? true,
         updated_at: new Date().toISOString(),
         deleted: false,
       });

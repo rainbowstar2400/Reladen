@@ -7,7 +7,7 @@
     "否定": -0.8,
     "皮肉": -0.5,
     "非難": -1.2,
-    "情報共有": 0.1,
+    "雑談・共通": 0.1,
     "軽い冗談": 0.2
   },
   "qualityHints": {
@@ -16,11 +16,5 @@
     "tone.gentle": 0.2,
     "tone.harsh": -0.4
   },
-  "signals": {
-    "continue": 0.1,
-    "close": 0.2,
-    "park": 0
-  },
-  "favorClip": { "min": -2, "max": 2 },
-  "impressionOrder": ["dislike", "dislike?", "none", "curious", "like?", "like"]
+  "favorClip": { "min": -2, "max": 2 }
 }
