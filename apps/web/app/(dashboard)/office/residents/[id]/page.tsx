@@ -133,27 +133,61 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   const recentChanges = useMemo(() => {
     if (!eventsPages?.pages) return [];
     const allEvents = eventsPages.pages.flatMap((p) => p.items);
-    const relevant = allEvents
-      .filter((e) => {
-        if (e.kind !== 'conversation' || !e.payload) return false;
-        const participants = (e.payload as any)?.participants;
-        if (!Array.isArray(participants)) return false;
-        return participants.includes(residentId);
-      })
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-      .slice(0, 15);
 
-    return relevant
-      .map((e) => {
-        const systemLine = (e.payload as any)?.systemLine as string | undefined;
-        if (!systemLine) return null;
-        const messages = parseSystemLine(systemLine, nameMapObj);
-        if (messages.length === 0) return null;
-        const d = new Date(e.updated_at);
-        const dateStr = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        return { id: e.id, date: dateStr, messages, eventId: e.id };
-      })
-      .filter(Boolean) as Array<{ id: string; date: string; messages: string[]; eventId: string }>;
+    type ChangeEntry = { id: string; date: string; messages: string[]; eventId: string };
+    const entries: ChangeEntry[] = [];
+
+    const formatDate = (iso: string) => {
+      const d = new Date(iso);
+      return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    };
+
+    for (const e of allEvents) {
+      if (!e.payload) continue;
+      const p = e.payload as any;
+      const participants: unknown[] = Array.isArray(p.participants) ? p.participants : [];
+      if (!participants.includes(residentId)) continue;
+
+      // 1. 会話イベント → systemLine から好感度/印象の変化
+      if (e.kind === 'conversation' && p.systemLine) {
+        const messages = parseSystemLine(p.systemLine, nameMapObj);
+        if (messages.length > 0) {
+          entries.push({ id: e.id, date: formatDate(e.updated_at), messages, eventId: e.id });
+        }
+      }
+
+      // 2. 関係遷移イベント（system / relation_transition）
+      if (e.kind === 'system' && p.type === 'relation_transition') {
+        const fromLabel = RELATION_LABELS[p.from as keyof typeof RELATION_LABELS] ?? p.from;
+        const toLabel = RELATION_LABELS[p.to as keyof typeof RELATION_LABELS] ?? p.to;
+        const names = participants.map((id) => nameMapObj[id as string] ?? id).join(' と ');
+        entries.push({
+          id: e.id,
+          date: formatDate(e.updated_at),
+          messages: [`${names} の関係が「${fromLabel}」→「${toLabel}」に変化しました。`],
+          eventId: e.id,
+        });
+      }
+
+      // 3. 相談イベント → 信頼度変化（回答済みのもの）
+      if (e.kind === 'consult' && p.trustDelta != null && p.answeredAt) {
+        const charName = nameMapObj[p.residentId as string] ?? '住人';
+        const delta = p.trustDelta as number;
+        if (delta !== 0) {
+          const direction = delta > 0 ? '上昇' : '下降';
+          entries.push({
+            id: e.id,
+            date: formatDate(p.answeredAt),
+            messages: [`${charName} からの信頼度が${direction}しました。（${delta > 0 ? '+' : ''}${delta}）`],
+            eventId: e.id,
+          });
+        }
+      }
+    }
+
+    return entries
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 20);
   }, [eventsPages, residentId, nameMapObj]);
 
   const sleepProfile = (resident.sleepProfile ?? {}) as Partial<SleepProfile>;
