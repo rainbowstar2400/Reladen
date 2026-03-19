@@ -178,7 +178,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
           entries.push({
             id: e.id,
             date: formatDate(p.answeredAt),
-            messages: [`${charName} からの信頼度が${direction}しました。（${delta > 0 ? '+' : ''}${delta}）`],
+            messages: [`${charName} からの信頼度が${direction}しました。`],
             eventId: e.id,
           });
         }
