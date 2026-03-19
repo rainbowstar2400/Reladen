@@ -17,6 +17,10 @@ export type TransitionCheckInput = {
   /** 告白成功率用 */
   empathyA?: number;
   empathyB?: number;
+  /** クールダウン中のペア+トリガー種別（"pair:trigger"形式のSet） */
+  activeCooldowns?: Set<string>;
+  /** このペアのソート済みID結合（"id1:id2"形式） */
+  pairKey?: string;
 };
 
 export type TransitionResult =
@@ -99,6 +103,15 @@ function checkBreakupTrigger(input: TransitionCheckInput): TransitionResult {
 }
 
 // ---------------------------------------------------------------------------
+// クールダウン判定
+// ---------------------------------------------------------------------------
+
+function isCoolingDown(input: TransitionCheckInput, trigger: string): boolean {
+  if (!input.activeCooldowns || !input.pairKey) return false;
+  return input.activeCooldowns.has(`${input.pairKey}:${trigger}`);
+}
+
+// ---------------------------------------------------------------------------
 // メイン判定関数
 // ---------------------------------------------------------------------------
 
@@ -119,17 +132,21 @@ export function checkRelationTransition(input: TransitionCheckInput): Transition
       if (checkFriendToBestFriend(input)) {
         return { type: 'observation', newRelation: 'best_friend', event: 'became_best_friend' };
       }
-      // lover トリガーチェック
-      const confession = checkConfessionTrigger(input);
-      if (confession.type !== 'none') return confession;
+      // lover トリガーチェック（クールダウン考慮）
+      if (!isCoolingDown(input, 'confession')) {
+        const confession = checkConfessionTrigger(input);
+        if (confession.type !== 'none') return confession;
+      }
       break;
     }
 
     case 'best_friend':
     case 'lover': {
-      // 降格トリガーチェック
-      const breakup = checkBreakupTrigger(input);
-      if (breakup.type !== 'none') return breakup;
+      // 降格トリガーチェック（クールダウン考慮）
+      if (!isCoolingDown(input, 'breakup')) {
+        const breakup = checkBreakupTrigger(input);
+        if (breakup.type !== 'none') return breakup;
+      }
       break;
     }
 

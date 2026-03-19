@@ -3,6 +3,7 @@
 
 import { useEffect, useRef } from "react";
 import { startConversationScheduler, triggerConversationNow } from "@/lib/scheduler/conversation-scheduler";
+import { startConsultScheduler } from "@/lib/scheduler/consult-scheduler";
 import { useAuth } from "@/lib/auth/use-auth";
 import { ensureUserPresetBootstrap } from "@/lib/data/presets";
 
@@ -22,6 +23,7 @@ export default function ConversationSchedulerProvider(props: Props) {
   } = props;
 
   const stopRef = useRef<null | { stop: () => void }>(null);
+  const consultStopRef = useRef<null | { stop: () => void }>(null);
   const { user, ready } = useAuth();
   const shouldRunScheduler = Boolean(enabled && ready && user);
   const manualTriggerFlag = (process.env.NEXT_PUBLIC_ENABLE_CONV_MANUAL_TRIGGER ?? "").toLowerCase();
@@ -83,6 +85,21 @@ export default function ConversationSchedulerProvider(props: Props) {
       stopRef.current = null;
     };
   }, [shouldRunScheduler, baseIntervalMs, defaultParticipants?.[0], defaultParticipants?.[1]]);
+
+  // --- 相談スケジューラー ---
+  useEffect(() => {
+    consultStopRef.current?.stop?.();
+    consultStopRef.current = null;
+
+    if (!shouldRunScheduler) return;
+
+    consultStopRef.current = startConsultScheduler();
+
+    return () => {
+      consultStopRef.current?.stop?.();
+      consultStopRef.current = null;
+    };
+  }, [shouldRunScheduler]);
 
   return <>{children}</>;
 }

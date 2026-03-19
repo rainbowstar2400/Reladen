@@ -640,20 +640,48 @@ export function HomeContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePeekResidentId, panelMode]);
 
+  const [consultAnswering, setConsultAnswering] = useState(false);
   const handleConsultDecide = useCallback(
     async (choiceId: string) => {
       if (!activeConsultId) return;
-      const result = await saveConsultAnswer(activeConsultId, choiceId);
-      const selected = result.selectedChoiceId ?? choiceId;
-      setConsultDetail((prev) => (prev ? { ...prev, selectedChoiceId: selected } : prev));
-      if (result.applied) {
-        await queryClient.invalidateQueries({ queryKey: ['residents'] });
-      }
+
+      // 1. ローカル保存
+      await saveConsultAnswer(activeConsultId, choiceId);
+      setConsultDetail((prev) => (prev ? { ...prev, selectedChoiceId: choiceId } : prev));
+
+      // 2. Answer API 呼び出し
+      setConsultAnswering(true);
       try {
-        await sync();
+        const res = await fetch(`/api/consults/${activeConsultId}/answer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ selectedChoiceId: choiceId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setConsultDetail((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  reply: data.reply,
+                  systemAfter: [
+                    ...(prev.systemAfter ?? []),
+                    ...(data.trustDelta > 0 ? ['信頼度：↑'] : data.trustDelta < 0 ? ['信頼度：↓'] : []),
+                  ],
+                }
+              : prev,
+          );
+          await queryClient.invalidateQueries({ queryKey: ['residents'] });
+        }
       } catch {
         // noop
+      } finally {
+        setConsultAnswering(false);
       }
+
+      try { await sync(); } catch { /* noop */ }
+
       const notif = consultNotifications.find(
         (n) =>
           (n as any).linkedConsultId === activeConsultId ||
@@ -1006,6 +1034,7 @@ export function HomeContent() {
                       data={consultDetail}
                       onDecide={handleConsultDecide}
                       onClose={closePanel}
+                      answering={consultAnswering}
                     />
                     </div>
                   </motion.aside>
