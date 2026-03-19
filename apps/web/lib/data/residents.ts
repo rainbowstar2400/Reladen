@@ -235,6 +235,7 @@ async function saveAllRelationData(
         from_id: currentId,
         to_id: targetId,
         nickname: data.nicknameTo.trim(),
+        locked: true, // D-3: 手動設定は自動的にロック
         updated_at: now,
         deleted: false,
         owner_id: ownerId,
@@ -254,6 +255,7 @@ async function saveAllRelationData(
         from_id: targetId,
         to_id: currentId,
         nickname: data.nicknameFrom.trim(),
+        locked: true, // D-3: 手動設定は自動的にロック
         updated_at: now,
         deleted: false,
         owner_id: ownerId,

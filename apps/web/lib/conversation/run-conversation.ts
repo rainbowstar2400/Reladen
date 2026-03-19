@@ -23,6 +23,8 @@ import { shouldGeneratePromise, determineConversationType, type ConversationType
 import { checkRelationTransition, computeImpressionOnTransition, type TransitionResult } from "@repo/shared/logic/relation-transition";
 import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
 import { callGptForSituation } from "@/lib/gpt/call-gpt-for-situation";
+import { callGptForNickname } from "@/lib/gpt/call-gpt-for-nickname";
+import { shouldGenerateNickname, type NicknameGenerationInput, type NicknameTendency } from "@repo/shared/logic/nickname";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
 import { KvUnauthenticatedError, listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
@@ -73,6 +75,8 @@ export type RunConversationArgs = {
   currentDate?: string;
   /** シチュエーション描写（GPT生成済み） */
   situation?: string;
+  /** ニックネーム情報（D-3） */
+  nicknames?: { aCallsB?: string | null; bCallsA?: string | null };
 };
 
 export type RunCharacterProfile = {
@@ -728,6 +732,7 @@ export async function runConversation(
     threadId,
     situation: args.situation,
     conversationType,
+    nicknames: args.nicknames,
   };
 
   // 一人称マップ
@@ -777,6 +782,108 @@ export async function runConversation(
 function clampScore(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+// ---------------------------------------------------------------------------
+// D-3: ニックネーム自動生成
+// ---------------------------------------------------------------------------
+
+type NicknameRow = {
+  id?: string;
+  from_id?: string;
+  to_id?: string;
+  fromId?: string;
+  toId?: string;
+  nickname?: string;
+  locked?: boolean;
+  deleted?: boolean;
+};
+
+async function generateNicknamesOnTransition(params: {
+  participants: [string, string];
+  trigger: 'initial' | 'upgrade';
+  newRelation: string;
+  now: string;
+}): Promise<void> {
+  const [a, b] = params.participants;
+
+  // 住人情報を取得（nicknameTendency 含む）
+  const residents = (await listAny("residents")) as unknown as Array<Record<string, any>> | null;
+  if (!Array.isArray(residents)) return;
+
+  const resA = residents.find((r) => r?.id === a && !r?.deleted);
+  const resB = residents.find((r) => r?.id === b && !r?.deleted);
+  if (!resA || !resB) return;
+
+  // 既存ニックネーム確認（locked チェック）
+  const nicknames = (await listAny("nicknames")) as unknown as NicknameRow[] | null;
+  const existingAtoB = Array.isArray(nicknames)
+    ? nicknames.find((n) => {
+        const from = n.from_id ?? n.fromId;
+        const to = n.to_id ?? n.toId;
+        return from === a && to === b && !n.deleted;
+      })
+    : undefined;
+  const existingBtoA = Array.isArray(nicknames)
+    ? nicknames.find((n) => {
+        const from = n.from_id ?? n.fromId;
+        const to = n.to_id ?? n.toId;
+        return from === b && to === a && !n.deleted;
+      })
+    : undefined;
+
+  // 両方 locked なら何もしない
+  const lockedAtoB = existingAtoB?.locked === true;
+  const lockedBtoA = existingBtoA?.locked === true;
+  if (lockedAtoB && lockedBtoA) return;
+
+  // GPT で生成
+  const input: NicknameGenerationInput = {
+    trigger: params.trigger,
+    characterA: {
+      id: a,
+      name: resA.name ?? '不明',
+      gender: resA.gender ?? null,
+      age: typeof resA.age === 'number' ? resA.age : null,
+      nicknameTendency: (resA.nickname_tendency ?? resA.nicknameTendency ?? 'san') as NicknameTendency,
+    },
+    characterB: {
+      id: b,
+      name: resB.name ?? '不明',
+      gender: resB.gender ?? null,
+      age: typeof resB.age === 'number' ? resB.age : null,
+      nicknameTendency: (resB.nickname_tendency ?? resB.nicknameTendency ?? 'san') as NicknameTendency,
+    },
+    newRelation: params.newRelation,
+    currentNicknameAtoB: existingAtoB?.nickname ?? null,
+    currentNicknameBtoA: existingBtoA?.nickname ?? null,
+  };
+
+  const result = await callGptForNickname(input);
+
+  // 保存（locked でないもののみ）
+  if (!lockedAtoB) {
+    await putAny("nicknames", {
+      id: existingAtoB?.id ?? newId(),
+      from_id: a,
+      to_id: b,
+      nickname: result.nicknameAtoB,
+      locked: false,
+      updated_at: params.now,
+      deleted: false,
+    });
+  }
+  if (!lockedBtoA) {
+    await putAny("nicknames", {
+      id: existingBtoA?.id ?? newId(),
+      from_id: b,
+      to_id: a,
+      nickname: result.nicknameBtoA,
+      locked: false,
+      updated_at: params.now,
+      deleted: false,
+    });
+  }
 }
 
 async function persistTransitionResult(params: {
@@ -854,6 +961,21 @@ async function persistTransitionResult(params: {
         to: newRelation,
       },
     } as any);
+
+    // D-3: ニックネーム自動生成
+    const nicknameTrigger = shouldGenerateNickname(params.currentRelation, newRelation);
+    if (nicknameTrigger) {
+      try {
+        await generateNicknamesOnTransition({
+          participants: [a, b],
+          trigger: nicknameTrigger,
+          newRelation,
+          now,
+        });
+      } catch (error) {
+        console.warn("[persistTransitionResult] Failed to generate nicknames.", error);
+      }
+    }
   }
 
   if (params.transition.type === 'intervention') {
@@ -956,6 +1078,33 @@ export async function runConversationFromApi(
     loadRecentEventsForCharacter(participants[1]),
   ]);
 
+  // 7.5) ニックネーム読み込み（D-3: プロンプト注入用）
+  let nicknameInfo: { aCallsB?: string | null; bCallsA?: string | null } | undefined;
+  try {
+    const nicknameRows = (await listAny("nicknames")) as unknown as NicknameRow[] | null;
+    if (Array.isArray(nicknameRows)) {
+      const [pa, pb] = participants;
+      const aToB = nicknameRows.find((n) => {
+        const from = n.from_id ?? n.fromId;
+        const to = n.to_id ?? n.toId;
+        return from === pa && to === pb && !n.deleted;
+      });
+      const bToA = nicknameRows.find((n) => {
+        const from = n.from_id ?? n.fromId;
+        const to = n.to_id ?? n.toId;
+        return from === pb && to === pa && !n.deleted;
+      });
+      if (aToB?.nickname || bToA?.nickname) {
+        nicknameInfo = {
+          aCallsB: aToB?.nickname ?? null,
+          bCallsA: bToA?.nickname ?? null,
+        };
+      }
+    }
+  } catch (error) {
+    console.warn("[runConversationFromApi] Failed to load nicknames.", error);
+  }
+
   // 8) シチュエーション生成（GPT）
   let situation: string | undefined;
   try {
@@ -998,6 +1147,7 @@ export async function runConversationFromApi(
     },
     currentDate: now.toISOString().slice(0, 10),
     situation,
+    nicknames: nicknameInfo,
   });
 
   // 10) 評価

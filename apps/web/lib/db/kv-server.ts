@@ -31,7 +31,8 @@ type Table =
   | "world_states"
   | "shared_snippets"
   | "recent_events"
-  | "offscreen_knowledge";
+  | "offscreen_knowledge"
+  | "nicknames";
 
 type OwnerColumnConfig =
   | { type: "fixed"; column: string }

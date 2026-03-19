@@ -74,6 +74,9 @@ export const residentSchema = baseEntitySchema.extend({
   interests: z.array(z.string()).max(20).optional(),
 
   sleepProfile: sleepProfileSchema.optional(),
+
+  // D-3: 呼び方の傾向プリセット
+  nickname_tendency: z.enum(['nickname', 'bare', 'san', 'kun_chan', 'hierarchy']).default('san').optional(),
 });
 
 export const relationSchema = baseEntitySchema.extend({
@@ -95,6 +98,7 @@ export const nicknameSchema = baseEntitySchema.extend({
   from_id: z.string().uuid(),
   to_id: z.string().uuid(),
   nickname: z.string().min(1).max(50),
+  locked: z.boolean().default(false).optional(),
 });
 
 // --- Weather / World state --------------------------------------------------

@@ -1,6 +1,8 @@
 import { boolean, jsonb, pgEnum, pgTable, text, timestamp, integer, uuid, index } from 'drizzle-orm/pg-core';
 import { relations as createRelations } from 'drizzle-orm';
 
+export const nicknameTendencyEnum = pgEnum('nickname_tendency_enum', ['nickname', 'bare', 'san', 'kun_chan', 'hierarchy']);
+
 export const relationTypeEnum = pgEnum('relation_type', ['none', 'acquaintance', 'friend', 'best_friend', 'lover', 'family']);
 export const feelingLabelEnum = pgEnum('feeling_label', [
   'none',
@@ -51,6 +53,7 @@ export const residents = pgTable('residents', {
   firstPerson: uuid('first_person').references(() => presets.id, { onDelete: 'set null' }),
   interests: jsonb('interests'),
   sleepProfile: jsonb('sleep_profile'),
+  nicknameTendency: nicknameTendencyEnum('nickname_tendency').default('san'),
 
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
@@ -109,6 +112,7 @@ export const nicknames = pgTable(
     fromId: uuid('from_id').notNull(), // 呼ぶ側
     toId: uuid('to_id').notNull(),   // 呼ばれる側
     nickname: text('nickname').notNull(), // 呼び名
+    locked: boolean('locked').notNull().default(false), // D-3: 手動設定ロック
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
     ownerId: uuid('owner_id'),

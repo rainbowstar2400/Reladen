@@ -34,6 +34,14 @@ export type CharacterProfile = {
   speechProfile?: SpeechProfile | null;
 };
 
+/** ペア間のニックネーム情報 */
+export type NicknameInfo = {
+  /** A が B を呼ぶ呼び名 */
+  aCallsB?: string | null;
+  /** B が A を呼ぶ呼び名 */
+  bCallsA?: string | null;
+};
+
 /** プロンプト構築の全入力 */
 export type PromptInput = {
   characters: [CharacterProfile, CharacterProfile];
@@ -55,6 +63,8 @@ export type PromptInput = {
   situation?: string;
   /** 会話タイプ（通常/約束生成/約束履行） */
   conversationType?: 'normal' | 'promise_generation' | 'promise_fulfillment';
+  /** ニックネーム情報（D-3） */
+  nicknames?: NicknameInfo;
 };
 
 // ---------------------------------------------------------------------------
@@ -326,6 +336,19 @@ export function buildUserPrompt(input: PromptInput): string {
   const settingLines = [settingParts[0]];
   if (input.gameDate) settingLines.push(`日付: ${input.gameDate}`);
   settingLines.push(relationBlock);
+
+  // D-3: ニックネーム注入
+  if (input.nicknames?.aCallsB || input.nicknames?.bCallsA) {
+    const nickLines: string[] = [];
+    if (input.nicknames.aCallsB) {
+      nickLines.push(`${aName}は${bName}を「${input.nicknames.aCallsB}」と呼ぶ`);
+    }
+    if (input.nicknames.bCallsA) {
+      nickLines.push(`${bName}は${aName}を「${input.nicknames.bCallsA}」と呼ぶ`);
+    }
+    settingLines.push(`呼び名: ${nickLines.join(" / ")}`);
+  }
+
   sections.push(`【会話設定】\n${settingLines.join("\n")}`);
 
   // ====================================================================
@@ -373,6 +396,11 @@ export function buildUserPrompt(input: PromptInput): string {
     "- 汎用テンプレ台詞の連発は避ける",
     "- 会話の冒頭を毎回同じパターンにしないこと。「あ、〇〇じゃん」のような驚き型の挨拶だけでなく、既に隣にいる状態からの「そういえばさ」、相手の行動へのツッコミ「何読んでんの」、作業中の声かけ等、多様な始め方をすること",
   ];
+
+  // ニックネームルール
+  if (input.nicknames?.aCallsB || input.nicknames?.bCallsA) {
+    rules.push("- 【呼び名】会話設定で指定された呼び名を使うこと。相手の名前をそのまま使わないこと");
+  }
 
   // 会話タイプに応じた約束ルール
   const convType = input.conversationType ?? 'normal';
