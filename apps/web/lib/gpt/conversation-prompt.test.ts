@@ -59,6 +59,7 @@ describe("conversation-prompt", () => {
     });
 
     expect(prompt).toContain("1発話は20〜30文字を目安にし、40文字を超えない");
+    expect(prompt).toContain("話題が一段落したら、余韻を残しつつ自然に会話を締めること");
     expect(prompt).toContain("シチュエーション: 昼休みの廊下で同時に足を止め、目が合った");
   });
 });

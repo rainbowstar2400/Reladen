@@ -210,6 +210,7 @@ export async function callGptForConversation(
 ): Promise<CallGptResult> {
   const sysPrompt = systemPromptConversation;
   const baseUserPrompt = buildUserPrompt(promptInput);
+  const conversationType = promptInput.conversationType ?? "normal";
   const ctx = {
     threadId: promptInput.threadId,
     participants: [promptInput.characters[0].id, promptInput.characters[1].id] as [string, string],
@@ -222,6 +223,7 @@ export async function callGptForConversation(
       output,
       structure,
       firstPersonMap,
+      conversationType,
     };
     let result = validateConversationOutput(validationInput);
 
@@ -235,6 +237,7 @@ export async function callGptForConversation(
         output,
         structure,
         firstPersonMap,
+        conversationType,
       });
 
       if (!retryValidation.valid) {

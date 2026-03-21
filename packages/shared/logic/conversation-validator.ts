@@ -31,6 +31,7 @@ export type ValidationInput = {
   structure: ConversationStructure;
   /** 各キャラの一人称。{ [characterId]: "私" } 形式 */
   firstPersonMap: Record<string, string>;
+  conversationType?: "normal" | "promise_generation" | "promise_fulfillment";
 };
 
 // ---------------------------------------------------------------------------
@@ -135,6 +136,7 @@ function validateParticipants(
 
 function validateMemory(
   output: ConversationOutput,
+  conversationType?: "normal" | "promise_generation" | "promise_fulfillment",
 ): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
   const mem = output.meta.memory;
@@ -152,6 +154,17 @@ function validateMemory(
       rule: "memory_topics",
       message: "memory.topicsCoveredが空です",
       severity: "warning",
+    });
+  }
+
+  if (
+    conversationType === "promise_generation"
+    && (!mem.unresolvedThreads || mem.unresolvedThreads.length === 0)
+  ) {
+    violations.push({
+      rule: "memory_unresolved_threads",
+      message: "promise_generation では memory.unresolvedThreads に約束内容を1件以上含めてください",
+      severity: "error",
     });
   }
 
@@ -315,7 +328,7 @@ export function validateConversationOutput(
 
   violations.push(...validateFirstPerson(input.output, input.firstPersonMap));
   violations.push(...validateParticipants(input.output));
-  violations.push(...validateMemory(input.output));
+  violations.push(...validateMemory(input.output, input.conversationType));
   violations.push(...validatePunctuation(input.output));
 
   // ヒューリスティクス検証

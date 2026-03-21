@@ -11,6 +11,8 @@ function createOutput(params: {
   turnCount: number;
   aText: string;
   bText: string;
+  summary?: string;
+  unresolvedThreads?: string[];
 }) {
   return {
     threadId: "33333333-3333-4333-8333-333333333333",
@@ -25,9 +27,9 @@ function createOutput(params: {
       qualityHints: { turnBalance: "balanced" as const, tone: "neutral" },
       debug: [],
       memory: {
-        summary: "会話した",
+        summary: params.summary ?? "会話した",
         topicsCovered: ["テスト話題"],
-        unresolvedThreads: [],
+        unresolvedThreads: params.unresolvedThreads ?? [],
         knowledgeGained: [],
       },
     },
@@ -98,6 +100,55 @@ describe("conversation-validator", () => {
 
     expect(result40.violations.some((v) => v.rule === "heuristic_over_length")).toBe(false);
     expect(result41.violations.some((v) => v.rule === "heuristic_over_length")).toBe(true);
+  });
+
+  it("promise_generation では unresolvedThreads が空だと error になる", () => {
+    const result = validateConversationOutput({
+      output: createOutput({
+        turnCount: 12,
+        aText: "a".repeat(20),
+        bText: "b".repeat(20),
+        unresolvedThreads: [],
+      }),
+      structure: baseStructure(),
+      firstPersonMap: {},
+      conversationType: "promise_generation",
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.violations.some((v) => v.rule === "memory_unresolved_threads" && v.severity === "error")).toBe(true);
+  });
+
+  it("normal では unresolvedThreads が空でも専用ルールは発火しない", () => {
+    const result = validateConversationOutput({
+      output: createOutput({
+        turnCount: 12,
+        aText: "a".repeat(20),
+        bText: "b".repeat(20),
+        unresolvedThreads: [],
+      }),
+      structure: baseStructure(),
+      firstPersonMap: {},
+      conversationType: "normal",
+    });
+
+    expect(result.violations.some((v) => v.rule === "memory_unresolved_threads")).toBe(false);
+  });
+
+  it("summary が空でも validation が実行され memory_summary error になる", () => {
+    const result = validateConversationOutput({
+      output: createOutput({
+        turnCount: 12,
+        aText: "a".repeat(20),
+        bText: "b".repeat(20),
+        summary: "",
+      }),
+      structure: baseStructure(),
+      firstPersonMap: {},
+      conversationType: "normal",
+    });
+
+    expect(result.violations.some((v) => v.rule === "memory_summary" && v.severity === "error")).toBe(true);
   });
 
   it("buildRetryFeedback は error/warning を区別して返す", () => {
