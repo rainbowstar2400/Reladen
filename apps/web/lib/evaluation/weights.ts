@@ -84,11 +84,16 @@ function loadServerSync(): WeightsConfig | null {
   triedServerLoad = true;
 
   try {
-    // Next.js の作業ディレクトリはアプリルート想定
     const path = require('path');
     const fs = require('fs');
-    const full = path.join(process.cwd(), 'public', 'config', 'conversation-weights.json');
-    if (fs.existsSync(full)) {
+    const candidates = [
+      path.join(process.cwd(), 'public', 'config', 'conversation-weights.json'),
+      path.join(process.cwd(), '..', 'public', 'config', 'conversation-weights.json'),
+      path.join(process.cwd(), '..', '..', 'public', 'config', 'conversation-weights.json'),
+    ];
+
+    for (const full of candidates) {
+      if (!fs.existsSync(full)) continue;
       const raw = fs.readFileSync(full, 'utf-8');
       const parsed = JSON.parse(raw);
       const valid = validate(parsed);
@@ -96,10 +101,11 @@ function loadServerSync(): WeightsConfig | null {
         cached = valid;
         return cached;
       }
-      console.warn('[weights] Invalid JSON schema. Fallback to defaults.');
-    } else {
-      console.warn('[weights] JSON not found. Fallback to defaults at:', full);
+      console.warn('[weights] Invalid JSON schema. Fallback to defaults. path=', full);
+      break;
     }
+
+    console.warn('[weights] JSON not found. Fallback to defaults. searched=', candidates);
   } catch (e) {
     console.warn('[weights] Failed to load JSON. Fallback to defaults.', e);
   }
