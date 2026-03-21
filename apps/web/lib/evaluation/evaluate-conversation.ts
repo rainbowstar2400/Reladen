@@ -1,6 +1,6 @@
 // apps/web/lib/evaluation/evaluate-conversation.ts
 
-import { clipFavor, type Impression, type ImpressionBase } from './weights';
+import { clipFavor, getWeightsCached, type Impression, type ImpressionBase } from './weights';
 
 // ------------------------------------------------------------
 // GPT応答（会話イベント）をローカルで評価し、Δ値・印象・スレッド進行を決定
@@ -60,28 +60,6 @@ export type EvaluationResult = {
   threadNextState: 'ongoing' | 'done';
   systemLine: string;
 };
-
-// ===== タグ・品質・シグナルの重み =====
-
-const TAG_WEIGHTS: Record<string, number> = {
-  '共感': 0.6,
-  '感謝': 0.7,
-  '称賛': 0.8,
-  '協力': 0.5,
-  '否定': -0.8,
-  '皮肉': -0.5,
-  '非難': -1.2,
-  '雑談・共通': 0.1,
-  '軽い冗談': 0.2,
-};
-
-const QUALITY_WEIGHTS: Record<string, number> = {
-  'coherence.good': 0.2,
-  'coherence.poor': -0.4,
-  'tone.gentle': 0.2,
-  'tone.harsh': -0.4,
-};
-
 
 // ===== A-5: 3層乗算の定数・関数 =====
 
@@ -185,6 +163,7 @@ function toState(input: Impression | ImpressionState | undefined, fallback: Impr
 export function evaluateConversation(input: EvalInput): EvaluationResult {
   const meta = input.meta ?? {};
   const [a, b] = input.participants;
+  const weights = getWeightsCached();
 
   const lines = Array.isArray(input.lines) ? input.lines : [];
 
@@ -192,7 +171,7 @@ export function evaluateConversation(input: EvalInput): EvaluationResult {
   let baseFavor = 0;
   const tags: string[] = meta.tags ?? [];
   for (const t of tags) {
-    baseFavor += TAG_WEIGHTS[t] ?? 0;
+    baseFavor += weights.tags[t] ?? 0;
   }
 
   // 2) 会話バランス（均衡に微加点）
@@ -205,7 +184,7 @@ export function evaluateConversation(input: EvalInput): EvaluationResult {
   // 3) qualityHints の重み
   const qh = meta.qualityHints ?? {};
   for (const k of Object.keys(qh)) {
-    const w = QUALITY_WEIGHTS[k];
+    const w = weights.qualityHints[k];
     if (typeof w === 'number') {
       baseFavor += w;
     }
@@ -229,8 +208,8 @@ export function evaluateConversation(input: EvalInput): EvaluationResult {
   let b2aFavor = Math.round(baseFavor * sensB * stanceModB * topicBonusB);
 
   // 5) クリップ [-2, +2]
-  a2bFavor = clipFavor(a2bFavor);
-  b2aFavor = clipFavor(b2aFavor);
+  a2bFavor = clipFavor(a2bFavor, weights.favorClip);
+  b2aFavor = clipFavor(b2aFavor, weights.favorClip);
 
   // 6) スレッド進行: 約束フラグベース
   const threadNextState: EvaluationResult['threadNextState'] =
