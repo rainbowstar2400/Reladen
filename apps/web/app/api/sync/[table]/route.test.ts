@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   upsert: vi.fn(),
   insert: vi.fn(),
   select: vi.fn(),
+  in: vi.fn(),
   gte: vi.fn(),
 }));
 
@@ -27,6 +28,17 @@ function makeRequest(table: string, body: Record<string, unknown>) {
   });
 }
 
+function makeGenericTableFromMock() {
+  return {
+    upsert: mocks.upsert,
+    insert: mocks.insert,
+    select: (columns?: string) => {
+      if (columns === 'id,updated_at') return { in: mocks.in };
+      return { gte: mocks.gte };
+    },
+  };
+}
+
 describe('POST /api/sync/[table]', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -42,6 +54,7 @@ describe('POST /api/sync/[table]', () => {
       auth: { getUser: mocks.getUser },
       from: mocks.from,
     });
+    mocks.in.mockResolvedValue({ data: [], error: null });
 
     if (!POST) {
       ({ POST } = await import('@/app/api/sync/[table]/route'));
@@ -232,11 +245,7 @@ describe('POST /api/sync/[table]', () => {
         message: 'new row violates row-level security policy (USING expression) for table "presets"',
       },
     });
-    mocks.from.mockImplementation((_table: string) => ({
-      upsert: mocks.upsert,
-      insert: mocks.insert,
-      select: mocks.select,
-    }));
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
 
     const req = makeRequest('presets', {
       changes: [
@@ -260,5 +269,122 @@ describe('POST /api/sync/[table]', () => {
     expect(res.status).toBe(401);
     expect(data.message).toContain('upsert failed');
     expect(data.message).toContain('row-level security policy');
+  });
+
+  it('LWW: クラウドより古い updated_at は upsert しない（巻き戻し防止）', async () => {
+    mocks.in.mockResolvedValue({
+      data: [{ id: '99999999-9999-4999-8999-999999999999', updated_at: '2026-01-02T00:00:00.000Z' }],
+      error: null,
+    });
+    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const req = makeRequest('presets', {
+      changes: [
+        {
+          data: {
+            id: '99999999-9999-4999-8999-999999999999',
+            category: 'speech',
+            label: '古い更新',
+            updated_at: '2026-01-01T00:00:00.000Z',
+            deleted: false,
+          },
+          updated_at: '2026-01-01T00:00:00.000Z',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
+  it('LWW: クラウドより新しい updated_at は upsert する', async () => {
+    mocks.in.mockResolvedValue({
+      data: [{ id: '88888888-8888-4888-8888-888888888888', updated_at: '2026-01-01T00:00:00.000Z' }],
+      error: null,
+    });
+    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const req = makeRequest('presets', {
+      changes: [
+        {
+          data: {
+            id: '88888888-8888-4888-8888-888888888888',
+            category: 'speech',
+            label: '新しい更新',
+            updated_at: '2026-01-02T00:00:00.000Z',
+            deleted: false,
+          },
+          updated_at: '2026-01-02T00:00:00.000Z',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert.mock.calls[0][0][0].updated_at).toBe('2026-01-02T00:00:00.000Z');
+  });
+
+  it('LWW: updated_at が同値なら既存優先 no-op にする', async () => {
+    mocks.in.mockResolvedValue({
+      data: [{ id: '77777777-7777-4777-8777-777777777777', updated_at: '2026-01-02T00:00:00.000Z' }],
+      error: null,
+    });
+    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const req = makeRequest('presets', {
+      changes: [
+        {
+          data: {
+            id: '77777777-7777-4777-8777-777777777777',
+            category: 'speech',
+            label: '同値更新',
+            updated_at: '2026-01-02T00:00:00.000Z',
+            deleted: false,
+          },
+          updated_at: '2026-01-02T00:00:00.000Z',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
+  it('LWW: data.updated_at 欠落時は change.updated_at を補完して比較する', async () => {
+    mocks.in.mockResolvedValue({
+      data: [{ id: '66666666-6666-4666-8666-666666666666', updated_at: '2026-01-01T00:00:00.000Z' }],
+      error: null,
+    });
+    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const req = makeRequest('presets', {
+      changes: [
+        {
+          data: {
+            id: '66666666-6666-4666-8666-666666666666',
+            category: 'speech',
+            label: '補完テスト',
+            deleted: false,
+          },
+          updated_at: '2026-01-03T00:00:00.000Z',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert.mock.calls[0][0][0].updated_at).toBe('2026-01-03T00:00:00.000Z');
   });
 });

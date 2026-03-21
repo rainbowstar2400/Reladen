@@ -21,7 +21,7 @@ const isoDate = z.string().refine(
 export const syncChangeSchema = z.object({
   data: z.record(z.any()).and(
     z.object({
-      updated_at: z.string(),          // ISO（LWWに使用）
+      updated_at: z.string().optional(), // ISO（LWWに使用。欠落時は change.updated_at を利用）
       deleted: z.boolean().optional(), // tombstone運用
       id: z.string().uuid().optional() // あるなら検証
     })

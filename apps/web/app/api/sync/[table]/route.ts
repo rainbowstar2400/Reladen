@@ -42,6 +42,39 @@ function pickFirst<T>(...values: Array<T | null | undefined>): T | undefined {
   return undefined;
 }
 
+function parseDateMs(value: unknown): number | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function resolveIncomingUpdatedAt(incomingData: Record<string, any>, fallbackUpdatedAt?: string): string {
+  const candidate = pickFirst(
+    incomingData.updated_at,
+    incomingData.updatedAt,
+    incomingData.updatedat,
+    fallbackUpdatedAt,
+  );
+  const candidateMs = parseDateMs(candidate);
+  if (candidateMs !== null) {
+    const normalized = new Date(candidateMs).toISOString();
+    incomingData.updated_at = normalized;
+    return normalized;
+  }
+  const now = new Date().toISOString();
+  incomingData.updated_at = now;
+  return now;
+}
+
+function shouldApplyIncomingByLww(currentUpdatedAt: unknown, incomingUpdatedAt: unknown): boolean {
+  const incomingMs = parseDateMs(incomingUpdatedAt);
+  if (incomingMs === null) return false;
+  const currentMs = parseDateMs(currentUpdatedAt);
+  if (currentMs === null) return true;
+  // 同値時は既存優先 no-op。incoming が新しい時のみ採用。
+  return incomingMs > currentMs;
+}
+
 function isUniqueViolation(error: any): boolean {
   const code = String(error?.code ?? '');
   const message = String(error?.message ?? '');
@@ -156,6 +189,27 @@ async function pushConsultAnswersRows(args: {
   }
 
   return pushed;
+}
+
+async function fetchExistingUpdatedAtById(args: {
+  sb: ReturnType<typeof createAuthedClient>;
+  table: AllowedTable;
+  ids: string[];
+}) {
+  const uniqueIds = [...new Set(args.ids.filter((id) => typeof id === 'string' && id.length > 0))];
+  if (uniqueIds.length === 0) return new Map<string, string>();
+
+  const { data, error } = await args.sb.from(args.table).select('id,updated_at').in('id', uniqueIds);
+  if (error) throw asHttpError('select failed', error);
+
+  const map = new Map<string, string>();
+  for (const row of data ?? []) {
+    if (typeof row?.id !== 'string') continue;
+    if (typeof row?.updated_at === 'string') {
+      map.set(row.id, row.updated_at);
+    }
+  }
+  return map;
 }
 
 // 許可リストを DB の snake_case カラム名に統一する
@@ -288,9 +342,10 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
         console.warn(JSON.stringify({ lvl: 'warn', at: 'sync.skip', requestId, table, reason: 'allowed columns list is empty' }));
       } else {
         // 3. 許可リストがある場合、キーを変換して upsert
-        const rows = incoming.map((c) => {
+        const rowsWithMeta = incoming.map((c) => {
           const incomingData = { ...(c.data as Record<string, any>) }; // camelCase キー
           const payload: Record<string, any> = {}; // snake_case キー
+          const resolvedUpdatedAt = resolveIncomingUpdatedAt(incomingData, c.updated_at);
 
           // 4. incomingData (camelCase) をループ
           for (const camelKey of Object.keys(incomingData)) {
@@ -311,18 +366,45 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
           if (typeof incomingData.deleted === 'boolean' && allowedCols.has('deleted')) {
             payload.deleted = incomingData.deleted;
           }
+          if (allowedCols.has('updated_at')) {
+            payload.updated_at = resolvedUpdatedAt;
+          }
 
           // 9. owner_id は対象テーブルが許可する場合のみ注入
           if (allowedCols.has('owner_id')) {
             payload.owner_id = user.id;
           }
 
-          return payload; // 最終的な payload は snake_case のキーを持つ
+          return {
+            payload, // 最終的な payload は snake_case のキーを持つ
+            id: typeof payload.id === 'string' ? payload.id : null,
+            updatedAt: resolvedUpdatedAt,
+          };
         });
 
+        const ids = rowsWithMeta
+          .map((row) => row.id)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0);
+        const existingUpdatedAtById = await fetchExistingUpdatedAtById({
+          sb,
+          table: table as AllowedTable,
+          ids,
+        });
+
+        const rows = rowsWithMeta
+          .filter((row) => {
+            if (!row.id) return true;
+            const currentUpdatedAt = existingUpdatedAtById.get(row.id);
+            if (!currentUpdatedAt) return true;
+            return shouldApplyIncomingByLww(currentUpdatedAt, row.updatedAt);
+          })
+          .map((row) => row.payload);
+
         // 10. upsert (snake_case のデータを送信)
-        const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
-        if (error) throw asHttpError('upsert failed', error);
+        if (rows.length > 0) {
+          const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
+          if (error) throw asHttpError('upsert failed', error);
+        }
         pushed = rows.length;
       }
     }
