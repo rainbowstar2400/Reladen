@@ -66,51 +66,6 @@ export type Database = {
         }
         Relationships: []
       }
-      experience_events: {
-        Row: {
-          deleted: boolean
-          fact_detail: Json | null
-          fact_summary: string
-          id: string
-          occurred_at: string
-          owner_id: string
-          signature: string
-          significance: number
-          source_ref: string | null
-          source_type: Database["public"]["Enums"]["experience_source_type"]
-          tags: Json
-          updated_at: string
-        }
-        Insert: {
-          deleted?: boolean
-          fact_detail?: Json | null
-          fact_summary: string
-          id?: string
-          occurred_at?: string
-          owner_id: string
-          signature: string
-          significance?: number
-          source_ref?: string | null
-          source_type: Database["public"]["Enums"]["experience_source_type"]
-          tags?: Json
-          updated_at?: string
-        }
-        Update: {
-          deleted?: boolean
-          fact_detail?: Json | null
-          fact_summary?: string
-          id?: string
-          occurred_at?: string
-          owner_id?: string
-          signature?: string
-          significance?: number
-          source_ref?: string | null
-          source_type?: Database["public"]["Enums"]["experience_source_type"]
-          tags?: Json
-          updated_at?: string
-        }
-        Relationships: []
-      }
       feelings: {
         Row: {
           deleted: boolean
@@ -354,62 +309,6 @@ export type Database = {
         }
         Relationships: []
       }
-      resident_experiences: {
-        Row: {
-          appraisal: string
-          awareness: Database["public"]["Enums"]["experience_awareness"]
-          confidence: number
-          deleted: boolean
-          experience_id: string
-          expires_at: string | null
-          hook_intent: Database["public"]["Enums"]["hook_intent"]
-          id: string
-          learned_at: string
-          owner_id: string
-          resident_id: string
-          salience: number
-          updated_at: string
-        }
-        Insert: {
-          appraisal: string
-          awareness: Database["public"]["Enums"]["experience_awareness"]
-          confidence?: number
-          deleted?: boolean
-          experience_id: string
-          expires_at?: string | null
-          hook_intent: Database["public"]["Enums"]["hook_intent"]
-          id?: string
-          learned_at?: string
-          owner_id: string
-          resident_id: string
-          salience?: number
-          updated_at?: string
-        }
-        Update: {
-          appraisal?: string
-          awareness?: Database["public"]["Enums"]["experience_awareness"]
-          confidence?: number
-          deleted?: boolean
-          experience_id?: string
-          expires_at?: string | null
-          hook_intent?: Database["public"]["Enums"]["hook_intent"]
-          id?: string
-          learned_at?: string
-          owner_id?: string
-          resident_id?: string
-          salience?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "resident_experiences_experience_id_fkey"
-            columns: ["experience_id"]
-            isOneToOne: false
-            referencedRelation: "experience_events"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       residents: {
         Row: {
           age: number | null
@@ -596,12 +495,6 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      experience_awareness: "direct" | "witnessed" | "heard"
-      experience_source_type:
-        | "lifestyle"
-        | "work"
-        | "interpersonal"
-        | "environment"
       feeling_label:
         | "none"
         | "dislike"
@@ -747,13 +640,6 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      experience_awareness: ["direct", "witnessed", "heard"],
-      experience_source_type: [
-        "lifestyle",
-        "work",
-        "interpersonal",
-        "environment",
-      ],
       feeling_label: [
         "none",
         "dislike",
