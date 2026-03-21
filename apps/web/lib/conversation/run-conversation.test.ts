@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   selectTopic: vi.fn(),
   buildConversationStructure: vi.fn(),
   shouldGeneratePromise: vi.fn(),
+  generateSnippetsIfStale: vi.fn(),
+  generateRecentEventsIfStale: vi.fn(),
 }));
 
 vi.mock("@/lib/db/kv-server", () => ({
@@ -39,6 +41,14 @@ vi.mock("@/lib/persist/persist-conversation", () => ({
 
 vi.mock("@/lib/newId", () => ({
   newId: mocks.newId,
+}));
+
+vi.mock("@/lib/batch/generate-snippets", () => ({
+  generateSnippetsIfStale: mocks.generateSnippetsIfStale,
+}));
+
+vi.mock("@/lib/batch/generate-recent-events", () => ({
+  generateRecentEventsIfStale: mocks.generateRecentEventsIfStale,
 }));
 
 vi.mock("@repo/shared/logic/topic-selection", async () => {
@@ -146,6 +156,8 @@ describe("run-conversation", () => {
     mocks.newId.mockReturnValue(THREAD_ID);
     mocks.putKV.mockResolvedValue(undefined);
     mocks.callGptForSituation.mockResolvedValue("駅前の信号待ちで隣に立ち、自然に会話が始まった");
+    mocks.generateSnippetsIfStale.mockResolvedValue(0);
+    mocks.generateRecentEventsIfStale.mockResolvedValue(0);
 
     mocks.listKV.mockImplementation(async (table: string) => {
       switch (table) {
@@ -274,6 +286,94 @@ describe("run-conversation", () => {
     expect(mocks.evaluateConversation).toHaveBeenCalledWith(
       expect.objectContaining({
         participants: [A_ID, B_ID],
+      }),
+    );
+  });
+
+  it("ongoing スレッド起動時は約束抽選をスキップし、promise_fulfillment を強制する", async () => {
+    mocks.shouldGeneratePromise.mockReturnValue(true);
+    mocks.listKV.mockImplementation(async (table: string) => {
+      if (table === "topic_threads") {
+        return [
+          {
+            id: THREAD_ID,
+            participants: [A_ID, B_ID],
+            status: "ongoing",
+            deleted: false,
+          },
+        ];
+      }
+      switch (table) {
+        case "residents":
+          return baseResidents();
+        case "presets":
+          return [];
+        case "relations":
+          return [{ a_id: A_ID, b_id: B_ID, type: "friend", deleted: false }];
+        case "feelings":
+          return [];
+        default:
+          return [];
+      }
+    });
+
+    await runConversationFromApi({ threadId: THREAD_ID });
+
+    expect(mocks.shouldGeneratePromise).not.toHaveBeenCalled();
+    expect(mocks.callGptForConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationType: "promise_fulfillment",
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(mocks.evaluateConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promiseFlag: false,
+      }),
+    );
+  });
+
+  it("done スレッド起動時は通常の約束抽選を行う", async () => {
+    mocks.shouldGeneratePromise.mockReturnValue(true);
+    mocks.listKV.mockImplementation(async (table: string) => {
+      if (table === "topic_threads") {
+        return [
+          {
+            id: THREAD_ID,
+            participants: [A_ID, B_ID],
+            status: "done",
+            deleted: false,
+          },
+        ];
+      }
+      switch (table) {
+        case "residents":
+          return baseResidents();
+        case "presets":
+          return [];
+        case "relations":
+          return [{ a_id: A_ID, b_id: B_ID, type: "friend", deleted: false }];
+        case "feelings":
+          return [];
+        default:
+          return [];
+      }
+    });
+
+    await runConversationFromApi({ threadId: THREAD_ID });
+
+    expect(mocks.shouldGeneratePromise).toHaveBeenCalledTimes(1);
+    expect(mocks.callGptForConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationType: "promise_generation",
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(mocks.evaluateConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promiseFlag: true,
       }),
     );
   });

@@ -84,6 +84,8 @@ export type RunConversationArgs = {
   situation?: string;
   /** ニックネーム情報（D-3） */
   nicknames?: { aCallsB?: string | null; bCallsA?: string | null };
+  /** threadId 起動時の topic_threads.status（ongoing なら約束履行会話を強制） */
+  threadStatus?: "ongoing" | "done" | null;
 };
 
 export type RunCharacterProfile = {
@@ -220,6 +222,9 @@ type FeelingRow = {
 type TopicThreadRow = {
   id?: string;
   participants?: unknown;
+  status?: string;
+  updated_at?: string;
+  updatedAt?: string;
   deleted?: boolean;
 };
 
@@ -400,9 +405,9 @@ async function loadCharacterProfiles(
   return { profiles: dict, nameMap };
 }
 
-async function resolveParticipantsFromThread(
+async function resolveThreadContext(
   threadId: string,
-): Promise<[string, string]> {
+): Promise<{ participants: [string, string]; status: "ongoing" | "done" | null }> {
   const rows = (await listAny("topic_threads")) as unknown as TopicThreadRow[] | null;
   if (!Array.isArray(rows)) {
     throw new ConversationStartError(
@@ -430,7 +435,14 @@ async function resolveParticipantsFromThread(
     );
   }
 
-  return participants;
+  const status = thread.status === "ongoing" || thread.status === "done"
+    ? thread.status
+    : null;
+
+  return {
+    participants,
+    status,
+  };
 }
 
 /** 関係性タイプを KV から読み込み */
@@ -750,13 +762,18 @@ export async function runConversation(
     args.relation,
     structure.initiatorId,
   );
-  const isContinuation = topic.source === 'continuation';
-  const promiseFlag = !isContinuation && shouldGeneratePromise({
-    relationType: args.relation.type,
-    topicSource: topic.source,
-    favorScore: initiatorFavorScore,
-  });
-  const conversationType = determineConversationType(topic.source, promiseFlag);
+  const isContinuation = topic.source === "continuation";
+  const isOngoingThread = args.threadStatus === "ongoing";
+  const promiseFlag = (!isContinuation && !isOngoingThread)
+    ? shouldGeneratePromise({
+        relationType: args.relation.type,
+        topicSource: topic.source,
+        favorScore: initiatorFavorScore,
+      })
+    : false;
+  const conversationType: ConversationType = isOngoingThread
+    ? "promise_fulfillment"
+    : determineConversationType(topic.source, promiseFlag);
 
   // --- 3. プロンプト構築 + GPT呼び出し ---
   const promptInput: PromptInput = {
@@ -1051,10 +1068,13 @@ export async function runConversationFromApi(
   args: RunConversationApiArgs,
 ): Promise<RunConversationApiResult> {
   let threadId: string | undefined;
+  let threadStatus: "ongoing" | "done" | null = null;
   let participants: [string, string];
   if ("threadId" in args) {
     threadId = args.threadId;
-    participants = await resolveParticipantsFromThread(args.threadId);
+    const threadContext = await resolveThreadContext(args.threadId);
+    participants = threadContext.participants;
+    threadStatus = threadContext.status;
   } else {
     participants = args.participants;
   }
@@ -1187,6 +1207,7 @@ export async function runConversationFromApi(
     currentDate: now.toISOString().slice(0, 10),
     situation,
     nicknames: nicknameInfo,
+    threadStatus,
   });
 
   // 10) 評価
