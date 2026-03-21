@@ -13,6 +13,9 @@ type FeelingRow = {
   from_id: string;
   to_id: string;
   label: string;
+  base_label?: string;
+  special_label?: string | null;
+  base_before_special?: string | null;
   score: number;
   recent_deltas?: number[];
   last_contacted_at?: string;
@@ -40,6 +43,37 @@ const GRACE_DAYS_IMPRESSION = 7;
 const MS_PER_DAY = 86_400_000;
 
 const SPECIAL_RELATIONS = new Set(['best_friend', 'lover', 'family']);
+const FEELING_BASE_LABELS = new Set([
+  'dislike',
+  'maybe_dislike',
+  'none',
+  'curious',
+  'maybe_like',
+  'like',
+  'love',
+] as const);
+
+type FeelingBaseLabel =
+  | 'dislike'
+  | 'maybe_dislike'
+  | 'none'
+  | 'curious'
+  | 'maybe_like'
+  | 'like'
+  | 'love';
+
+function normalizeBaseLabel(value: unknown, fallback: FeelingBaseLabel = 'none'): FeelingBaseLabel {
+  if (typeof value === 'string' && FEELING_BASE_LABELS.has(value as FeelingBaseLabel)) {
+    return value as FeelingBaseLabel;
+  }
+  return fallback;
+}
+
+function normalizeNullableBaseLabel(value: unknown): FeelingBaseLabel | null {
+  if (typeof value !== 'string') return null;
+  if (!FEELING_BASE_LABELS.has(value as FeelingBaseLabel)) return null;
+  return value as FeelingBaseLabel;
+}
 
 // ---------------------------------------------------------------------------
 // A-6: 好感度自然減少（中立点30への収束）
@@ -152,7 +186,15 @@ export async function runDailyDecay(): Promise<{
 
     let changed = false;
     let newScore = feeling.score;
-    let newLabel = feeling.label;
+    let newBaseLabel = normalizeBaseLabel(
+      feeling.base_label,
+      normalizeBaseLabel(feeling.label, 'none'),
+    );
+    let newSpecialLabel: 'awkward' | null = feeling.special_label === 'awkward' || feeling.label === 'awkward'
+      ? 'awkward'
+      : null;
+    let newBaseBeforeSpecial = normalizeNullableBaseLabel(feeling.base_before_special);
+    let newLabel = newSpecialLabel === 'awkward' ? 'awkward' : newBaseLabel;
 
     // 関係タイプを取得
     const relType = relationMap.get(`${feeling.from_id}:${feeling.to_id}`) ?? 'acquaintance';
@@ -166,16 +208,19 @@ export async function runDailyDecay(): Promise<{
     }
 
     // B-4: awkward 回復
-    if (newLabel === 'awkward' && shouldClearAwkward(daysElapsed)) {
-      // awkward → none にフォールバック（baseBeforeSpecial は KV に保存していないため）
-      newLabel = 'none';
+    if (newSpecialLabel === 'awkward' && shouldClearAwkward(daysElapsed)) {
+      newBaseLabel = newBaseBeforeSpecial ?? newBaseLabel;
+      newSpecialLabel = null;
+      newBaseBeforeSpecial = null;
+      newLabel = newBaseLabel;
       changed = true;
     }
 
     // B-1: 印象回帰（awkwardでない場合のみ）
-    if (newLabel !== 'awkward') {
-      const regressed = regressImpression(newLabel, daysElapsed, isSpecial);
+    if (newSpecialLabel !== 'awkward') {
+      const regressed = regressImpression(newBaseLabel, daysElapsed, isSpecial);
       if (regressed) {
+        newBaseLabel = normalizeBaseLabel(regressed, newBaseLabel);
         newLabel = regressed;
         changed = true;
       }
@@ -186,6 +231,9 @@ export async function runDailyDecay(): Promise<{
         ...feeling,
         score: newScore,
         label: newLabel,
+        base_label: newBaseLabel,
+        special_label: newSpecialLabel,
+        base_before_special: newBaseBeforeSpecial,
         updated_at: nowIso,
       });
       updated++;

@@ -14,6 +14,16 @@ export const feelingLabelEnum = pgEnum('feeling_label', [
   'love',
   'awkward',
 ]);
+export const feelingBaseLabelEnum = pgEnum('feeling_base_label', [
+  'dislike',
+  'maybe_dislike',
+  'none',
+  'curious',
+  'maybe_like',
+  'like',
+  'love',
+]);
+export const feelingSpecialLabelEnum = pgEnum('feeling_special_label', ['awkward']);
 
 export const presetCategoryEnum = pgEnum('preset_category', [
   'speech',
@@ -85,6 +95,10 @@ export const feelings = pgTable(
     fromId: uuid('from_id').notNull(),
     toId: uuid('to_id').notNull(),
     label: feelingLabelEnum('label').notNull().default('none'),
+    // 印象の3層表現（base / special / baseBeforeSpecial）
+    baseLabel: feelingBaseLabelEnum('base_label').notNull().default('none'),
+    specialLabel: feelingSpecialLabelEnum('special_label'),
+    baseBeforeSpecial: feelingBaseLabelEnum('base_before_special'),
 
     // 好感度スコア
     score: integer('score').notNull().default(30),

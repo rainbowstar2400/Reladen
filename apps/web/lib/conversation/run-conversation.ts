@@ -27,6 +27,7 @@ import {
 import { buildConversationStructure, determineInitiator, type StructureInput } from "@repo/shared/logic/conversation-structure";
 import { shouldGeneratePromise, determineConversationType, type ConversationType } from "@repo/shared/logic/promise";
 import { checkRelationTransition, computeImpressionOnTransition, type TransitionResult } from "@repo/shared/logic/relation-transition";
+import type { ImpressionBase } from "@repo/shared/types/conversation";
 import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
 import { callGptForSituation } from "@/lib/gpt/call-gpt-for-situation";
 import { callGptForNickname } from "@/lib/gpt/call-gpt-for-nickname";
@@ -212,6 +213,12 @@ type FeelingRow = {
   fromId?: string;
   toId?: string;
   label?: string;
+  base_label?: string;
+  special_label?: string | null;
+  base_before_special?: string | null;
+  baseLabel?: string;
+  specialLabel?: string | null;
+  baseBeforeSpecial?: string | null;
   score?: number;
   recent_deltas?: number[];
   updated_at?: string;
@@ -470,13 +477,61 @@ async function loadRelationForPair(
   };
 }
 
-type FeelingData = { label: string; score: number; recentDeltas: number[] };
+type FeelingData = {
+  label: string;
+  score: number;
+  recentDeltas: number[];
+  baseLabel: ImpressionBase;
+  specialLabel: 'awkward' | null;
+  baseBeforeSpecial: ImpressionBase | null;
+};
+
+const FEELING_BASE_LABELS = new Set<ImpressionBase>([
+  'dislike',
+  'maybe_dislike',
+  'none',
+  'curious',
+  'maybe_like',
+  'like',
+  'love',
+]);
 
 function normalizeFeelingScore(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return DEFAULT_FEELING_SCORE;
   }
   return value;
+}
+
+function normalizeImpressionBase(value: unknown, fallback: ImpressionBase = 'none'): ImpressionBase {
+  if (typeof value === 'string' && FEELING_BASE_LABELS.has(value as ImpressionBase)) {
+    return value as ImpressionBase;
+  }
+  return fallback;
+}
+
+function normalizeNullableImpressionBase(value: unknown): ImpressionBase | null {
+  if (typeof value !== 'string') return null;
+  if (!FEELING_BASE_LABELS.has(value as ImpressionBase)) return null;
+  return value as ImpressionBase;
+}
+
+function pickFeelingBaseLabel(row: FeelingRow | undefined): ImpressionBase {
+  const fromLabel = row?.label === 'awkward'
+    ? 'none'
+    : normalizeImpressionBase(row?.label, 'none');
+  return normalizeImpressionBase(row?.base_label ?? row?.baseLabel, fromLabel);
+}
+
+function pickFeelingSpecialLabel(row: FeelingRow | undefined): 'awkward' | null {
+  const special = row?.special_label ?? row?.specialLabel;
+  if (special === 'awkward') return 'awkward';
+  if (row?.label === 'awkward') return 'awkward';
+  return null;
+}
+
+function pickFeelingBaseBeforeSpecial(row: FeelingRow | undefined): ImpressionBase | null {
+  return normalizeNullableImpressionBase(row?.base_before_special ?? row?.baseBeforeSpecial);
 }
 
 /** 好感度を KV から読み込み */
@@ -487,7 +542,16 @@ async function loadFeelingsForPair(
   const [a, b] = participants;
 
   const pickLatest = (fromId: string, toId: string): FeelingData => {
-    if (!Array.isArray(rows)) return { label: "none", score: DEFAULT_FEELING_SCORE, recentDeltas: [] };
+    if (!Array.isArray(rows)) {
+      return {
+        label: "none",
+        score: DEFAULT_FEELING_SCORE,
+        recentDeltas: [],
+        baseLabel: 'none',
+        specialLabel: null,
+        baseBeforeSpecial: null,
+      };
+    }
     const found = rows
       .filter((row) => {
         if (!row || row.deleted) return false;
@@ -495,10 +559,19 @@ async function loadFeelingsForPair(
         return pair.fromId === fromId && pair.toId === toId;
       })
       .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs))[0];
+    const baseLabel = pickFeelingBaseLabel(found);
+    const specialLabel = pickFeelingSpecialLabel(found);
+    const baseBeforeSpecial = pickFeelingBaseBeforeSpecial(found);
+    const effectiveLabel = specialLabel === 'awkward'
+      ? 'awkward'
+      : normalizeImpressionBase(found?.label, baseLabel);
     return {
-      label: typeof found?.label === "string" ? found.label : "none",
+      label: effectiveLabel,
       score: normalizeFeelingScore(found?.score),
       recentDeltas: Array.isArray(found?.recent_deltas) ? found.recent_deltas : [],
+      baseLabel,
+      specialLabel,
+      baseBeforeSpecial,
     };
   };
 
@@ -948,8 +1021,8 @@ async function persistTransitionResult(params: {
   transition: TransitionResult;
   favorA: number;
   favorB: number;
-  currentImpressionA: import("@repo/shared/types/conversation").ImpressionBase;
-  currentImpressionB: import("@repo/shared/types/conversation").ImpressionBase;
+  currentImpressionA: ImpressionBase;
+  currentImpressionB: ImpressionBase;
 }): Promise<void> {
   const [a, b] = params.participants;
   const now = new Date().toISOString();
@@ -996,10 +1069,24 @@ async function persistTransitionResult(params: {
         return pair.fromId === b && pair.toId === a && !f.deleted;
       });
       if (fAB) {
-        await putAny("feelings", { ...(fAB as any), label: newImpressionA, updated_at: now });
+        await putAny("feelings", {
+          ...(fAB as any),
+          label: newImpressionA,
+          base_label: newImpressionA,
+          special_label: null,
+          base_before_special: null,
+          updated_at: now,
+        });
       }
       if (fBA) {
-        await putAny("feelings", { ...(fBA as any), label: newImpressionB, updated_at: now });
+        await putAny("feelings", {
+          ...(fBA as any),
+          label: newImpressionB,
+          base_label: newImpressionB,
+          special_label: null,
+          base_before_special: null,
+          updated_at: now,
+        });
       }
     }
 
@@ -1099,8 +1186,22 @@ export async function runConversationFromApi(
 
   // 3) 好感度読み込み
   let feelings: { aToB: FeelingData; bToA: FeelingData } = {
-    aToB: { label: "none", score: DEFAULT_FEELING_SCORE, recentDeltas: [] },
-    bToA: { label: "none", score: DEFAULT_FEELING_SCORE, recentDeltas: [] },
+    aToB: {
+      label: "none",
+      score: DEFAULT_FEELING_SCORE,
+      recentDeltas: [],
+      baseLabel: 'none',
+      specialLabel: null,
+      baseBeforeSpecial: null,
+    },
+    bToA: {
+      label: "none",
+      score: DEFAULT_FEELING_SCORE,
+      recentDeltas: [],
+      baseLabel: 'none',
+      specialLabel: null,
+      baseBeforeSpecial: null,
+    },
   };
   try {
     feelings = await loadFeelingsForPair(participants);
@@ -1237,8 +1338,16 @@ export async function runConversationFromApi(
     // Phase 2: A-3 2系列制
     relationType: relationType ?? 'acquaintance',
     currentImpression: {
-      aToB: feelings.aToB.label as import('@/lib/evaluation/weights').ImpressionBase,
-      bToA: feelings.bToA.label as import('@/lib/evaluation/weights').ImpressionBase,
+      aToB: {
+        base: feelings.aToB.baseLabel,
+        special: feelings.aToB.specialLabel,
+        baseBeforeSpecial: feelings.aToB.baseBeforeSpecial,
+      },
+      bToA: {
+        base: feelings.bToA.baseLabel,
+        special: feelings.bToA.specialLabel,
+        baseBeforeSpecial: feelings.bToA.baseBeforeSpecial,
+      },
     },
     // Phase 2: A-4 3件窓
     recentDeltas: {
@@ -1258,8 +1367,8 @@ export async function runConversationFromApi(
   // 12) 関係遷移チェック（会話評価後・永続化後）
   const postFavorA = clampScore(feelings.aToB.score + Math.round(evalResult.deltas.aToB.favor));
   const postFavorB = clampScore(feelings.bToA.score + Math.round(evalResult.deltas.bToA.favor));
-  const postImpressionA = evalResult.deltas.aToB.impressionState.base as import("@repo/shared/types/conversation").ImpressionBase;
-  const postImpressionB = evalResult.deltas.bToA.impressionState.base as import("@repo/shared/types/conversation").ImpressionBase;
+  const postImpressionA = evalResult.deltas.aToB.impressionState.base as ImpressionBase;
+  const postImpressionB = evalResult.deltas.bToA.impressionState.base as ImpressionBase;
 
   const transition = checkRelationTransition({
     participantAId: participants[0],

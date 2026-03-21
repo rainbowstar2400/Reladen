@@ -215,7 +215,7 @@ const RELATIONS_ALLOWED = new Set([
 // feelings の許可カラム
 const FEELINGS_ALLOWED = new Set([
   'id', 'from_id', 'to_id', 'label', 'score', 'updated_at', 'deleted', 'owner_id',
-  'recent_deltas', 'last_contacted_at'
+  'recent_deltas', 'last_contacted_at', 'base_label', 'special_label', 'base_before_special'
 ]);
 
 // nicknames の許可カラム

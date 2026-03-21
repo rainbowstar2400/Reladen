@@ -362,11 +362,29 @@ async function updateFeelingLabel(
     score: 0,
     deleted: false,
   };
+  const normalizedCurrentBase = normalizeImpressionBase(
+    base.base_label ?? (base.label === "awkward" ? "none" : base.label),
+  );
+  const normalizedBaseBeforeSpecial = normalizeImpressionBase(
+    base.base_before_special,
+    normalizedCurrentBase,
+  );
+
+  const isAwkward = label === "awkward";
+  const nextBaseLabel = isAwkward ? normalizedCurrentBase : normalizeImpressionBase(label);
+  const nextSpecialLabel = isAwkward ? "awkward" : null;
+  const nextBaseBeforeSpecial = isAwkward
+    ? normalizedBaseBeforeSpecial
+    : null;
+
   await putAny("feelings", {
     ...base,
     from_id: fromId,
     to_id: toId,
-    label,
+    label: isAwkward ? "awkward" : nextBaseLabel,
+    base_label: nextBaseLabel,
+    special_label: nextSpecialLabel,
+    base_before_special: nextBaseBeforeSpecial,
     updated_at: now,
   });
 }

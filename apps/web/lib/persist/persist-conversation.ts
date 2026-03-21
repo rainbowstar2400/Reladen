@@ -9,6 +9,77 @@ import type {
 import { DEFAULT_FEELING_SCORE, type Feeling } from "@repo/shared/types";
 import type { EvaluationResult } from "@/lib/evaluation/evaluate-conversation";
 
+const FEELING_BASE_LABELS = new Set<Exclude<Feeling["label"], "awkward">>([
+  "dislike",
+  "maybe_dislike",
+  "none",
+  "curious",
+  "maybe_like",
+  "like",
+  "love",
+]);
+
+type FeelingBaseLabel = Exclude<Feeling["label"], "awkward">;
+
+function normalizeBaseLabel(value: unknown, fallback: FeelingBaseLabel = "none"): FeelingBaseLabel {
+  if (typeof value === "string" && FEELING_BASE_LABELS.has(value as FeelingBaseLabel)) {
+    return value as FeelingBaseLabel;
+  }
+  return fallback;
+}
+
+function normalizeNullableBaseLabel(value: unknown): FeelingBaseLabel | null {
+  if (typeof value !== "string") return null;
+  if (!FEELING_BASE_LABELS.has(value as FeelingBaseLabel)) return null;
+  return value as FeelingBaseLabel;
+}
+
+function toExistingFeelingState(record: Feeling | undefined): {
+  baseLabel: FeelingBaseLabel;
+  specialLabel: "awkward" | null;
+  baseBeforeSpecial: FeelingBaseLabel | null;
+} {
+  const label = typeof record?.label === "string" ? record.label : "none";
+  const baseFromLabel = label === "awkward" ? "none" : normalizeBaseLabel(label);
+  const baseLabel = normalizeBaseLabel((record as any)?.base_label, baseFromLabel);
+  const specialLabel = (record as any)?.special_label === "awkward" || label === "awkward"
+    ? "awkward"
+    : null;
+  const baseBeforeSpecial = normalizeNullableBaseLabel((record as any)?.base_before_special);
+  return {
+    baseLabel,
+    specialLabel,
+    baseBeforeSpecial,
+  };
+}
+
+function toPersistedFeelingState(params: {
+  state: EvaluationResult["deltas"]["aToB"]["impressionState"];
+  fallback: {
+    baseLabel: FeelingBaseLabel;
+    specialLabel: "awkward" | null;
+    baseBeforeSpecial: FeelingBaseLabel | null;
+  };
+}): {
+  label: Feeling["label"];
+  base_label: FeelingBaseLabel;
+  special_label: "awkward" | null;
+  base_before_special: FeelingBaseLabel | null;
+} {
+  const base = normalizeBaseLabel(params.state.base, params.fallback.baseLabel);
+  const special = params.state.special === "awkward" ? "awkward" : null;
+  const baseBeforeSpecialRaw = special === "awkward"
+    ? params.state.baseBeforeSpecial ?? params.fallback.baseBeforeSpecial ?? params.fallback.baseLabel
+    : null;
+  const baseBeforeSpecial = normalizeNullableBaseLabel(baseBeforeSpecialRaw);
+  return {
+    label: special === "awkward" ? "awkward" : base,
+    base_label: base,
+    special_label: special,
+    base_before_special: baseBeforeSpecial,
+  };
+}
+
 
 async function updateRelationsAndFeelings(params: {
   participants: [string, string];
@@ -17,24 +88,6 @@ async function updateRelationsAndFeelings(params: {
 }) {
   const [a, b] = params.participants;
   const now = new Date().toISOString();
-
-  const impressionToFeelingLabel = (
-    state: EvaluationResult["deltas"]["aToB"]["impressionState"],
-    fallback: Feeling["label"],
-  ): Feeling["label"] => {
-    const impression = state.special === 'awkward' ? 'awkward' : state.base;
-    const map: Record<string, Feeling["label"]> = {
-      dislike: "dislike",
-      maybe_dislike: "maybe_dislike",
-      awkward: "awkward",
-      none: "none",
-      curious: "curious",
-      maybe_like: "maybe_like",
-      like: "like",
-      love: "love",
-    };
-    return map[String(impression)] ?? fallback ?? "none";
-  };
 
   const clampScore = (value: number) => {
     if (!Number.isFinite(value)) return DEFAULT_FEELING_SCORE;
@@ -72,14 +125,16 @@ async function updateRelationsAndFeelings(params: {
   const curScoreAB = normalizeCurrentScore(recAB?.score);
   const curScoreBA = normalizeCurrentScore(recBA?.score);
 
-  const nextLabelAB = impressionToFeelingLabel(
-    params.deltas.aToB.impressionState,
-    recAB?.label ?? "none",
-  );
-  const nextLabelBA = impressionToFeelingLabel(
-    params.deltas.bToA.impressionState,
-    recBA?.label ?? "none",
-  );
+  const fallbackStateAB = toExistingFeelingState(recAB);
+  const fallbackStateBA = toExistingFeelingState(recBA);
+  const nextStateAB = toPersistedFeelingState({
+    state: params.deltas.aToB.impressionState,
+    fallback: fallbackStateAB,
+  });
+  const nextStateBA = toPersistedFeelingState({
+    state: params.deltas.bToA.impressionState,
+    fallback: fallbackStateBA,
+  });
 
   const nextScoreAB = favorToScore(curScoreAB, params.deltas.aToB.favor);
   const nextScoreBA = favorToScore(curScoreBA, params.deltas.bToA.favor);
@@ -89,7 +144,10 @@ async function updateRelationsAndFeelings(params: {
     id: idAB,
     from_id: a,
     to_id: b,
-    label: nextLabelAB,
+    label: nextStateAB.label,
+    base_label: nextStateAB.base_label,
+    special_label: nextStateAB.special_label,
+    base_before_special: nextStateAB.base_before_special,
     score: nextScoreAB,
     recent_deltas: params.recentDeltas.aToB,
     last_contacted_at: now,
@@ -102,7 +160,10 @@ async function updateRelationsAndFeelings(params: {
     id: idBA,
     from_id: b,
     to_id: a,
-    label: nextLabelBA,
+    label: nextStateBA.label,
+    base_label: nextStateBA.base_label,
+    special_label: nextStateBA.special_label,
+    base_before_special: nextStateBA.base_before_special,
     score: nextScoreBA,
     recent_deltas: params.recentDeltas.bToA,
     last_contacted_at: now,

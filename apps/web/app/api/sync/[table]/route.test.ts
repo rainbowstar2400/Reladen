@@ -478,7 +478,7 @@ describe('POST /api/sync/[table]', () => {
     expect(mocks.upsert.mock.calls[0][0][0].family_sub_type).toBe('sister');
   });
 
-  it('同期許可列: feelings.recentDeltas / lastContactedAt を snake_case として upsert する', async () => {
+  it('同期許可列: feelings の拡張列を snake_case として upsert する', async () => {
     mocks.upsert.mockResolvedValue({ error: null });
     mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
 
@@ -493,6 +493,9 @@ describe('POST /api/sync/[table]', () => {
             score: 42,
             recentDeltas: [3, -1, 2],
             lastContactedAt: '2026-03-15T02:00:00.000Z',
+            baseLabel: 'like',
+            specialLabel: null,
+            baseBeforeSpecial: 'curious',
             updated_at: '2026-03-15T02:00:01.000Z',
             deleted: false,
           },
@@ -507,6 +510,9 @@ describe('POST /api/sync/[table]', () => {
     expect(mocks.upsert).toHaveBeenCalledTimes(1);
     expect(mocks.upsert.mock.calls[0][0][0].recent_deltas).toEqual([3, -1, 2]);
     expect(mocks.upsert.mock.calls[0][0][0].last_contacted_at).toBe('2026-03-15T02:00:00.000Z');
+    expect(mocks.upsert.mock.calls[0][0][0].base_label).toBe('like');
+    expect(mocks.upsert.mock.calls[0][0][0].special_label).toBe(null);
+    expect(mocks.upsert.mock.calls[0][0][0].base_before_special).toBe('curious');
   });
 
   it('同期許可列: nicknames.locked を upsert する', async () => {

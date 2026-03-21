@@ -80,7 +80,15 @@ describe("persistConversation", () => {
   const findFeelingWrite = (fromId: string, toId: string) => {
     return mocks.putKV.mock.calls
       .filter((call) => call[0] === "feelings")
-      .map((call) => call[1] as { from_id?: string; to_id?: string; score?: number })
+      .map((call) => call[1] as {
+        from_id?: string;
+        to_id?: string;
+        score?: number;
+        label?: string;
+        base_label?: string;
+        special_label?: string | null;
+        base_before_special?: string | null;
+      })
       .find((payload) => payload.from_id === fromId && payload.to_id === toId);
   };
 
@@ -184,5 +192,35 @@ describe("persistConversation", () => {
     const ba = findFeelingWrite(B_ID, A_ID);
     expect(ab?.score).toBe(30);
     expect(ba?.score).toBe(30);
+  });
+
+  it("impressionState の3層を feelings に保存する", async () => {
+    const evalResult = makeEvalResult();
+    evalResult.deltas.aToB.impressionState = {
+      base: "maybe_like",
+      special: "awkward",
+      baseBeforeSpecial: "curious",
+    };
+    evalResult.deltas.bToA.impressionState = {
+      base: "like",
+      special: null,
+      baseBeforeSpecial: null,
+    };
+
+    await persistConversation({
+      gptOut: baseGptOut,
+      evalResult,
+    });
+
+    const ab = findFeelingWrite(A_ID, B_ID);
+    const ba = findFeelingWrite(B_ID, A_ID);
+    expect(ab?.label).toBe("awkward");
+    expect(ab?.base_label).toBe("maybe_like");
+    expect(ab?.special_label).toBe("awkward");
+    expect(ab?.base_before_special).toBe("curious");
+    expect(ba?.label).toBe("like");
+    expect(ba?.base_label).toBe("like");
+    expect(ba?.special_label).toBe(null);
+    expect(ba?.base_before_special).toBe(null);
   });
 });
