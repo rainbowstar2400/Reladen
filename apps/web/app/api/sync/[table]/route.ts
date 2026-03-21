@@ -81,16 +81,8 @@ function isUniqueViolation(error: any): boolean {
   return code === '23505' || /duplicate key value violates unique constraint/i.test(message);
 }
 
-function isMissingColumnError(error: any, column: string): boolean {
-  const message = String(error?.message ?? '');
-  return /column .* does not exist/i.test(message) && message.includes(column);
-}
-
-type ConsultVariant = 'snake' | 'compact';
-
 function buildConsultAnswerPayload(
   incomingData: Record<string, any>,
-  variant: ConsultVariant,
   allowedCols: Set<string>,
   fallbackUpdatedAt?: string,
 ) {
@@ -122,15 +114,31 @@ function buildConsultAnswerPayload(
     payload.deleted = incomingData.deleted;
   }
 
-  if (variant === 'snake') {
-    if (allowedCols.has('selected_choice_id')) payload.selected_choice_id = selectedChoiceId ?? null;
-    if (allowedCols.has('decided_at')) payload.decided_at = decidedAt ?? null;
-  } else {
-    if (allowedCols.has('selectedchoiceid')) payload.selectedchoiceid = selectedChoiceId ?? null;
-    if (allowedCols.has('decidedat')) payload.decidedat = decidedAt ?? null;
-  }
+  if (allowedCols.has('selected_choice_id')) payload.selected_choice_id = selectedChoiceId ?? null;
+  if (allowedCols.has('decided_at')) payload.decided_at = decidedAt ?? null;
 
   return payload;
+}
+
+function normalizeConsultAnswerRowForResponse(row: Record<string, any>) {
+  const normalized = { ...row };
+  const selectedChoiceId = pickFirst(
+    normalized.selected_choice_id,
+    normalized.selectedChoiceId,
+    normalized.selectedchoiceid,
+  );
+  const decidedAt = pickFirst(
+    normalized.decided_at,
+    normalized.decidedAt,
+    normalized.decidedat,
+  );
+  if (selectedChoiceId !== undefined) normalized.selected_choice_id = selectedChoiceId;
+  if (decidedAt !== undefined) normalized.decided_at = decidedAt;
+  delete normalized.selectedchoiceid;
+  delete normalized.decidedat;
+  delete normalized.selectedChoiceId;
+  delete normalized.decidedAt;
+  return normalized;
 }
 
 async function pushConsultAnswersRows(args: {
@@ -145,47 +153,24 @@ async function pushConsultAnswersRows(args: {
 
   for (const change of incoming) {
     const incomingData = { ...(change.data ?? {}) };
-    if (incomingData.updated_at == null && typeof change.updated_at === 'string') {
-      incomingData.updated_at = change.updated_at;
-    }
+    resolveIncomingUpdatedAt(incomingData, change.updated_at);
     if (incomingData.deleted == null && typeof change.deleted === 'boolean') {
       incomingData.deleted = change.deleted;
     }
     if (!incomingData.id) continue;
 
-    const variants: ConsultVariant[] = ['snake', 'compact'];
-    let handled = false;
-
-    for (let i = 0; i < variants.length; i += 1) {
-      const variant = variants[i];
-      const payload = buildConsultAnswerPayload(incomingData, variant, allowedCols, change.updated_at);
-      if (allowedCols.has('owner_id')) payload.owner_id = ownerId;
-
-      const { error } = await sb.from(table).insert(payload);
-      if (!error) {
-        pushed += 1;
-        handled = true;
-        break;
-      }
-      if (isUniqueViolation(error)) {
-        // first-write-wins: 既存回答が正。後着は no-op 扱い。
-        handled = true;
-        break;
-      }
-
-      const shouldFallback =
-        variant === 'snake'
-        && (
-          isMissingColumnError(error, 'selected_choice_id')
-          || isMissingColumnError(error, 'decided_at')
-        );
-      if (shouldFallback && i < variants.length - 1) continue;
-      throw asHttpError('insert failed', error);
+    const payload = buildConsultAnswerPayload(incomingData, allowedCols, change.updated_at);
+    if (allowedCols.has('owner_id')) payload.owner_id = ownerId;
+    const { error } = await sb.from(table).insert(payload);
+    if (!error) {
+      pushed += 1;
+      continue;
     }
-
-    if (!handled) {
-      throw asHttpError('insert failed', new Error('consult_answers row push failed'));
+    if (isUniqueViolation(error)) {
+      // first-write-wins: 既存回答が正。後着は no-op 扱い。
+      continue;
     }
+    throw asHttpError('insert failed', error);
   }
 
   return pushed;
@@ -219,22 +204,23 @@ const RESIDENTS_ALLOWED = new Set([
   'id', 'name', 'updated_at', 'deleted', 'owner_id',
   'mbti', 'traits', 'speech_preset', 'gender', 'age',
   'birthday', 'occupation', 'first_person', 'interests', 'sleep_profile',
-  'trust_to_player'
+  'trust_to_player', 'nickname_tendency'
 ]);
 
 // relations の許可カラム
 const RELATIONS_ALLOWED = new Set([
-  'id', 'a_id', 'b_id', 'type', 'updated_at', 'deleted', 'owner_id'
+  'id', 'a_id', 'b_id', 'type', 'updated_at', 'deleted', 'owner_id', 'family_sub_type'
 ]);
 
 // feelings の許可カラム
 const FEELINGS_ALLOWED = new Set([
-  'id', 'from_id', 'to_id', 'label', 'score', 'updated_at', 'deleted', 'owner_id'
+  'id', 'from_id', 'to_id', 'label', 'score', 'updated_at', 'deleted', 'owner_id',
+  'recent_deltas', 'last_contacted_at'
 ]);
 
 // nicknames の許可カラム
 const NICKNAMES_ALLOWED = new Set([
-  'id', 'from_id', 'to_id', 'nickname', 'updated_at', 'deleted', 'owner_id'
+  'id', 'from_id', 'to_id', 'nickname', 'updated_at', 'deleted', 'owner_id', 'locked'
 ]);
 
 // events の許可カラム
@@ -255,15 +241,13 @@ const WORLD_STATES_ALLOWED = new Set([
   'owner_id', 'updated_at', 'deleted'
 ]);
 
-// consult_answers のカラム表記ゆらぎ（snake/compact）をどちらも受ける
+// consult_answers の内部契約は snake_case に統一する
 const CONSULT_ANSWERS_ALLOWED = new Set([
   'id',
   'updated_at',
   'deleted',
   'selected_choice_id',
   'decided_at',
-  'selectedchoiceid',
-  'decidedat',
 ]);
 
 // 許可リストのマップ (キーは sync.ts と一致)
@@ -423,7 +407,9 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     const resp = syncResponseSchema.parse({
       table,
       changes: cloud.map((row) => ({
-        data: row, // DBからは snake_case で返る (client-side Drizzle が処理する)
+        data: table === 'consult_answers'
+          ? normalizeConsultAnswerRowForResponse(row as Record<string, any>)
+          : row, // DBからは snake_case で返る (client-side Drizzle が処理する)
         updated_at: row.updated_at,
         deleted: !!row.deleted,
       })),

@@ -94,8 +94,10 @@ describe('POST /api/sync/[table]', () => {
     expect(payload.owner_id).toBeUndefined();
     expect(payload.id).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
     expect(payload.updated_at).toBe('2026-03-14T00:00:00.000Z');
-    expect(payload.selected_choice_id ?? payload.selectedchoiceid).toBe('choice_1');
-    expect(payload.decided_at ?? payload.decidedat).toBe('2026-03-14T00:00:00.000Z');
+    expect(payload.selected_choice_id).toBe('choice_1');
+    expect(payload.decided_at).toBe('2026-03-14T00:00:00.000Z');
+    expect(payload.selectedchoiceid).toBeUndefined();
+    expect(payload.decidedat).toBeUndefined();
   });
 
   it('consult_answers の重複 insert は no-op 成功にする（first-write-wins）', async () => {
@@ -131,14 +133,8 @@ describe('POST /api/sync/[table]', () => {
     expect(mocks.insert).toHaveBeenCalledTimes(1);
   });
 
-  it('snake_case 列が無い環境では compact 列へフォールバックして insert する', async () => {
-    mocks.insert
-      .mockResolvedValueOnce({
-        error: {
-          message: 'column "selected_choice_id" of relation "consult_answers" does not exist',
-        },
-      })
-      .mockResolvedValueOnce({ error: null });
+  it('compact 入力を受理し、snake_case 列へ正規化して insert する', async () => {
+    mocks.insert.mockResolvedValue({ error: null });
     mocks.from.mockImplementation((table: string) => {
       if (table === 'consult_answers') return { insert: mocks.insert };
       return { upsert: mocks.upsert, select: mocks.select };
@@ -149,8 +145,8 @@ describe('POST /api/sync/[table]', () => {
         {
           data: {
             id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-            selectedChoiceId: 'choice_3',
-            decidedAt: '2026-03-14T02:00:00.000Z',
+            selectedchoiceid: 'choice_3',
+            decidedat: '2026-03-14T02:00:00.000Z',
             updated_at: '2026-03-14T02:00:00.000Z',
             deleted: false,
           },
@@ -162,11 +158,51 @@ describe('POST /api/sync/[table]', () => {
 
     const res = await POST(req as any, { params: { table: 'consult_answers' } } as any);
     expect(res.status).toBe(200);
-    expect(mocks.insert).toHaveBeenCalledTimes(2);
-    const compactPayload = mocks.insert.mock.calls[1][0];
-    expect(compactPayload.selectedchoiceid).toBe('choice_3');
-    expect(compactPayload.decidedat).toBe('2026-03-14T02:00:00.000Z');
-    expect(compactPayload.owner_id).toBeUndefined();
+    expect(mocks.insert).toHaveBeenCalledTimes(1);
+    const payload = mocks.insert.mock.calls[0][0];
+    expect(payload.selected_choice_id).toBe('choice_3');
+    expect(payload.decided_at).toBe('2026-03-14T02:00:00.000Z');
+    expect(payload.selectedchoiceid).toBeUndefined();
+    expect(payload.decidedat).toBeUndefined();
+    expect(payload.owner_id).toBeUndefined();
+  });
+
+  it('consult_answers pull 応答では compact 列を snake_case へ正規化する', async () => {
+    mocks.gte.mockResolvedValue({
+      data: [
+        {
+          id: '12121212-1212-4121-8121-121212121212',
+          selectedchoiceid: 'choice_9',
+          decidedat: '2026-03-14T09:00:00.000Z',
+          updated_at: '2026-03-14T09:00:00.000Z',
+          deleted: false,
+        },
+      ],
+      error: null,
+    });
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'consult_answers') {
+        return {
+          insert: mocks.insert,
+          select: (_columns?: string) => ({ gte: mocks.gte }),
+        };
+      }
+      return makeGenericTableFromMock();
+    });
+
+    const req = makeRequest('consult_answers', {
+      since: '2026-03-14T00:00:00.000Z',
+      changes: [],
+    });
+
+    const res = await POST(req as any, { params: { table: 'consult_answers' } } as any);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const row = body.changes[0].data;
+    expect(row.selected_choice_id).toBe('choice_9');
+    expect(row.decided_at).toBe('2026-03-14T09:00:00.000Z');
+    expect(row.selectedchoiceid).toBeUndefined();
+    expect(row.decidedat).toBeUndefined();
   });
 
   it('consult_answers insert の RLS エラーを 401 として返す', async () => {
@@ -386,5 +422,118 @@ describe('POST /api/sync/[table]', () => {
     expect(res.status).toBe(200);
     expect(mocks.upsert).toHaveBeenCalledTimes(1);
     expect(mocks.upsert.mock.calls[0][0][0].updated_at).toBe('2026-01-03T00:00:00.000Z');
+  });
+
+  it('同期許可列: residents.nicknameTendency を nickname_tendency として upsert する', async () => {
+    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const req = makeRequest('residents', {
+      changes: [
+        {
+          data: {
+            id: '10101010-1010-4101-8101-101010101010',
+            name: 'Alice',
+            nicknameTendency: 'nickname',
+            updated_at: '2026-03-15T00:00:00.000Z',
+            deleted: false,
+          },
+          updated_at: '2026-03-15T00:00:00.000Z',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'residents' } } as any);
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert.mock.calls[0][0][0].nickname_tendency).toBe('nickname');
+  });
+
+  it('同期許可列: relations.familySubType を family_sub_type として upsert する', async () => {
+    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const req = makeRequest('relations', {
+      changes: [
+        {
+          data: {
+            id: '20202020-2020-4202-8202-202020202020',
+            aId: '11111111-1111-4111-8111-111111111111',
+            bId: '22222222-2222-4222-8222-222222222222',
+            type: 'family',
+            familySubType: 'sister',
+            updated_at: '2026-03-15T01:00:00.000Z',
+            deleted: false,
+          },
+          updated_at: '2026-03-15T01:00:00.000Z',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'relations' } } as any);
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert.mock.calls[0][0][0].family_sub_type).toBe('sister');
+  });
+
+  it('同期許可列: feelings.recentDeltas / lastContactedAt を snake_case として upsert する', async () => {
+    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const req = makeRequest('feelings', {
+      changes: [
+        {
+          data: {
+            id: '30303030-3030-4303-8303-303030303030',
+            fromId: '11111111-1111-4111-8111-111111111111',
+            toId: '22222222-2222-4222-8222-222222222222',
+            label: 'like',
+            score: 42,
+            recentDeltas: [3, -1, 2],
+            lastContactedAt: '2026-03-15T02:00:00.000Z',
+            updated_at: '2026-03-15T02:00:01.000Z',
+            deleted: false,
+          },
+          updated_at: '2026-03-15T02:00:01.000Z',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'feelings' } } as any);
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert.mock.calls[0][0][0].recent_deltas).toEqual([3, -1, 2]);
+    expect(mocks.upsert.mock.calls[0][0][0].last_contacted_at).toBe('2026-03-15T02:00:00.000Z');
+  });
+
+  it('同期許可列: nicknames.locked を upsert する', async () => {
+    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const req = makeRequest('nicknames', {
+      changes: [
+        {
+          data: {
+            id: '40404040-4040-4404-8404-404040404040',
+            fromId: '11111111-1111-4111-8111-111111111111',
+            toId: '22222222-2222-4222-8222-222222222222',
+            nickname: 'Aちゃん',
+            locked: true,
+            updated_at: '2026-03-15T03:00:00.000Z',
+            deleted: false,
+          },
+          updated_at: '2026-03-15T03:00:00.000Z',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'nicknames' } } as any);
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert.mock.calls[0][0][0].locked).toBe(true);
   });
 });
