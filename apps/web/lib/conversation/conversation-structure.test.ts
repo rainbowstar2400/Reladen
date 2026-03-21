@@ -83,5 +83,41 @@ describe("conversation-structure (third_party)", () => {
     expect(TOPIC_INTEREST_FAVOR_ATTENUATION).toBe(0.5);
     expect(stance).toBe("indifferent");
   });
+
+  it("snippet 話題は高関心扱いで受け手スタンスが受動化しにくい", () => {
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.99);
+
+    const structure = buildConversationStructure({
+      characterA: {
+        id: A_ID,
+        name: "A",
+        traits: { sociability: 4, expressiveness: 4, empathy: 4, stubbornness: 2, activity: 3 },
+        interests: ["料理"],
+      },
+      characterB: {
+        id: B_ID,
+        name: "B",
+        traits: { sociability: 4, expressiveness: 4, empathy: 4, stubbornness: 2, activity: 3 },
+        interests: ["料理"],
+      },
+      relation: {
+        type: "friend",
+        feelingAtoB: { label: "like", score: 70 },
+        feelingBtoA: { label: "like", score: 70 },
+      },
+      topic: {
+        source: "snippet",
+        label: "共有した出来事",
+        detail: "共有体験",
+      },
+      initiatorOverrideId: A_ID,
+    });
+
+    randomSpy.mockRestore();
+
+    expect(structure.initiatorStance).not.toBe("indifferent");
+    expect(structure.responderStance).not.toBe("indifferent");
+    expect(structure.responderStance).not.toBe("reluctant");
+  });
 });
 
