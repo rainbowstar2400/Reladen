@@ -91,6 +91,10 @@ describe("persistConversation", () => {
       })
       .find((payload) => payload.from_id === fromId && payload.to_id === toId);
   };
+  const findNotificationWrite = () => {
+    const call = mocks.putKV.mock.calls.find((entry) => entry[0] === "notifications");
+    return call?.[1] as { snippet?: string } | undefined;
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -136,6 +140,30 @@ describe("persistConversation", () => {
     expect(
       mocks.putKV.mock.calls.some((call) => call[0] === "notifications"),
     ).toBe(true);
+  });
+
+  it("会話通知の snippet は短文でも末尾に … が付く", async () => {
+    await persistConversation({
+      gptOut: {
+        ...baseGptOut,
+        lines: [{ speaker: A_ID, text: "短文です" }],
+      },
+      evalResult: makeEvalResult(),
+    });
+
+    expect(findNotificationWrite()?.snippet).toBe("短文です…");
+  });
+
+  it("会話通知の snippet は本文20文字で切り詰められる", async () => {
+    await persistConversation({
+      gptOut: {
+        ...baseGptOut,
+        lines: [{ speaker: A_ID, text: "1234567890123456789012345" }],
+      },
+      evalResult: makeEvalResult(),
+    });
+
+    expect(findNotificationWrite()?.snippet).toBe("12345678901234567890…");
   });
 
   it("feelings 未存在時は好感度を 30 から開始する", async () => {

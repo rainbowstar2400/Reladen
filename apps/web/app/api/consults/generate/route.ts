@@ -196,7 +196,7 @@ export async function POST(req: Request) {
 
     // notification 作成
     const notifId = newId();
-    const snippet = themeResult.content.slice(0, 57) + (themeResult.content.length > 57 ? "…" : "");
+    const snippet = themeResult.content.slice(0, 30) + (themeResult.content.length > 30 ? "…" : "");
     await putAny("notifications", {
       id: notifId,
       type: "consult",

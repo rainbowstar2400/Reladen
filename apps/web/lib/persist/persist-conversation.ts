@@ -235,6 +235,13 @@ async function createNotification(params: {
   });
 }
 
+function formatConversationNotificationSnippet(firstLine?: { text?: string }): string {
+  const baseText = typeof firstLine?.text === "string" && firstLine.text.length > 0
+    ? firstLine.text
+    : "会話が発生しました。";
+  return `${baseText.slice(0, 20)}…`;
+}
+
 /**
  * 会話の永続化：events / topic_threads / notifications / feelings
  */
@@ -282,9 +289,7 @@ export async function persistConversation(params: {
   // 4) 通知登録
   // gptOut.lines が null の場合を考慮
   const first = Array.isArray(gptOut.lines) ? gptOut.lines[0] : undefined;
-  const snippet = first
-    ? `${first.speaker.slice(0, 4)}: ${first.text.slice(0, 60)}…`
-    : undefined;
+  const snippet = formatConversationNotificationSnippet(first);
 
   await createNotification({
     linkedEventId: eventId,

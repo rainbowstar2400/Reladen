@@ -22,6 +22,11 @@ import { useSync } from '@/lib/sync/use-sync';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { calcSituation, type Situation, type SleepProfile } from '../../../../packages/shared/logic/schedule';
 import { useQueryClient } from '@tanstack/react-query';
+import {
+  setPeekCacheEntry,
+  shouldReusePeekCache,
+  type PeekCacheEntry,
+} from '@/lib/peek/peek-cache';
 
 const notoSans = Noto_Sans_JP({
   weight: ['300', '400', '500', '600'],
@@ -105,12 +110,7 @@ export function HomeContent() {
   const [peekInteraction, setPeekInteraction] = useState<{ partnerName: string; kind: string } | null>(
     null
   );
-  const [peekResult, setPeekResult] = useState<{
-    residentId: string;
-    situation: string;
-    monologue: string;
-    fetchedAt: number;
-  } | null>(null);
+  const [peekResultByResidentId, setPeekResultByResidentId] = useState<Record<string, PeekCacheEntry>>({});
   const [peekLoading, setPeekLoading] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'trust'>('name');
   const [searchTerm, setSearchTerm] = useState('');
@@ -557,18 +557,18 @@ export function HomeContent() {
     const name = residentNameMap[top.to_id] ?? top.to_id;
     return { name, score: top.score ?? 0 };
   }, [feelings, activePeekResidentId, residentNameMap]);
+  const activePeekResult = useMemo(() => {
+    if (!activePeekResidentId) return null;
+    return peekResultByResidentId[activePeekResidentId] ?? null;
+  }, [activePeekResidentId, peekResultByResidentId]);
 
   // --- 覗く API 呼び出し（30分キャッシュ） ---
   useEffect(() => {
     if (!activePeekResidentId || panelMode !== 'right-peek') return;
 
-    // キャッシュチェック: 同じ住人で30分以内ならスキップ
+    // キャッシュチェック: 住人ごとに30分以内ならスキップ
     const CACHE_TTL_MS = 30 * 60 * 1000;
-    if (
-      peekResult &&
-      peekResult.residentId === activePeekResidentId &&
-      Date.now() - peekResult.fetchedAt < CACHE_TTL_MS
-    ) {
+    if (shouldReusePeekCache(peekResultByResidentId, activePeekResidentId, Date.now(), CACHE_TTL_MS)) {
       return;
     }
 
@@ -597,12 +597,13 @@ export function HomeContent() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!alive || !data) return;
-        setPeekResult({
-          residentId: activePeekResidentId,
-          situation: data.situation,
-          monologue: data.monologue,
-          fetchedAt: Date.now(),
-        });
+        setPeekResultByResidentId((prev) =>
+          setPeekCacheEntry(prev, activePeekResidentId, {
+            situation: data.situation,
+            monologue: data.monologue,
+            fetchedAt: Date.now(),
+          })
+        );
       })
       .catch(() => {})
       .finally(() => {
@@ -1071,11 +1072,11 @@ export function HomeContent() {
                         <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
                         様子を見ています…
                       </div>
-                    ) : peekResult && peekResult.residentId === activePeekResidentId ? (
+                    ) : activePeekResult ? (
                       <>
-                        <div className="leading-relaxed">{peekResult.situation}</div>
+                        <div className="leading-relaxed">{activePeekResult.situation}</div>
                         <div className="mt-2 rounded-lg border border-white/50 bg-white/30 px-3 py-2 text-sm italic">
-                          「{peekResult.monologue}」
+                          「{activePeekResult.monologue}」
                         </div>
                       </>
                     ) : (

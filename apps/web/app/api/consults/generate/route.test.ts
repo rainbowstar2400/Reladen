@@ -112,5 +112,57 @@ describe("POST /api/consults/generate", () => {
     expect(body.error).toBe("trigger_already_handled");
     expect(mocks.putKV).not.toHaveBeenCalled();
   });
+
+  it("通常相談の通知 snippet は 30文字以下なら省略記号を付けない", async () => {
+    mocks.generateConsultTheme.mockResolvedValue({
+      title: "相談タイトル",
+      content: "123456789012345678901234567890",
+      choices: [
+        { id: "a", label: "A", favorability: "positive" },
+        { id: "b", label: "B", favorability: "neutral" },
+        { id: "c", label: "C", favorability: "negative" },
+      ],
+    });
+    mocks.listKV.mockImplementation(async (table: string) => {
+      if (table === "events") return [];
+      if (table === "residents") {
+        return [{ id: RESIDENT_ID, name: "住人A", deleted: false, traits: {}, trustToPlayer: 50 }];
+      }
+      if (table === "presets") return [];
+      return [];
+    });
+
+    const res = await POST(makeRequest({ residentId: RESIDENT_ID }));
+    expect(res.status).toBe(200);
+
+    const notificationWrite = mocks.putKV.mock.calls.find(([table]) => table === "notifications");
+    expect(notificationWrite?.[1]?.snippet).toBe("123456789012345678901234567890");
+  });
+
+  it("通常相談の通知 snippet は 30文字超過時のみ省略記号を付ける", async () => {
+    mocks.generateConsultTheme.mockResolvedValue({
+      title: "相談タイトル",
+      content: "1234567890123456789012345678901",
+      choices: [
+        { id: "a", label: "A", favorability: "positive" },
+        { id: "b", label: "B", favorability: "neutral" },
+        { id: "c", label: "C", favorability: "negative" },
+      ],
+    });
+    mocks.listKV.mockImplementation(async (table: string) => {
+      if (table === "events") return [];
+      if (table === "residents") {
+        return [{ id: RESIDENT_ID, name: "住人A", deleted: false, traits: {}, trustToPlayer: 50 }];
+      }
+      if (table === "presets") return [];
+      return [];
+    });
+
+    const res = await POST(makeRequest({ residentId: RESIDENT_ID }));
+    expect(res.status).toBe(200);
+
+    const notificationWrite = mocks.putKV.mock.calls.find(([table]) => table === "notifications");
+    expect(notificationWrite?.[1]?.snippet).toBe("123456789012345678901234567890…");
+  });
 });
 

@@ -215,9 +215,12 @@ function makeNotificationForEvent(ev: EventLogStrict): LocalNotificationEntity {
   const now = new Date().toISOString();
   const p = isConversationPayload(ev.payload) ? ev.payload : undefined;
 
-  const snippet =
-    (p?.lines?.[0]?.text?.slice(0, 60) ?? '会話が発生しました。') +
-    (p?.lines && p.lines.length > 1 ? ' …' : '');
+  const firstLine = p?.lines?.[0];
+  const baseText =
+    typeof firstLine?.text === 'string' && firstLine.text.length > 0
+      ? firstLine.text
+      : '会話が発生しました。';
+  const snippet = `${baseText.slice(0, 20)}…`;
 
   const base: NotificationRecord = {
     id: newId(),
