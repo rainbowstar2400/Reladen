@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   newId: vi.fn(),
   selectTopic: vi.fn(),
   buildConversationStructure: vi.fn(),
+  shouldGeneratePromise: vi.fn(),
 }));
 
 vi.mock("@/lib/db/kv-server", () => ({
@@ -57,6 +58,16 @@ vi.mock("@repo/shared/logic/conversation-structure", async () => {
   return {
     ...actual,
     buildConversationStructure: mocks.buildConversationStructure,
+  };
+});
+
+vi.mock("@repo/shared/logic/promise", async () => {
+  const actual = await vi.importActual<typeof import("@repo/shared/logic/promise")>(
+    "@repo/shared/logic/promise",
+  );
+  return {
+    ...actual,
+    shouldGeneratePromise: mocks.shouldGeneratePromise,
   };
 });
 
@@ -227,6 +238,7 @@ describe("run-conversation", () => {
 
     mocks.evaluateConversation.mockImplementation((_input: EvalInput) => baseEvalResult);
     mocks.persistConversation.mockResolvedValue({ eventId: EVENT_ID });
+    mocks.shouldGeneratePromise.mockReturnValue(false);
   });
 
   it("threadId 経路では topic_threads から participants を解決する", async () => {
@@ -368,6 +380,72 @@ describe("run-conversation", () => {
     expect(topicInput?.situation).toBe("昼休みの廊下で同時に足を止め、目が合った");
     expect(structureInput?.initiatorOverrideId).toBe(selectedInitiator?.id);
     expect(result.debug.structure.initiator).toBe("Bob");
+  });
+
+  it("約束抽選は主導者がAのとき feelingAtoB.score を使う", async () => {
+    await runConversation({
+      participants: [A_ID, B_ID],
+      characters: {
+        [A_ID]: {
+          id: A_ID,
+          name: "Alice",
+          traits: { sociability: 5, activity: 5, expressiveness: 4, stubbornness: 4 },
+          interests: ["料理", "釣り"],
+        },
+        [B_ID]: {
+          id: B_ID,
+          name: "Bob",
+          traits: { sociability: 1, activity: 1, expressiveness: 1, stubbornness: 1 },
+          interests: ["料理"],
+        },
+      },
+      relation: {
+        type: "friend",
+        feelingAtoB: { label: "curious", score: 42 },
+        feelingBtoA: { label: "like", score: 77 },
+      },
+      environment: {
+        timeOfDay: "昼",
+      },
+      threadId: THREAD_ID,
+      situation: "廊下で偶然目が合った",
+    });
+
+    const promiseInput = mocks.shouldGeneratePromise.mock.calls[0]?.[0];
+    expect(promiseInput?.favorScore).toBe(42);
+  });
+
+  it("約束抽選は主導者がBのとき feelingBtoA.score を使う", async () => {
+    await runConversation({
+      participants: [A_ID, B_ID],
+      characters: {
+        [A_ID]: {
+          id: A_ID,
+          name: "Alice",
+          traits: { sociability: 1, activity: 1, expressiveness: 1, stubbornness: 1 },
+          interests: ["料理"],
+        },
+        [B_ID]: {
+          id: B_ID,
+          name: "Bob",
+          traits: { sociability: 5, activity: 5, expressiveness: 4, stubbornness: 4 },
+          interests: ["料理", "釣り"],
+        },
+      },
+      relation: {
+        type: "friend",
+        feelingAtoB: { label: "curious", score: 42 },
+        feelingBtoA: { label: "like", score: 77 },
+      },
+      environment: {
+        timeOfDay: "昼",
+      },
+      threadId: THREAD_ID,
+      situation: "廊下で偶然目が合った",
+    });
+
+    const promiseInput = mocks.shouldGeneratePromise.mock.calls[0]?.[0];
+    expect(promiseInput?.favorScore).toBe(77);
   });
 
   it("runConversationFromApi は会話履歴の situation を recentSituations として渡す", async () => {

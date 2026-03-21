@@ -178,6 +178,17 @@ function toCharacterProfile(profile: RunCharacterProfile): CharacterProfile {
   };
 }
 
+function resolveFavorScoreByInitiator(
+  participants: [string, string],
+  relation: RunConversationArgs["relation"],
+  initiatorId: string,
+): number {
+  const [aId, bId] = participants;
+  if (initiatorId === aId) return relation.feelingAtoB.score;
+  if (initiatorId === bId) return relation.feelingBtoA.score;
+  return relation.feelingAtoB.score;
+}
+
 // ---------------------------------------------------------------------------
 // KV データ読み込み
 // ---------------------------------------------------------------------------
@@ -722,15 +733,6 @@ export async function runConversation(
     seedResponder,
   );
 
-  // --- 1.5. 約束フラグ抽選 ---
-  const isContinuation = topic.source === 'continuation';
-  const promiseFlag = !isContinuation && shouldGeneratePromise({
-    relationType: args.relation.type,
-    topicSource: topic.source,
-    favorScore: args.relation.feelingAtoB.score,
-  });
-  const conversationType = determineConversationType(topic.source, promiseFlag);
-
   // --- 2. 会話構造決定 ---
   const structureInput: StructureInput = {
     characterA: ctxA,
@@ -740,6 +742,21 @@ export async function runConversation(
     initiatorOverrideId: seedInitiator.id,
   };
   const structure = buildConversationStructure(structureInput);
+
+  // --- 2.5. 約束フラグ抽選 ---
+  // 約束抽選は「主導者 -> 相手」の好感度軸で確率計算する。
+  const initiatorFavorScore = resolveFavorScoreByInitiator(
+    args.participants,
+    args.relation,
+    structure.initiatorId,
+  );
+  const isContinuation = topic.source === 'continuation';
+  const promiseFlag = !isContinuation && shouldGeneratePromise({
+    relationType: args.relation.type,
+    topicSource: topic.source,
+    favorScore: initiatorFavorScore,
+  });
+  const conversationType = determineConversationType(topic.source, promiseFlag);
 
   // --- 3. プロンプト構築 + GPT呼び出し ---
   const promptInput: PromptInput = {
