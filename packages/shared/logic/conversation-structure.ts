@@ -11,6 +11,8 @@ import type {
 
 import type { CharacterContext, RelationContext } from "./topic-selection";
 
+export const TOPIC_INTEREST_FAVOR_ATTENUATION = 0.5;
+
 // ---------------------------------------------------------------------------
 // 主導権（Dominance）
 // ---------------------------------------------------------------------------
@@ -92,8 +94,10 @@ export function determineStance(
   const expressiveness = character.traits.expressiveness ?? 3;
 
   // --- 話題関心度によるfavor減衰 (A-9) ---
-  // 話題に関心がない場合、好感度のスタンスへの寄与を×0.5に減衰
-  const effectiveFavorScore = topicInterest ? favorScore : favorScore * 0.5;
+  // 話題に関心がない場合、好感度のスタンスへの寄与を減衰させる。
+  const effectiveFavorScore = topicInterest
+    ? favorScore
+    : favorScore * TOPIC_INTEREST_FAVOR_ATTENUATION;
 
   // 基本スコアマップ: 各スタンスへの傾きを算出
   const scores: Record<EmotionalStance, number> = {

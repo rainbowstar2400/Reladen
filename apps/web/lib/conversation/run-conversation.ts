@@ -17,7 +17,13 @@ import type {
   Traits,
   SelectedTopic,
 } from "@repo/shared/types/conversation-generation";
-import { selectTopic, type TopicSelectionInput, type CharacterContext } from "@repo/shared/logic/topic-selection";
+import {
+  selectTopic,
+  SMALL_TALK_CATEGORY_DETAIL,
+  SMALL_TALK_CATEGORY_LABEL,
+  type TopicSelectionInput,
+  type CharacterContext,
+} from "@repo/shared/logic/topic-selection";
 import { buildConversationStructure, determineInitiator, type StructureInput } from "@repo/shared/logic/conversation-structure";
 import { shouldGeneratePromise, determineConversationType, type ConversationType } from "@repo/shared/logic/promise";
 import { checkRelationTransition, computeImpressionOnTransition, type TransitionResult } from "@repo/shared/logic/relation-transition";
@@ -686,11 +692,10 @@ export async function runConversation(
   const ctxB = toCharacterContext(charB);
 
   // 話題選定と会話構造の主導者を一致させるため、先に主導者シードを確定する。
-  const seedSituation = typeof args.situation === "string" ? args.situation.trim() : "";
   const seedTopic: SelectedTopic = {
     source: "small_talk",
-    label: seedSituation.length > 0 ? seedSituation : `${args.environment.timeOfDay}の雑談`,
-    detail: seedSituation.length > 0 ? `${args.environment.timeOfDay}の出来事` : `${args.environment.timeOfDay}の何気ない会話`,
+    label: SMALL_TALK_CATEGORY_LABEL,
+    detail: SMALL_TALK_CATEGORY_DETAIL,
   };
   const { initiator: seedInitiator, responder: seedResponder } = determineInitiator(ctxA, ctxB, seedTopic);
 

@@ -75,6 +75,10 @@ const INTIMACY: Record<string, number> = {
 /** 鮮度減衰: 最近使った話題のスコア減点 */
 const FRESHNESS_PENALTY = -3;
 
+/** small_talk はカテゴリのみ選定し、具体内容はプロンプト側へ委譲する */
+export const SMALL_TALK_CATEGORY_LABEL = "日常の雑談";
+export const SMALL_TALK_CATEGORY_DETAIL = "その場の空気で自然に広がる世間話";
+
 // ---------------------------------------------------------------------------
 // ヘルパー
 // ---------------------------------------------------------------------------
@@ -209,25 +213,14 @@ function generateHeartToHeartCandidates(
 }
 
 function generateSmallTalkCandidates(
-  input: TopicSelectionInput,
+  _input: TopicSelectionInput,
 ): TopicCandidate[] {
-  const { timeOfDay, weather } = input.environment;
-  const situation = typeof input.situation === "string" ? input.situation.trim() : "";
-  const candidates: TopicCandidate[] = [{
+  return [{
     source: "small_talk" as TopicSource,
-    label: situation.length > 0 ? situation : `${timeOfDay}の雑談`,
-    detail: situation.length > 0 ? `${timeOfDay}の出来事` : `${timeOfDay}の何気ない会話`,
+    label: SMALL_TALK_CATEGORY_LABEL,
+    detail: SMALL_TALK_CATEGORY_DETAIL,
     score: 0,
   }];
-  if (weather) {
-    candidates.push({
-      source: "small_talk" as TopicSource,
-      label: `${weather}の話`,
-      detail: `今日の天気: ${weather}`,
-      score: 0,
-    });
-  }
-  return candidates;
 }
 
 /** 現在日付から季節を判定 */
@@ -374,11 +367,10 @@ export function selectTopic(
 
   if (!best) {
     // フォールバック: small_talk
-    const situation = typeof input.situation === "string" ? input.situation.trim() : "";
     const fallback: SelectedTopic = {
       source: "small_talk",
-      label: situation.length > 0 ? situation : `${input.environment.timeOfDay}の雑談`,
-      detail: situation.length > 0 ? `${input.environment.timeOfDay}の出来事` : `${input.environment.timeOfDay}の何気ない会話`,
+      label: SMALL_TALK_CATEGORY_LABEL,
+      detail: SMALL_TALK_CATEGORY_DETAIL,
     };
     return { selected: fallback, candidates: scored };
   }
