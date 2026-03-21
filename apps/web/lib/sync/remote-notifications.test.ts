@@ -107,6 +107,18 @@ describe("remote-notifications participants validation", () => {
     expect(result[0]?.participants).toEqual(tuple);
   });
 
+  it("participants=[string] を 1要素配列として扱う", async () => {
+    const single: [string] = [PARTICIPANT_A];
+    mocks.limit.mockResolvedValue({
+      data: [makeNotificationRow(single)],
+      error: null,
+    });
+
+    const result = await remoteFetchRecentNotifications(1);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.participants).toEqual(single);
+  });
+
   it("participants=string の場合はエラーを投げる", async () => {
     mocks.limit.mockResolvedValue({
       data: [makeNotificationRow("abc")],
@@ -119,16 +131,16 @@ describe("remote-notifications participants validation", () => {
     await expect(remoteFetchRecentNotifications(1)).rejects.toThrow("received string:");
   });
 
-  it("participants の要素数が2でない場合はエラーを投げる", async () => {
+  it("participants の要素数が3以上の場合はエラーを投げる", async () => {
     mocks.limit.mockResolvedValue({
-      data: [makeNotificationRow([PARTICIPANT_A])],
+      data: [makeNotificationRow([PARTICIPANT_A, PARTICIPANT_B, OWNER_ID])],
       error: null,
     });
 
     await expect(remoteFetchRecentNotifications(1)).rejects.toThrow(
       `Invalid participants for notification ${NOTIFICATION_ID}`,
     );
-    await expect(remoteFetchRecentNotifications(1)).rejects.toThrow("array(length=1)");
+    await expect(remoteFetchRecentNotifications(1)).rejects.toThrow("array(length=3)");
   });
 
   it("participants に文字列以外が含まれる場合はエラーを投げる", async () => {

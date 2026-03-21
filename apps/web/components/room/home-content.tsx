@@ -58,25 +58,6 @@ const RESIDENT_STATUS_SAMPLE: ResidentStatusItem[] = [
   { id: 'D', name: 'レイ', tone: 'bg-[#3a7bd5] shadow-[0_0_8px_rgba(58,123,213,0.6)]', trustToPlayer: 55 },
 ];
 
-function filterRecentNotifications(notifications: NotificationRecord[]) {
-  const now = Date.now();
-
-  return notifications.filter((n) => {
-    const occurredAt = new Date(n.occurredAt).getTime();
-    const diffHours = (now - occurredAt) / (1000 * 60 * 60);
-
-    if (n.status === 'read') {
-      return diffHours < 5;
-    }
-
-    if (n.status === 'unread') {
-      return diffHours < 10;
-    }
-
-    return true;
-  });
-}
-
 function getNotificationTitle(n: NotificationRecord, residentNameMap: Record<string, string>) {
   const participantIds = Array.isArray(n.participants) ? n.participants : [];
   const participantNames = participantIds.map((id) => residentNameMap[id] ?? id);
@@ -143,19 +124,14 @@ export function HomeContent() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const recentNotifications = useMemo(
-    () => filterRecentNotifications(notifications),
+  const conversationNotifications = useMemo(
+    () => notifications.filter((n) => n.type === 'conversation'),
     [notifications]
   );
 
-  const conversationNotifications = useMemo(
-    () => recentNotifications.filter((n) => n.type === 'conversation'),
-    [recentNotifications]
-  );
-
   const consultNotifications = useMemo(
-    () => recentNotifications.filter((n) => n.type === 'consult'),
-    [recentNotifications]
+    () => notifications.filter((n) => n.type === 'consult'),
+    [notifications]
   );
 
   const unreadConversation = conversationNotifications.filter((n) => n.status === 'unread').length;

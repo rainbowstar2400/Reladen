@@ -312,7 +312,7 @@ async function handleTransitionConsultAnswer(params: {
   });
 }
 
-function normalizeImpressionBase(value: unknown): ImpressionBase {
+function normalizeImpressionBase(value: unknown, fallback: ImpressionBase = "none"): ImpressionBase {
   const allowed: ImpressionBase[] = [
     "dislike",
     "maybe_dislike",
@@ -325,7 +325,7 @@ function normalizeImpressionBase(value: unknown): ImpressionBase {
   if (typeof value === "string" && (allowed as string[]).includes(value)) {
     return value as ImpressionBase;
   }
-  return "none";
+  return fallback;
 }
 
 async function updateRelationType(params: {

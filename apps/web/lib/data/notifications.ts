@@ -7,6 +7,11 @@ import type { NotificationRecord, EventLogStrict } from '@repo/shared/types/conv
 import { remoteFetchEventById } from '@/lib/sync/remote-events';
 import { bulkUpsert } from '@/lib/db-local';
 import { remoteFetchRecentNotifications, remoteUpsertNotification } from '@/lib/sync/remote-notifications';
+import {
+  filterExpiredUnansweredConsultNotifications,
+  filterNotificationsByRecency,
+  type ConsultPayloadLike,
+} from '@/lib/data/notification-visibility';
 
 /**
 * 通知の並び順を共通化：
@@ -19,6 +24,55 @@ function sortNotifications(items: NotificationRecord[]): NotificationRecord[] {
     if (p !== 0) return p;
     return (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
   });
+}
+
+async function buildConsultPayloadByEventId(
+  notifications: NotificationRecord[],
+): Promise<Map<string, ConsultPayloadLike>> {
+  const consultIds = Array.from(
+    new Set(
+      notifications
+        .filter((notification) => notification.type === 'consult')
+        .map((notification) => notification.linkedEventId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  );
+  if (consultIds.length === 0) return new Map();
+
+  const idSet = new Set(consultIds);
+  const payloadByEventId = new Map<string, ConsultPayloadLike>();
+
+  const localEvents = (await listLocal('events')) as EventLogStrict[];
+  for (const event of localEvents) {
+    if (!event || event.deleted || event.kind !== 'consult') continue;
+    if (!idSet.has(event.id)) continue;
+    payloadByEventId.set(event.id, (event.payload ?? {}) as ConsultPayloadLike);
+  }
+
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return payloadByEventId;
+  }
+
+  const missingIds = consultIds.filter((id) => !payloadByEventId.has(id));
+  if (missingIds.length === 0) return payloadByEventId;
+
+  const remoteRows = await Promise.all(
+    missingIds.map(async (id) => {
+      try {
+        return await remoteFetchEventById(id);
+      } catch (error) {
+        console.warn('[notifications] consult event fetch skipped:', (error as any)?.message);
+        return null;
+      }
+    }),
+  );
+
+  for (const row of remoteRows) {
+    if (!row || row.deleted || row.kind !== 'consult') continue;
+    payloadByEventId.set(row.id, (row.payload ?? {}) as ConsultPayloadLike);
+  }
+
+  return payloadByEventId;
 }
 
 export function useNotifications() {
@@ -48,7 +102,14 @@ export function useNotifications() {
         console.warn('[notifications] remote fetch skipped:', (e as any)?.message);
       }
 
-      return current;
+      const nowMs = Date.now();
+      const recencyFiltered = filterNotificationsByRecency(current, nowMs);
+      const consultPayloadByEventId = await buildConsultPayloadByEventId(recencyFiltered);
+      return filterExpiredUnansweredConsultNotifications(
+        recencyFiltered,
+        consultPayloadByEventId,
+        nowMs,
+      );
     },
   });
 }
@@ -107,7 +168,15 @@ export async function listNotifications(opts?: { limit?: number }): Promise<Noti
   // こちらも archived を除外し、共通ソートへ統一
   const filtered = arr.filter((n) => n.status !== 'archived');
   const sorted = sortNotifications(filtered);
-  return (typeof opts?.limit === 'number') ? sorted.slice(0, opts.limit) : sorted;
+  const nowMs = Date.now();
+  const recencyFiltered = filterNotificationsByRecency(sorted, nowMs);
+  const consultPayloadByEventId = await buildConsultPayloadByEventId(recencyFiltered);
+  const visible = filterExpiredUnansweredConsultNotifications(
+    recencyFiltered,
+    consultPayloadByEventId,
+    nowMs,
+  );
+  return (typeof opts?.limit === 'number') ? visible.slice(0, opts.limit) : visible;
 }
 
 export async function getUnreadCount(): Promise<number> {

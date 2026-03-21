@@ -20,24 +20,7 @@ export default function NotificationsPanel() {
   const [page, setPage] = React.useState(1);
   const residentNameMap = useResidentNameMap();
 
-  const filteredNotifications = React.useMemo(() => {
-    const now = Date.now();
-
-    return notifications.filter((n) => {
-      const occurredAt = new Date(n.occurredAt).getTime();
-      const diffHours = (now - occurredAt) / (1000 * 60 * 60);
-
-      if (n.status === 'read') {
-        return diffHours < 5;
-      }
-
-      if (n.status === 'unread') {
-        return diffHours < 10;
-      }
-
-      return true;
-    });
-  }, [notifications]);
+  const filteredNotifications = notifications;
 
   const totalPages = React.useMemo(
     () => Math.max(1, Math.ceil(filteredNotifications.length / 5)),
@@ -144,6 +127,10 @@ export default function NotificationsPanel() {
               ? hasTwoParticipants
                 ? `${participantNames[0]}と${participantNames[1]}が話しています…`
                 : '会話が発生しました'
+              : n.type === 'consult'
+                ? participantNames.length >= 1
+                  ? `${participantNames[0]}から相談が届きました`
+                  : '相談が届きました'
               : 'お知らせ';
 
           return (

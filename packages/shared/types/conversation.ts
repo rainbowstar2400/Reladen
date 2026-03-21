@@ -137,12 +137,18 @@ export const topicThreadSchema = baseEntitySchema.extend({
 });
 export type TopicThread = z.infer<typeof topicThreadSchema>;
 
+const notificationParticipantsSchema = z.union([
+  z.tuple([z.string().uuid()]),
+  z.tuple([z.string().uuid(), z.string().uuid()]),
+]);
+export type NotificationParticipants = z.infer<typeof notificationParticipantsSchema>;
+
 export const notificationRecordSchema = z.object({
   id: z.string().uuid(),
   type: z.enum(['conversation', 'consult', 'system']),
   linkedEventId: z.string().uuid(),
   threadId: z.string().uuid().optional(),
-  participants: z.tuple([z.string().uuid(), z.string().uuid()]).optional(),
+  participants: notificationParticipantsSchema.optional(),
   snippet: z.string().optional(),
   occurredAt: z.string().datetime(),
   status: z.enum(['unread', 'read', 'archived']).default('unread'),
