@@ -221,9 +221,17 @@ async function pickThreadOrDefault(
   awakeCandidates: Resident[],
   relations: Relation[],
 ): Promise<{
-  threadId?: string;
+  kind: "target";
+  target: {
+    threadId?: string;
+    participants: [string, string];
+  };
+} | {
+  kind: "sleeping_only";
   participants: [string, string];
-} | null> { // null を返す可能性を追加
+} | {
+  kind: "no_target";
+}> {
   const allThreads = (await listLocal("topic_threads")) as unknown as TopicThread[];
   const usableThreads = allThreads.filter((t) => {
     const ps = (t.participants as [string, string]) ?? [];
@@ -231,37 +239,53 @@ async function pickThreadOrDefault(
     if (!hasPair) return false;
     return !hasNoneRelationBetween(ps, relations);
   });
-  // 条件：status が "ongoing" のものを優先、updated_at が古いものから順
-  const ongoing = usableThreads.filter((t) => (t as any).status === "ongoing");
-  const sorted = (ongoing.length ? ongoing : usableThreads).sort((a, b) => {
+
+  // 睡眠除外後に ongoing 優先を再計算するため、優先順のみを先に整列。
+  const sortedByPriority = [...usableThreads].sort((a, b) => {
+    const ongoingA = (a as any).status === "ongoing" ? 1 : 0;
+    const ongoingB = (b as any).status === "ongoing" ? 1 : 0;
+    if (ongoingA !== ongoingB) return ongoingB - ongoingA;
     const ta = new Date(a.updated_at ?? 0).getTime();
     const tb = new Date(b.updated_at ?? 0).getTime();
     return ta - tb;
   });
-  const first = sorted[0];
+  const awakeIds = new Set(awakeCandidates.map((resident) => resident.id));
+  const firstAwakeThread = sortedByPriority.find((thread) => {
+    const ps = thread.participants as [string, string];
+    if (!Array.isArray(ps) || ps.length !== 2) return false;
+    return awakeIds.has(ps[0]) && awakeIds.has(ps[1]);
+  });
 
-  if (first) {
-    const ps = first.participants as [string, string];
-    // 既存スレッドに参加者が正しく設定されていれば、それを返す
+  if (firstAwakeThread) {
+    const ps = firstAwakeThread.participants as [string, string];
     if (ps && ps.length === 2) {
-      return { threadId: first.id, participants: ps };
+      return { kind: "target", target: { threadId: firstAwakeThread.id, participants: ps } };
     }
-    // ※ 参加者がいない異常なスレッドは無視し、新規会話ロジックへ
   }
 
-  // スレッドが1つも無いか、スレッドに参加者がいない場合：
-  // 活動中の住人から新規ペアを選ぶ
   if (awakeCandidates.length < 2) {
-    // 新規会話の候補がいない
-    return null;
+    if (sortedByPriority.length > 0) {
+      const sleepingPair = sortedByPriority[0].participants as [string, string];
+      if (Array.isArray(sleepingPair) && sleepingPair.length === 2) {
+        return { kind: "sleeping_only", participants: sleepingPair };
+      }
+    }
+    return { kind: "no_target" };
   }
 
-  // 活動中の住人をシャッフルして先頭2名を選ぶ
   const newPair = pickAllowedPair(awakeCandidates, relations);
-  if (!newPair) return null;
+  if (newPair) {
+    return { kind: "target", target: { participants: newPair } };
+  }
 
-  // 新規会話として参加者ペアを返す（threadId はなし）
-  return { participants: newPair };
+  if (sortedByPriority.length > 0) {
+    const sleepingPair = sortedByPriority[0].participants as [string, string];
+    if (Array.isArray(sleepingPair) && sleepingPair.length === 2) {
+      return { kind: "sleeping_only", participants: sleepingPair };
+    }
+  }
+
+  return { kind: "no_target" };
 }
 
 // --- 反復タスク --------------------------------------------------------------
@@ -322,30 +346,28 @@ export async function triggerConversationNow(
     const activeRelations = allRelations.filter((r) => !r.deleted);
     const now = new Date();
     const awakeCandidates = selectConversationCandidates(now, allResidents);
-    const awakeIds = new Set(awakeCandidates.map((r) => r.id));
 
     if (awakeCandidates.length < 2) {
       return { status: "skipped", reason: "not_enough_awake" };
     }
 
-    const target = await pickThreadOrDefault(awakeCandidates, activeRelations);
-    if (!target) {
+    const selected = await pickThreadOrDefault(awakeCandidates, activeRelations);
+    if (selected.kind === "no_target") {
       return { status: "skipped", reason: "no_target" };
     }
+    if (selected.kind === "sleeping_only") {
+      return {
+        status: "skipped",
+        reason: "participant_sleeping",
+        participants: selected.participants,
+      };
+    }
+    const target = selected.target;
 
     if (hasNoneRelationBetween(target.participants, activeRelations)) {
       return {
         status: "skipped",
         reason: "relation_none",
-        participants: target.participants,
-      };
-    }
-
-    const [pA, pB] = target.participants;
-    if (!awakeIds.has(pA) || !awakeIds.has(pB)) {
-      return {
-        status: "skipped",
-        reason: "participant_sleeping",
         participants: target.participants,
       };
     }
