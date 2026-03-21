@@ -10,6 +10,7 @@ import {
   type SleepProfile
 } from '../../../../packages/shared/logic/schedule';
 import { loadWorldWeather, saveWorldWeather, DEFAULT_WORLD_ID } from '@/lib/data/world-weather';
+import { buildRelationDedupPlan, normalizeRelationPair } from '@/lib/data/relation-pair';
 
 const KEY = ['residents'];
 
@@ -175,19 +176,21 @@ async function saveAllRelationData(
 
   const promises: Promise<any>[] = [];
   const now = new Date().toISOString();
+  const relationDedupPlan = buildRelationDedupPlan(allRelations, now);
+  for (const duplicate of relationDedupPlan.tombstones) {
+    promises.push(putLocal('relations', duplicate));
+  }
 
   for (const [targetId, data] of Object.entries(relations)) {
+    const pair = normalizeRelationPair(currentId, targetId);
+
     // 1. Relation (関係性)
-    const existingRelation = allRelations.find(
-      (r) =>
-        (r.a_id === currentId && r.b_id === targetId) ||
-        (r.a_id === targetId && r.b_id === currentId)
-    );
+    const existingRelation = relationDedupPlan.canonicalByKey.get(pair.key);
     const relationPayload: Relation = {
       // @ts-ignore
       id: existingRelation?.id ?? newId(),
-      a_id: currentId,
-      b_id: targetId,
+      a_id: pair.aId,
+      b_id: pair.bId,
       type: data.relationType,
       family_sub_type: data.relationType === 'family' ? (data.familySubType ?? null) : null,
       updated_at: now,
