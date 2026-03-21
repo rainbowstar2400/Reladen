@@ -77,6 +77,13 @@ function makeEvalResult(
 }
 
 describe("persistConversation", () => {
+  const findFeelingWrite = (fromId: string, toId: string) => {
+    return mocks.putKV.mock.calls
+      .filter((call) => call[0] === "feelings")
+      .map((call) => call[1] as { from_id?: string; to_id?: string; score?: number })
+      .find((payload) => payload.from_id === fromId && payload.to_id === toId);
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -121,5 +128,61 @@ describe("persistConversation", () => {
     expect(
       mocks.putKV.mock.calls.some((call) => call[0] === "notifications"),
     ).toBe(true);
+  });
+
+  it("feelings 未存在時は好感度を 30 から開始する", async () => {
+    await persistConversation({
+      gptOut: baseGptOut,
+      evalResult: makeEvalResult(),
+    });
+
+    const ab = findFeelingWrite(A_ID, B_ID);
+    const ba = findFeelingWrite(B_ID, A_ID);
+    expect(ab?.score).toBe(30);
+    expect(ba?.score).toBe(30);
+  });
+
+  it("既存の score=0 は補正せず維持する", async () => {
+    mocks.listKV.mockImplementation(async (table: string) => {
+      if (table === "feelings") {
+        return [
+          { id: "f1", from_id: A_ID, to_id: B_ID, label: "none", score: 0 },
+          { id: "f2", from_id: B_ID, to_id: A_ID, label: "none", score: 0 },
+        ];
+      }
+      return [];
+    });
+
+    await persistConversation({
+      gptOut: baseGptOut,
+      evalResult: makeEvalResult(),
+    });
+
+    const ab = findFeelingWrite(A_ID, B_ID);
+    const ba = findFeelingWrite(B_ID, A_ID);
+    expect(ab?.score).toBe(0);
+    expect(ba?.score).toBe(0);
+  });
+
+  it("既存 score が NaN/undefined の場合は 30 に補正する", async () => {
+    mocks.listKV.mockImplementation(async (table: string) => {
+      if (table === "feelings") {
+        return [
+          { id: "f1", from_id: A_ID, to_id: B_ID, label: "none", score: Number.NaN },
+          { id: "f2", from_id: B_ID, to_id: A_ID, label: "none" },
+        ];
+      }
+      return [];
+    });
+
+    await persistConversation({
+      gptOut: baseGptOut,
+      evalResult: makeEvalResult(),
+    });
+
+    const ab = findFeelingWrite(A_ID, B_ID);
+    const ba = findFeelingWrite(B_ID, A_ID);
+    expect(ab?.score).toBe(30);
+    expect(ba?.score).toBe(30);
   });
 });

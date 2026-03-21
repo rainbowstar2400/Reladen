@@ -457,6 +457,63 @@ describe("run-conversation", () => {
     );
   });
 
+  it("runConversationFromApi は feelings 未存在時に好感度初期値30を使う", async () => {
+    mocks.listKV.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "topic_threads":
+          return [];
+        case "residents":
+          return baseResidents();
+        case "presets":
+          return [];
+        case "relations":
+          return [{ a_id: A_ID, b_id: B_ID, type: "friend", deleted: false }];
+        case "feelings":
+          return [];
+        case "events":
+          return [];
+        default:
+          return [];
+      }
+    });
+
+    await runConversationFromApi({ participants: [A_ID, B_ID] });
+
+    const topicInput = mocks.selectTopic.mock.calls[0]?.[0];
+    expect(topicInput?.relation?.feelingAtoB?.score).toBe(30);
+    expect(topicInput?.relation?.feelingBtoA?.score).toBe(30);
+  });
+
+  it("runConversationFromApi は既存 score=0 を補正せず維持する", async () => {
+    mocks.listKV.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "topic_threads":
+          return [];
+        case "residents":
+          return baseResidents();
+        case "presets":
+          return [];
+        case "relations":
+          return [{ a_id: A_ID, b_id: B_ID, type: "friend", deleted: false }];
+        case "feelings":
+          return [
+            { id: "f1", from_id: A_ID, to_id: B_ID, label: "none", score: 0, deleted: false },
+            { id: "f2", from_id: B_ID, to_id: A_ID, label: "none", score: 0, deleted: false },
+          ];
+        case "events":
+          return [];
+        default:
+          return [];
+      }
+    });
+
+    await runConversationFromApi({ participants: [A_ID, B_ID] });
+
+    const topicInput = mocks.selectTopic.mock.calls[0]?.[0];
+    expect(topicInput?.relation?.feelingAtoB?.score).toBe(0);
+    expect(topicInput?.relation?.feelingBtoA?.score).toBe(0);
+  });
+
   it("runConversationFromApi は relation_trigger を residentId/targetId 形式で保存する", async () => {
     mocks.listKV.mockImplementation(async (table: string) => {
       switch (table) {

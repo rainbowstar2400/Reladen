@@ -6,8 +6,8 @@ import type {
   NotificationRecord,
   TopicThread,
 } from "@repo/shared/types/conversation";
+import { DEFAULT_FEELING_SCORE, type Feeling } from "@repo/shared/types";
 import type { EvaluationResult } from "@/lib/evaluation/evaluate-conversation";
-import type { Feeling } from "@/types";
 
 
 async function updateRelationsAndFeelings(params: {
@@ -37,7 +37,7 @@ async function updateRelationsAndFeelings(params: {
   };
 
   const clampScore = (value: number) => {
-    if (!Number.isFinite(value)) return 0;
+    if (!Number.isFinite(value)) return DEFAULT_FEELING_SCORE;
     return Math.max(0, Math.min(100, Math.round(value)));
   };
 
@@ -62,8 +62,15 @@ async function updateRelationsAndFeelings(params: {
   const idAB = recAB?.id ?? newId();
   const idBA = recBA?.id ?? newId();
 
-  const curScoreAB = recAB?.score ?? 0;
-  const curScoreBA = recBA?.score ?? 0;
+  const normalizeCurrentScore = (score: unknown) => {
+    if (typeof score !== "number" || !Number.isFinite(score)) {
+      return DEFAULT_FEELING_SCORE;
+    }
+    return score;
+  };
+
+  const curScoreAB = normalizeCurrentScore(recAB?.score);
+  const curScoreBA = normalizeCurrentScore(recBA?.score);
 
   const nextLabelAB = impressionToFeelingLabel(
     params.deltas.aToB.impressionState,

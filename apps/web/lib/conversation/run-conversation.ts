@@ -25,6 +25,7 @@ import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-f
 import { callGptForSituation } from "@/lib/gpt/call-gpt-for-situation";
 import { callGptForNickname } from "@/lib/gpt/call-gpt-for-nickname";
 import { shouldGenerateNickname, type NicknameGenerationInput, type NicknameTendency } from "@repo/shared/logic/nickname";
+import { DEFAULT_FEELING_SCORE } from "@repo/shared/types";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
 import { KvUnauthenticatedError, listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
@@ -442,6 +443,13 @@ async function loadRelationForPair(
 
 type FeelingData = { label: string; score: number; recentDeltas: number[] };
 
+function normalizeFeelingScore(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_FEELING_SCORE;
+  }
+  return value;
+}
+
 /** 好感度を KV から読み込み */
 async function loadFeelingsForPair(
   participants: [string, string],
@@ -450,7 +458,7 @@ async function loadFeelingsForPair(
   const [a, b] = participants;
 
   const pickLatest = (fromId: string, toId: string): FeelingData => {
-    if (!Array.isArray(rows)) return { label: "none", score: 0, recentDeltas: [] };
+    if (!Array.isArray(rows)) return { label: "none", score: DEFAULT_FEELING_SCORE, recentDeltas: [] };
     const found = rows
       .filter((row) => {
         if (!row || row.deleted) return false;
@@ -460,7 +468,7 @@ async function loadFeelingsForPair(
       .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs))[0];
     return {
       label: typeof found?.label === "string" ? found.label : "none",
-      score: typeof found?.score === "number" && Number.isFinite(found.score) ? found.score : 0,
+      score: normalizeFeelingScore(found?.score),
       recentDeltas: Array.isArray(found?.recent_deltas) ? found.recent_deltas : [],
     };
   };
@@ -1049,8 +1057,8 @@ export async function runConversationFromApi(
 
   // 3) 好感度読み込み
   let feelings: { aToB: FeelingData; bToA: FeelingData } = {
-    aToB: { label: "none", score: 0, recentDeltas: [] },
-    bToA: { label: "none", score: 0, recentDeltas: [] },
+    aToB: { label: "none", score: DEFAULT_FEELING_SCORE, recentDeltas: [] },
+    bToA: { label: "none", score: DEFAULT_FEELING_SCORE, recentDeltas: [] },
   };
   try {
     feelings = await loadFeelingsForPair(participants);
