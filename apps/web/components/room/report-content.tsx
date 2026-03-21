@@ -14,6 +14,7 @@ import { replaceResidentIds, useResidentNameMap } from '@/lib/data/residents';
 import { detectImpressionLabelChanges } from '@/lib/repos/conversation-repo';
 import { remoteFetchRecentEvents } from '@/lib/sync/remote-events';
 import { fetchEventById } from '@/lib/data/notifications';
+import { filterReportTargetEvents, hasAnsweredConsultSelection } from '@/lib/reports/report-visibility';
 import { useDeskTransition } from '@/components/room/room-transition-context';
 import { LogDetailPanelContent, LogDetail } from '@/components/logs/log-detail-panel';
 import { ConsultDetailPanelContent, ConsultDetail } from '@/components/consults/consult-detail-panel';
@@ -268,9 +269,7 @@ export function ReportContent() {
 
   const buildReportItems = useCallback(
     (events: EventLogStrict[]): ReportItem[] => {
-      const targets = events.filter(
-        (ev) => ev && (ev.kind === 'conversation' || ev.kind === 'consult')
-      );
+      const targets = filterReportTargetEvents(events);
       const impressionChangeMap = detectImpressionLabelChanges(targets as EventLogStrict[]);
 
       return targets.map((ev) => {
@@ -520,31 +519,46 @@ export function ReportContent() {
         );
         const stored = await loadConsultAnswer(base.id);
         if (!alive) return;
+        const selectedChoiceId = base.selectedChoiceId ?? stored?.selectedChoiceId ?? null;
+        if (!selectedChoiceId) {
+          setActiveConsultId(null);
+          setPanelMode('none');
+          setConsultDetail(null);
+          return;
+        }
         setConsultDetail({
           ...base,
           prompt: { ...base.prompt, speaker: mappedSpeaker },
           systemAfter: mappedSystemAfter ?? base.systemAfter,
-          selectedChoiceId: base.selectedChoiceId ?? stored?.selectedChoiceId ?? null,
+          selectedChoiceId,
         });
       } catch {
         try {
           const localEvents = (await listLocal('events')) as EventLogStrict[];
           const ev = localEvents.find((item) => item.id === activeConsultId);
           if (!ev || ev.kind !== 'consult') throw new Error('no local consult');
+          if (!hasAnsweredConsultSelection((ev as any)?.payload)) throw new Error('unanswered consult');
           const base = normalizeToConsultDetail(ev, activeConsultId);
           const mappedSpeaker = residentNameMap[base.prompt.speaker] ?? base.prompt.speaker;
           const mappedSystemAfter = base.systemAfter?.map((line) =>
             replaceResidentIds(line, residentNameMap)
           );
+          const stored = await loadConsultAnswer(base.id);
           if (!alive) return;
+          const selectedChoiceId = base.selectedChoiceId ?? stored?.selectedChoiceId ?? null;
+          if (!selectedChoiceId) throw new Error('unanswered consult');
           setConsultDetail({
             ...base,
             prompt: { ...base.prompt, speaker: mappedSpeaker },
             systemAfter: mappedSystemAfter ?? base.systemAfter,
-            selectedChoiceId: null,
+            selectedChoiceId,
           });
         } catch {
-          if (alive) setConsultDetail(null);
+          if (alive) {
+            setActiveConsultId(null);
+            setPanelMode('none');
+            setConsultDetail(null);
+          }
         }
       }
     })();
