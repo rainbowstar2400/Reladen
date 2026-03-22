@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_FEELING_SCORE } from "@repo/shared/types";
 
 const mocks = vi.hoisted(() => ({
   listKV: vi.fn(),
@@ -263,5 +264,44 @@ describe("POST /api/consults/[id]/answer", () => {
     expect(feeling?.special_label).toBe(null);
     expect(feeling?.base_before_special).toBe(null);
     expect(db.events.some((e) => e.kind === "consult_cooldown" && e.payload?.trigger === "breakup")).toBe(true);
+  });
+
+  it("breakup: feeling欠損時は score=30 基準で印象遷移し、新規rowも score=30 で保存する", async () => {
+    const db = buildDb({
+      trigger: "breakup",
+      relationType: "lover",
+      residentFeelingLabel: "love",
+      residentFeelingScore: 80,
+      targetFeelingLabel: "like",
+      targetFeelingScore: 40,
+    });
+    db.feelings = db.feelings.filter((f) => !(f.from_id === RESIDENT_ID && f.to_id === TARGET_ID));
+    configureDb(db);
+
+    const res = await POST(makeRequest("positive"), { params: { id: CONSULT_ID } } as any);
+    expect(res.status).toBe(200);
+
+    const recreatedFeeling = db.feelings.find((f) => f.from_id === RESIDENT_ID && f.to_id === TARGET_ID);
+    expect(recreatedFeeling?.label).toBe("none");
+    expect(recreatedFeeling?.score).toBe(DEFAULT_FEELING_SCORE);
+  });
+
+  it("breakup: score が NaN の既存 feeling は 30 に正規化して保存する", async () => {
+    const db = buildDb({
+      trigger: "breakup",
+      relationType: "lover",
+      residentFeelingLabel: "love",
+      residentFeelingScore: Number.NaN,
+      targetFeelingLabel: "like",
+      targetFeelingScore: 42,
+    });
+    configureDb(db);
+
+    const res = await POST(makeRequest("positive"), { params: { id: CONSULT_ID } } as any);
+    expect(res.status).toBe(200);
+
+    const normalizedFeeling = db.feelings.find((f) => f.from_id === RESIDENT_ID && f.to_id === TARGET_ID);
+    expect(normalizedFeeling?.label).toBe("none");
+    expect(normalizedFeeling?.score).toBe(DEFAULT_FEELING_SCORE);
   });
 });

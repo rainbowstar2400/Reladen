@@ -89,6 +89,7 @@ describe('POST /api/sync/[table]', () => {
     const res = await POST(req as any, { params: { table: 'consult_answers' } } as any);
     expect(res.status).toBe(200);
     expect(mocks.insert).toHaveBeenCalledTimes(1);
+    const data = await res.json();
 
     const payload = mocks.insert.mock.calls[0][0];
     expect(payload.owner_id).toBe('11111111-1111-4111-8111-111111111111');
@@ -96,6 +97,8 @@ describe('POST /api/sync/[table]', () => {
     expect(payload.updated_at).toBe('2026-03-14T00:00:00.000Z');
     expect(payload.selected_choice_id).toBe('choice_1');
     expect(payload.decided_at).toBe('2026-03-14T00:00:00.000Z');
+    expect(data.pushResult.consumedIndexes).toEqual([0]);
+    expect(data.pushResult.rejected).toEqual([]);
   });
 
   it('consult_answers の重複 insert は no-op 成功にする（first-write-wins）', async () => {
@@ -129,6 +132,9 @@ describe('POST /api/sync/[table]', () => {
     const res = await POST(req as any, { params: { table: 'consult_answers' } } as any);
     expect(res.status).toBe(200);
     expect(mocks.insert).toHaveBeenCalledTimes(1);
+    const data = await res.json();
+    expect(data.pushResult.consumedIndexes).toEqual([0]);
+    expect(data.pushResult.rejected).toEqual([]);
   });
 
   it('camelCase 入力を受理し、snake_case 列へ正規化して insert する', async () => {
@@ -292,6 +298,9 @@ describe('POST /api/sync/[table]', () => {
     const res = await POST(req as any, { params: { table: 'presets' } } as any);
     expect(res.status).toBe(200);
     expect(mocks.upsert).not.toHaveBeenCalled();
+    const data = await res.json();
+    expect(data.pushResult.consumedIndexes).toEqual([0]);
+    expect(data.pushResult.rejected).toEqual([]);
   });
 
   it('LWW: クラウドより新しい updated_at は upsert する', async () => {
@@ -380,6 +389,92 @@ describe('POST /api/sync/[table]', () => {
     expect(res.status).toBe(200);
     expect(mocks.upsert).toHaveBeenCalledTimes(1);
     expect(mocks.upsert.mock.calls[0][0][0].updated_at).toBe('2026-01-03T00:00:00.000Z');
+  });
+
+  it('10件中1件の invalid updated_at は rejected し、他は処理を継続する', async () => {
+    mocks.in.mockResolvedValue({ data: [], error: null });
+    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const changes = Array.from({ length: 10 }, (_, index) => ({
+      data: {
+        id: `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa${index.toString().padStart(2, '0')}`,
+        category: 'speech',
+        label: `label-${index}`,
+        updated_at: index === 4 ? 'not-a-date' : `2026-03-${(index + 1).toString().padStart(2, '0')}T00:00:00.000Z`,
+        deleted: false,
+      },
+      updated_at: index === 4 ? 'not-a-date' : `2026-03-${(index + 1).toString().padStart(2, '0')}T00:00:00.000Z`,
+      deleted: false,
+    }));
+
+    const req = makeRequest('presets', { changes });
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert.mock.calls[0][0]).toHaveLength(9);
+    expect(data.pushResult.consumedIndexes).toEqual([0, 1, 2, 3, 5, 6, 7, 8, 9]);
+    expect(data.pushResult.rejected).toEqual([
+      {
+        index: 4,
+        reason: 'invalid_updated_at',
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa04',
+      },
+    ]);
+  });
+
+  it('全件 invalid updated_at の場合は 200 + rejected のみを返す', async () => {
+    mocks.in.mockResolvedValue({ data: [], error: null });
+    mocks.upsert.mockResolvedValue({ error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const req = makeRequest('presets', {
+      changes: [
+        {
+          data: {
+            id: 'b0b0b0b0-b0b0-4b0b-8b0b-b0b0b0b0b0b0',
+            category: 'speech',
+            label: 'invalid-1',
+            updated_at: '',
+            deleted: false,
+          },
+          updated_at: '',
+          deleted: false,
+        },
+        {
+          data: {
+            id: 'b1b1b1b1-b1b1-4b1b-8b1b-b1b1b1b1b1b1',
+            category: 'speech',
+            label: 'invalid-2',
+            updated_at: '',
+            deleted: false,
+          },
+          updated_at: '',
+          deleted: false,
+        },
+      ],
+    });
+
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(data.pushResult.consumedIndexes).toEqual([]);
+    expect(data.pushResult.rejected).toEqual([
+      {
+        index: 0,
+        reason: 'invalid_updated_at',
+        id: 'b0b0b0b0-b0b0-4b0b-8b0b-b0b0b0b0b0b0',
+      },
+      {
+        index: 1,
+        reason: 'invalid_updated_at',
+        id: 'b1b1b1b1-b1b1-4b1b-8b1b-b1b1b1b1b1b1',
+      },
+    ]);
   });
 
   it('同期許可列: residents.nicknameTendency を nickname_tendency として upsert する', async () => {

@@ -5,8 +5,9 @@ import { supabaseClient } from '@/lib/db-cloud/supabase';
 import { bulkUpsert, since } from '@/lib/db-local';
 import { SyncPayload, syncPayloadSchema } from '@/types';
 import { normalizePulledRow } from '@/lib/sync/pull-normalizer';
+import { applyPushAck } from '@/lib/sync/push-ack';
 export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
-import { makeOutboxKey, listPendingByTable, markSent /* , markFailed */ } from '@/lib/sync/outbox';
+import { makeOutboxKey, listPendingByTable, markSent, markFailed } from '@/lib/sync/outbox';
 import { useSettings } from '@/lib/use-settings';
 
 const TABLES: SyncPayload['table'][] = [
@@ -158,12 +159,13 @@ function useSyncInternal() {
         );
         if (cloudChanges.length > 0) {
           await bulkUpsert(table, cloudChanges as any);
-          // 送信成功扱いの outbox を削除
-          const sentKeys = merged.filter(m => m.__key).map(m => m.__key!) as string[];
-          if (sentKeys.length > 0) {
-            await markSent(sentKeys);
-          }
         }
+        await applyPushAck({
+          merged,
+          payload,
+          markSentFn: markSent,
+          markFailedFn: markFailed,
+        });
       }
 
       // サーバー時刻を返していない想定なので、クライアント時刻で更新

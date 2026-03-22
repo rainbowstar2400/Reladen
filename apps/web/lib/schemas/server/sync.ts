@@ -38,8 +38,20 @@ export const syncRequestSchema = z.object({
 
 export type TSyncRequest = z.infer<typeof syncRequestSchema>;
 
+export const syncPushRejectedSchema = z.object({
+  index: z.number().int().nonnegative(),
+  reason: z.string().min(1),
+  id: z.string().optional(),
+});
+
+export const syncPushResultSchema = z.object({
+  consumedIndexes: z.array(z.number().int().nonnegative()).default([]),
+  rejected: z.array(syncPushRejectedSchema).default([]),
+});
+
 export const syncResponseSchema = z.object({
   table: z.enum(allowedTables),
   changes: z.array(syncChangeSchema),
+  pushResult: syncPushResultSchema.optional(),
 });
 export type TSyncResponse = z.infer<typeof syncResponseSchema>;

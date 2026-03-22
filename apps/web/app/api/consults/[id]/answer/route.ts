@@ -21,6 +21,7 @@ import {
   relationTriggerEventPayloadSchema,
   type ImpressionBase,
 } from "@repo/shared/types/conversation";
+import { DEFAULT_FEELING_SCORE } from "@repo/shared/types";
 import { newId } from "@/lib/newId";
 
 const answerRequestSchema = z.object({
@@ -241,8 +242,8 @@ async function handleTransitionConsultAnswer(params: {
     (f) => !f.deleted && f.from_id === targetId && f.to_id === residentId,
   );
 
-  const favorResidentToTarget = Number(feelingResidentToTarget?.score ?? 0);
-  const favorTargetToResident = Number(feelingTargetToResident?.score ?? 0);
+  const favorResidentToTarget = normalizeFeelingScore(feelingResidentToTarget?.score);
+  const favorTargetToResident = normalizeFeelingScore(feelingTargetToResident?.score);
 
   const impressionResidentToTarget = normalizeImpressionBase(feelingResidentToTarget?.label);
   const impressionTargetToResident = normalizeImpressionBase(feelingTargetToResident?.label);
@@ -328,6 +329,11 @@ function normalizeImpressionBase(value: unknown, fallback: ImpressionBase = "non
   return fallback;
 }
 
+function normalizeFeelingScore(value: unknown, fallback = DEFAULT_FEELING_SCORE): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 async function updateRelationType(params: {
   relation: any;
   residentId: string;
@@ -359,7 +365,7 @@ async function updateFeelingLabel(
     id: newId(),
     from_id: fromId,
     to_id: toId,
-    score: 0,
+    score: DEFAULT_FEELING_SCORE,
     deleted: false,
   };
   const normalizedCurrentBase = normalizeImpressionBase(
@@ -381,6 +387,7 @@ async function updateFeelingLabel(
     ...base,
     from_id: fromId,
     to_id: toId,
+    score: normalizeFeelingScore(base.score),
     label: isAwkward ? "awkward" : nextBaseLabel,
     base_label: nextBaseLabel,
     special_label: nextSpecialLabel,

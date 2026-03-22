@@ -48,7 +48,15 @@ function parseDateMs(value: unknown): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
-function resolveIncomingUpdatedAt(incomingData: Record<string, any>, fallbackUpdatedAt?: string): string {
+const REJECT_REASON_INVALID_UPDATED_AT = 'invalid_updated_at';
+
+type PushRejectedRow = {
+  index: number;
+  reason: string;
+  id?: string;
+};
+
+function resolveIncomingUpdatedAt(incomingData: Record<string, any>, fallbackUpdatedAt?: string): string | null {
   const candidate = pickFirst(
     incomingData.updated_at,
     incomingData.updatedAt,
@@ -56,14 +64,10 @@ function resolveIncomingUpdatedAt(incomingData: Record<string, any>, fallbackUpd
     fallbackUpdatedAt,
   );
   const candidateMs = parseDateMs(candidate);
-  if (candidateMs !== null) {
-    const normalized = new Date(candidateMs).toISOString();
-    incomingData.updated_at = normalized;
-    return normalized;
-  }
-  const now = new Date().toISOString();
-  incomingData.updated_at = now;
-  return now;
+  if (candidateMs === null) return null;
+  const normalized = new Date(candidateMs).toISOString();
+  incomingData.updated_at = normalized;
+  return normalized;
 }
 
 function shouldApplyIncomingByLww(currentUpdatedAt: unknown, incomingUpdatedAt: unknown): boolean {
@@ -84,16 +88,10 @@ function isUniqueViolation(error: any): boolean {
 function buildConsultAnswerPayload(
   incomingData: Record<string, any>,
   allowedCols: Set<string>,
-  fallbackUpdatedAt?: string,
+  resolvedUpdatedAt: string,
 ) {
   const payload: Record<string, any> = {};
   const id = incomingData.id;
-  const updatedAt = pickFirst(
-    incomingData.updated_at,
-    incomingData.updatedAt,
-    incomingData.updatedat,
-    fallbackUpdatedAt,
-  );
   const selectedChoiceId = pickFirst(
     incomingData.selectedChoiceId,
     incomingData.selected_choice_id,
@@ -105,8 +103,7 @@ function buildConsultAnswerPayload(
 
   if (id && allowedCols.has('id')) payload.id = id;
   if (allowedCols.has('updated_at')) {
-    payload.updated_at =
-      typeof updatedAt === 'string' && updatedAt.length > 0 ? updatedAt : new Date().toISOString();
+    payload.updated_at = resolvedUpdatedAt;
   }
   if (typeof incomingData.deleted === 'boolean' && allowedCols.has('deleted')) {
     payload.deleted = incomingData.deleted;
@@ -133,30 +130,46 @@ async function pushConsultAnswersRows(args: {
 }) {
   const { sb, table, incoming, allowedCols, ownerId } = args;
   let pushed = 0;
+  const consumedIndexes: number[] = [];
+  const rejected: PushRejectedRow[] = [];
 
-  for (const change of incoming) {
+  for (const [index, change] of incoming.entries()) {
     const incomingData = { ...(change.data ?? {}) };
-    resolveIncomingUpdatedAt(incomingData, change.updated_at);
+    const resolvedUpdatedAt = resolveIncomingUpdatedAt(incomingData, change.updated_at);
+    if (!resolvedUpdatedAt) {
+      rejected.push({
+        index,
+        reason: REJECT_REASON_INVALID_UPDATED_AT,
+        id: typeof incomingData.id === 'string' ? incomingData.id : undefined,
+      });
+      continue;
+    }
     if (incomingData.deleted == null && typeof change.deleted === 'boolean') {
       incomingData.deleted = change.deleted;
     }
     if (!incomingData.id) continue;
 
-    const payload = buildConsultAnswerPayload(incomingData, allowedCols, change.updated_at);
+    const payload = buildConsultAnswerPayload(incomingData, allowedCols, resolvedUpdatedAt);
     if (allowedCols.has('owner_id')) payload.owner_id = ownerId;
     const { error } = await sb.from(table).insert(payload);
     if (!error) {
       pushed += 1;
+      consumedIndexes.push(index);
       continue;
     }
     if (isUniqueViolation(error)) {
       // first-write-wins: 既存回答が正。後着は no-op 扱い。
+      consumedIndexes.push(index);
       continue;
     }
     throw asHttpError('insert failed', error);
   }
 
-  return pushed;
+  return {
+    pushed,
+    consumedIndexes,
+    rejected,
+  };
 }
 
 async function fetchExistingUpdatedAtById(args: {
@@ -287,6 +300,8 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     // push ロジックを汎用化
     const incoming = parsed.data.changes ?? [];
     let pushed = 0;
+    const consumedIndexes: number[] = [];
+    const rejectedRows: PushRejectedRow[] = [];
     if (incoming.length > 0) {
 
       // 1. snake_case の許可リストを取得
@@ -298,22 +313,39 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
 
       // consult_answers は first-write-wins を守るため専用処理（insert + duplicate no-op）
       if (table === 'consult_answers') {
-        pushed = await pushConsultAnswersRows({
+        const consultPushResult = await pushConsultAnswersRows({
           sb,
           table: table as AllowedTable,
           incoming: incoming as Array<{ data: Record<string, any>; updated_at?: string; deleted?: boolean }>,
           allowedCols,
           ownerId: user.id,
         });
+        pushed = consultPushResult.pushed;
+        consumedIndexes.push(...consultPushResult.consumedIndexes);
+        rejectedRows.push(...consultPushResult.rejected);
       // 2. 許可リストが空の場合は upsert をスキップ
       } else if (allowedCols.size === 0) {
         console.warn(JSON.stringify({ lvl: 'warn', at: 'sync.skip', requestId, table, reason: 'allowed columns list is empty' }));
       } else {
         // 3. 許可リストがある場合、キーを変換して upsert
-        const rowsWithMeta = incoming.map((c) => {
+        const rowsWithMeta: Array<{
+          index: number;
+          payload: Record<string, any>;
+          id: string | null;
+          updatedAt: string;
+        }> = [];
+        for (const [index, c] of incoming.entries()) {
           const incomingData = { ...(c.data as Record<string, any>) }; // camelCase キー
           const payload: Record<string, any> = {}; // snake_case キー
           const resolvedUpdatedAt = resolveIncomingUpdatedAt(incomingData, c.updated_at);
+          if (!resolvedUpdatedAt) {
+            rejectedRows.push({
+              index,
+              reason: REJECT_REASON_INVALID_UPDATED_AT,
+              id: typeof incomingData.id === 'string' ? incomingData.id : undefined,
+            });
+            continue;
+          }
 
           // 4. incomingData (camelCase) をループ
           for (const camelKey of Object.keys(incomingData)) {
@@ -343,12 +375,13 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
             payload.owner_id = user.id;
           }
 
-          return {
+          rowsWithMeta.push({
+            index,
             payload, // 最終的な payload は snake_case のキーを持つ
             id: typeof payload.id === 'string' ? payload.id : null,
             updatedAt: resolvedUpdatedAt,
-          };
-        });
+          });
+        }
 
         const ids = rowsWithMeta
           .map((row) => row.id)
@@ -359,20 +392,22 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
           ids,
         });
 
-        const rows = rowsWithMeta
-          .filter((row) => {
-            if (!row.id) return true;
-            const currentUpdatedAt = existingUpdatedAtById.get(row.id);
-            if (!currentUpdatedAt) return true;
-            return shouldApplyIncomingByLww(currentUpdatedAt, row.updatedAt);
-          })
-          .map((row) => row.payload);
+        const rowsToUpsert = rowsWithMeta.filter((row) => {
+          if (!row.id) return true;
+          const currentUpdatedAt = existingUpdatedAtById.get(row.id);
+          if (!currentUpdatedAt) return true;
+          const shouldApply = shouldApplyIncomingByLww(currentUpdatedAt, row.updatedAt);
+          if (!shouldApply) consumedIndexes.push(row.index);
+          return shouldApply;
+        });
+        const rows = rowsToUpsert.map((row) => row.payload);
 
         // 10. upsert (snake_case のデータを送信)
         if (rows.length > 0) {
           const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
           if (error) throw asHttpError('upsert failed', error);
         }
+        consumedIndexes.push(...rowsToUpsert.map((row) => row.index));
         pushed = rows.length;
       }
     }
@@ -388,6 +423,11 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       cloud = []; // 初回は全件返さない方針
     }
 
+    const pushResult = {
+      consumedIndexes: [...new Set(consumedIndexes)].sort((a, b) => a - b),
+      rejected: [...rejectedRows].sort((a, b) => a.index - b.index),
+    };
+
     const resp = syncResponseSchema.parse({
       table,
       changes: cloud.map((row) => ({
@@ -397,10 +437,23 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
         updated_at: row.updated_at,
         deleted: !!row.deleted,
       })),
+      pushResult,
     });
 
     const durationMs = Date.now() - started;
-    console.log(JSON.stringify({ lvl: 'info', at: 'sync.ok', requestId, clientIp, userAgent, table, pushed, pulled: resp.changes.length, durationMs }));
+    console.log(JSON.stringify({
+      lvl: 'info',
+      at: 'sync.ok',
+      requestId,
+      clientIp,
+      userAgent,
+      table,
+      pushed,
+      consumed: resp.pushResult?.consumedIndexes.length ?? 0,
+      rejected: resp.pushResult?.rejected.length ?? 0,
+      pulled: resp.changes.length,
+      durationMs,
+    }));
     return jsonWithHeaders(resp, 200, requestId);
   } catch (e: any) {
     const durationMs = Date.now() - started;
