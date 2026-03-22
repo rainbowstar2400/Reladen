@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { EventLogStrict } from '@repo/shared/types/conversation';
-import { filterReportTargetEvents } from '@/lib/reports/report-visibility';
+import {
+  filterReportTargetEvents,
+  hasAnsweredConsultSelection,
+  resolveConsultSelectedChoiceId,
+} from '@/lib/reports/report-visibility';
 
 const now = '2026-03-21T00:00:00.000Z';
 
@@ -19,6 +23,50 @@ function makeEvent(params: {
 }
 
 describe('report-visibility', () => {
+  it('selectedChoiceId の優先順は payload > server > local', () => {
+    expect(
+      resolveConsultSelectedChoiceId({
+        payload: { selectedChoiceId: 'payload-choice' },
+        serverAnswer: { selectedChoiceId: 'server-choice' },
+        localAnswer: { selectedChoiceId: 'local-choice' },
+      }),
+    ).toBe('payload-choice');
+  });
+
+  it('payload が空なら serverAnswer、さらに空なら localAnswer を採用する', () => {
+    expect(
+      resolveConsultSelectedChoiceId({
+        payload: { selectedChoiceId: '' },
+        serverAnswer: { selectedChoiceId: 'server-choice' },
+        localAnswer: { selectedChoiceId: 'local-choice' },
+      }),
+    ).toBe('server-choice');
+
+    expect(
+      resolveConsultSelectedChoiceId({
+        payload: {},
+        serverAnswer: { selectedChoiceId: null },
+        localAnswer: { selectedChoiceId: 'local-choice' },
+      }),
+    ).toBe('local-choice');
+  });
+
+  it('3ソースとも未設定なら null を返す', () => {
+    expect(
+      resolveConsultSelectedChoiceId({
+        payload: { selectedChoiceId: '' },
+        serverAnswer: { selectedChoiceId: '  ' },
+        localAnswer: null,
+      }),
+    ).toBeNull();
+  });
+
+  it('hasAnsweredConsultSelection は resolver 判定と一致する', () => {
+    expect(hasAnsweredConsultSelection({ selectedChoiceId: 'choice-1' })).toBe(true);
+    expect(hasAnsweredConsultSelection({ selectedChoiceId: '' })).toBe(false);
+    expect(hasAnsweredConsultSelection({})).toBe(false);
+  });
+
   it('回答済み相談のみを日報対象として残す', () => {
     const conversation = makeEvent({
       id: 'conv-1',

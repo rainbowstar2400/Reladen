@@ -18,7 +18,7 @@ import { Feeling } from '@/types';
 import { DEFAULT_TRAITS, FEELING_LABELS, GENDER_LABELS, RELATION_LABELS, TRAIT_LABELS } from '@/lib/constants/labels';
 import { DeskPanel } from '@/components/room/desk-panel';
 import { OfficePanelShell } from '@/components/room/office-panel-shell';
-import { useResidentRelatedEvents } from '@/lib/data/events';
+import { useResidentChangeEvents } from '@/lib/data/events';
 import { parseSystemLine } from '@/lib/utils/parse-system-line';
 
 // --- (ここから) traits の日本語ラベルと表示用コンポーネント ---
@@ -73,7 +73,7 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
   const { data: allResidents } = useResidents();
   const { data: relations } = useRelations();
   const { data: feelings } = useFeelings();
-  const { data: residentEvents = [] } = useResidentRelatedEvents(residentId, 15);
+  const { data: residentEvents = [] } = useResidentChangeEvents(residentId, 15);
   const remove = useDeleteResident();
 
   // プリセットデータを取得 (ローディング状態も)
@@ -144,8 +144,6 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
       if (!e.payload) continue;
       const p = e.payload as any;
       const participants: unknown[] = Array.isArray(p.participants) ? p.participants : [];
-      const isResidentRelated = participants.includes(residentId) || p.residentId === residentId;
-      if (!isResidentRelated) continue;
       const updatedAtTs = new Date(e.updated_at).getTime();
       const normalizedUpdatedAt = Number.isFinite(updatedAtTs) ? updatedAtTs : 0;
 
@@ -196,9 +194,8 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
     }
 
     return entries
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, 15);
-  }, [residentEvents, residentId, nameMapObj]);
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }, [residentEvents, nameMapObj]);
 
   const sleepProfile = (resident.sleepProfile ?? {}) as Partial<SleepProfile>;
   // traits にデフォルト値をマージ (DBに traits が null の場合に対応)
