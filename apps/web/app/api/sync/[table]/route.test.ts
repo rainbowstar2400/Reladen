@@ -61,7 +61,7 @@ describe('POST /api/sync/[table]', () => {
     }
   });
 
-  it('consult_answers を初回 insert できる（owner_id は注入しない）', async () => {
+  it('consult_answers を初回 insert できる（owner_id を注入する）', async () => {
     mocks.insert.mockResolvedValue({ error: null });
     mocks.from.mockImplementation((table: string) => {
       if (table === 'consult_answers') {
@@ -91,13 +91,11 @@ describe('POST /api/sync/[table]', () => {
     expect(mocks.insert).toHaveBeenCalledTimes(1);
 
     const payload = mocks.insert.mock.calls[0][0];
-    expect(payload.owner_id).toBeUndefined();
+    expect(payload.owner_id).toBe('11111111-1111-4111-8111-111111111111');
     expect(payload.id).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
     expect(payload.updated_at).toBe('2026-03-14T00:00:00.000Z');
     expect(payload.selected_choice_id).toBe('choice_1');
     expect(payload.decided_at).toBe('2026-03-14T00:00:00.000Z');
-    expect(payload.selectedchoiceid).toBeUndefined();
-    expect(payload.decidedat).toBeUndefined();
   });
 
   it('consult_answers の重複 insert は no-op 成功にする（first-write-wins）', async () => {
@@ -133,7 +131,7 @@ describe('POST /api/sync/[table]', () => {
     expect(mocks.insert).toHaveBeenCalledTimes(1);
   });
 
-  it('compact 入力を受理し、snake_case 列へ正規化して insert する', async () => {
+  it('camelCase 入力を受理し、snake_case 列へ正規化して insert する', async () => {
     mocks.insert.mockResolvedValue({ error: null });
     mocks.from.mockImplementation((table: string) => {
       if (table === 'consult_answers') return { insert: mocks.insert };
@@ -145,8 +143,8 @@ describe('POST /api/sync/[table]', () => {
         {
           data: {
             id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-            selectedchoiceid: 'choice_3',
-            decidedat: '2026-03-14T02:00:00.000Z',
+            selectedChoiceId: 'choice_3',
+            decidedAt: '2026-03-14T02:00:00.000Z',
             updated_at: '2026-03-14T02:00:00.000Z',
             deleted: false,
           },
@@ -162,47 +160,7 @@ describe('POST /api/sync/[table]', () => {
     const payload = mocks.insert.mock.calls[0][0];
     expect(payload.selected_choice_id).toBe('choice_3');
     expect(payload.decided_at).toBe('2026-03-14T02:00:00.000Z');
-    expect(payload.selectedchoiceid).toBeUndefined();
-    expect(payload.decidedat).toBeUndefined();
-    expect(payload.owner_id).toBeUndefined();
-  });
-
-  it('consult_answers pull 応答では compact 列を snake_case へ正規化する', async () => {
-    mocks.gte.mockResolvedValue({
-      data: [
-        {
-          id: '12121212-1212-4121-8121-121212121212',
-          selectedchoiceid: 'choice_9',
-          decidedat: '2026-03-14T09:00:00.000Z',
-          updated_at: '2026-03-14T09:00:00.000Z',
-          deleted: false,
-        },
-      ],
-      error: null,
-    });
-    mocks.from.mockImplementation((table: string) => {
-      if (table === 'consult_answers') {
-        return {
-          insert: mocks.insert,
-          select: (_columns?: string) => ({ gte: mocks.gte }),
-        };
-      }
-      return makeGenericTableFromMock();
-    });
-
-    const req = makeRequest('consult_answers', {
-      since: '2026-03-14T00:00:00.000Z',
-      changes: [],
-    });
-
-    const res = await POST(req as any, { params: { table: 'consult_answers' } } as any);
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    const row = body.changes[0].data;
-    expect(row.selected_choice_id).toBe('choice_9');
-    expect(row.decided_at).toBe('2026-03-14T09:00:00.000Z');
-    expect(row.selectedchoiceid).toBeUndefined();
-    expect(row.decidedat).toBeUndefined();
+    expect(payload.owner_id).toBe('11111111-1111-4111-8111-111111111111');
   });
 
   it('consult_answers insert の RLS エラーを 401 として返す', async () => {

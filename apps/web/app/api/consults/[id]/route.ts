@@ -38,21 +38,10 @@ function normalizeConsultRow(row: any) {
 
 function normalizeConsultAnswerRow(row: any) {
   if (!row) return null;
-  const selectedChoiceId =
-    row.selected_choice_id
-    ?? row.selectedchoiceid
-    ?? row.selectedChoiceId
-    ?? null;
-  const decidedAt =
-    row.decided_at
-    ?? row.decidedat
-    ?? row.decidedAt
-    ?? null;
-
   return {
     id: row.id ?? null,
-    selectedChoiceId: selectedChoiceId != null ? String(selectedChoiceId) : null,
-    decidedAt: decidedAt != null ? String(decidedAt) : null,
+    selectedChoiceId: row.selected_choice_id != null ? String(row.selected_choice_id) : null,
+    decidedAt: row.decided_at != null ? String(row.decided_at) : null,
     updatedAt: row.updated_at ?? null,
   };
 }

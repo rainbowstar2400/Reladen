@@ -17,24 +17,30 @@ export type Database = {
     Tables: {
       consult_answers: {
         Row: {
-          decidedat: string | null
+          decided_at: string | null
           deleted: boolean
+          event_id: string | null
           id: string
-          selectedchoiceid: string | null
+          owner_id: string | null
+          selected_choice_id: string | null
           updated_at: string
         }
         Insert: {
-          decidedat?: string | null
+          decided_at?: string | null
           deleted?: boolean
+          event_id?: string | null
           id: string
-          selectedchoiceid?: string | null
+          owner_id?: string | null
+          selected_choice_id?: string | null
           updated_at?: string
         }
         Update: {
-          decidedat?: string | null
+          decided_at?: string | null
           deleted?: boolean
+          event_id?: string | null
           id?: string
-          selectedchoiceid?: string | null
+          owner_id?: string | null
+          selected_choice_id?: string | null
           updated_at?: string
         }
         Relationships: []

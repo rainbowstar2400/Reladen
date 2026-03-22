@@ -35,24 +35,20 @@ describe('normalizePulledRow', () => {
     expect(normalized.updatedAt).toBe('camel');
   });
 
-  it('consult_answers の compact/snake 混在を3系統へ補完する', () => {
+  it('consult_answers の snake_case を camelCase に補完する', () => {
     const input = {
       id: 'consult-1',
       selected_choice_id: 'choice_snake',
-      selectedchoiceid: 'choice_compact',
-      decidedat: '2026-03-14T01:00:00.000Z',
+      decided_at: '2026-03-14T01:00:00.000Z',
       updated_at: '2026-03-14T01:00:00.000Z',
     };
 
     const normalized = normalizePulledRow('consult_answers', input);
 
-    // 優先順: camel > snake > compact
-    expect(normalized.selectedChoiceId).toBe('choice_snake');
     expect(normalized.selected_choice_id).toBe('choice_snake');
-    expect(normalized.selectedchoiceid).toBe('choice_snake');
-    expect(normalized.decidedAt).toBe('2026-03-14T01:00:00.000Z');
+    expect(normalized.selectedChoiceId).toBe('choice_snake');
     expect(normalized.decided_at).toBe('2026-03-14T01:00:00.000Z');
-    expect(normalized.decidedat).toBe('2026-03-14T01:00:00.000Z');
+    expect(normalized.decidedAt).toBe('2026-03-14T01:00:00.000Z');
     expect(normalized.updatedAt).toBe('2026-03-14T01:00:00.000Z');
   });
 });

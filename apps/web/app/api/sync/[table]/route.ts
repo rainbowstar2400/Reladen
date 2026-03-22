@@ -97,12 +97,10 @@ function buildConsultAnswerPayload(
   const selectedChoiceId = pickFirst(
     incomingData.selectedChoiceId,
     incomingData.selected_choice_id,
-    incomingData.selectedchoiceid,
   );
   const decidedAt = pickFirst(
     incomingData.decidedAt,
     incomingData.decided_at,
-    incomingData.decidedat,
   );
 
   if (id && allowedCols.has('id')) payload.id = id;
@@ -122,22 +120,7 @@ function buildConsultAnswerPayload(
 
 function normalizeConsultAnswerRowForResponse(row: Record<string, any>) {
   const normalized = { ...row };
-  const selectedChoiceId = pickFirst(
-    normalized.selected_choice_id,
-    normalized.selectedChoiceId,
-    normalized.selectedchoiceid,
-  );
-  const decidedAt = pickFirst(
-    normalized.decided_at,
-    normalized.decidedAt,
-    normalized.decidedat,
-  );
-  if (selectedChoiceId !== undefined) normalized.selected_choice_id = selectedChoiceId;
-  if (decidedAt !== undefined) normalized.decided_at = decidedAt;
-  delete normalized.selectedchoiceid;
-  delete normalized.decidedat;
-  delete normalized.selectedChoiceId;
-  delete normalized.decidedAt;
+  // DBは snake_case に統一済みなので、そのまま返す
   return normalized;
 }
 
@@ -241,13 +224,14 @@ const WORLD_STATES_ALLOWED = new Set([
   'owner_id', 'updated_at', 'deleted'
 ]);
 
-// consult_answers の内部契約は snake_case に統一する
+// consult_answers の許可カラム
 const CONSULT_ANSWERS_ALLOWED = new Set([
   'id',
   'updated_at',
   'deleted',
   'selected_choice_id',
   'decided_at',
+  'owner_id',
 ]);
 
 // 許可リストのマップ (キーは sync.ts と一致)
