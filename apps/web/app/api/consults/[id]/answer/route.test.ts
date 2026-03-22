@@ -192,8 +192,12 @@ describe("POST /api/consults/[id]/answer", () => {
     expect(res.status).toBe(200);
 
     const relation = db.relations.find((row) => row.id === "55555555-5555-4555-8555-555555555555");
+    const feeling = db.feelings.find((f) => f.from_id === RESIDENT_ID && f.to_id === TARGET_ID);
     expect(relation?.type).toBe("friend");
-    expect(db.feelings.find((f) => f.from_id === RESIDENT_ID && f.to_id === TARGET_ID)?.label).toBe("curious");
+    expect(feeling?.label).toBe("curious");
+    expect(feeling?.base_label).toBe("curious");
+    expect(feeling?.special_label).toBe(null);
+    expect(feeling?.base_before_special).toBe(null);
     expect(db.events.some((e) => e.kind === "consult_cooldown" && e.payload?.trigger === "confession")).toBe(true);
   });
 
@@ -252,8 +256,12 @@ describe("POST /api/consults/[id]/answer", () => {
     expect(res.status).toBe(200);
 
     const relation = db.relations.find((row) => row.id === "55555555-5555-4555-8555-555555555555");
+    const feeling = db.feelings.find((f) => f.from_id === RESIDENT_ID && f.to_id === TARGET_ID);
     expect(relation?.type).toBe("lover");
-    expect(db.feelings.find((f) => f.from_id === RESIDENT_ID && f.to_id === TARGET_ID)?.label).toBe("none");
+    expect(feeling?.label).toBe("none");
+    expect(feeling?.base_label).toBe("none");
+    expect(feeling?.special_label).toBe(null);
+    expect(feeling?.base_before_special).toBe(null);
     expect(db.events.some((e) => e.kind === "consult_cooldown" && e.payload?.trigger === "breakup")).toBe(true);
   });
 });

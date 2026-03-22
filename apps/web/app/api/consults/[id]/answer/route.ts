@@ -436,11 +436,13 @@ async function handleNegativeTransitionAnswer(params: {
     }
 
     if (newLabel) {
-      await putAny("feelings", {
-        ...feeling,
-        label: newLabel,
-        updated_at: params.now,
-      });
+      await updateFeelingLabel(
+        feeling,
+        residentId,
+        targetId,
+        newLabel,
+        params.now,
+      );
     }
   }
 

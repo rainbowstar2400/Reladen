@@ -26,8 +26,14 @@ function sortNotifications(items: NotificationRecord[]): NotificationRecord[] {
   });
 }
 
+function isOnline(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return navigator.onLine;
+}
+
 async function buildConsultPayloadByEventId(
   notifications: NotificationRecord[],
+  options?: { isOnline?: boolean },
 ): Promise<Map<string, ConsultPayloadLike>> {
   const consultIds = Array.from(
     new Set(
@@ -49,7 +55,8 @@ async function buildConsultPayloadByEventId(
     payloadByEventId.set(event.id, (event.payload ?? {}) as ConsultPayloadLike);
   }
 
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+  const canFetchRemote = options?.isOnline ?? isOnline();
+  if (!canFetchRemote) {
     return payloadByEventId;
   }
 
@@ -75,6 +82,22 @@ async function buildConsultPayloadByEventId(
   return payloadByEventId;
 }
 
+export async function resolveVisibleNotifications(
+  notifications: NotificationRecord[],
+  options?: { nowMs?: number; isOnline?: boolean },
+): Promise<NotificationRecord[]> {
+  const nowMs = options?.nowMs ?? Date.now();
+  const recencyFiltered = filterNotificationsByRecency(notifications, nowMs);
+  const consultPayloadByEventId = await buildConsultPayloadByEventId(recencyFiltered, {
+    isOnline: options?.isOnline,
+  });
+  return filterExpiredUnansweredConsultNotifications(
+    recencyFiltered,
+    consultPayloadByEventId,
+    nowMs,
+  );
+}
+
 export function useNotifications() {
   return useQuery({
     queryKey: ['notifications'],
@@ -85,31 +108,26 @@ export function useNotifications() {
       let current = sortNotifications(localFiltered);
 
       // 2) オンラインならクラウド取り込み → ローカルへ反映 → 再読み込み
-      if (typeof navigator === 'undefined' || !navigator.onLine) {
-        return current;
-      }
-
-      try {
-        const remote = await remoteFetchRecentNotifications(50);
-        if (remote?.length) {
-          await bulkUpsert('notifications', remote as any);
-          const after = (await listLocal('notifications')) as NotificationRecord[];
-          const afterFiltered = after.filter((n) => n.status !== 'archived');
-          current = sortNotifications(afterFiltered);
+      const online = isOnline();
+      if (online) {
+        try {
+          const remote = await remoteFetchRecentNotifications(50);
+          if (remote?.length) {
+            await bulkUpsert('notifications', remote as any);
+            const after = (await listLocal('notifications')) as NotificationRecord[];
+            const afterFiltered = after.filter((n) => n.status !== 'archived');
+            current = sortNotifications(afterFiltered);
+          }
+        } catch (e) {
+          // ネットワーク等の一時失敗は無視（ローカル表示を維持）
+          console.warn('[notifications] remote fetch skipped:', (e as any)?.message);
         }
-      } catch (e) {
-        // ネットワーク等の一時失敗は無視（ローカル表示を維持）
-        console.warn('[notifications] remote fetch skipped:', (e as any)?.message);
       }
 
-      const nowMs = Date.now();
-      const recencyFiltered = filterNotificationsByRecency(current, nowMs);
-      const consultPayloadByEventId = await buildConsultPayloadByEventId(recencyFiltered);
-      return filterExpiredUnansweredConsultNotifications(
-        recencyFiltered,
-        consultPayloadByEventId,
-        nowMs,
-      );
+      return resolveVisibleNotifications(current, {
+        nowMs: Date.now(),
+        isOnline: online,
+      });
     },
   });
 }
@@ -168,14 +186,10 @@ export async function listNotifications(opts?: { limit?: number }): Promise<Noti
   // こちらも archived を除外し、共通ソートへ統一
   const filtered = arr.filter((n) => n.status !== 'archived');
   const sorted = sortNotifications(filtered);
-  const nowMs = Date.now();
-  const recencyFiltered = filterNotificationsByRecency(sorted, nowMs);
-  const consultPayloadByEventId = await buildConsultPayloadByEventId(recencyFiltered);
-  const visible = filterExpiredUnansweredConsultNotifications(
-    recencyFiltered,
-    consultPayloadByEventId,
-    nowMs,
-  );
+  const visible = await resolveVisibleNotifications(sorted, {
+    nowMs: Date.now(),
+    isOnline: isOnline(),
+  });
   return (typeof opts?.limit === 'number') ? visible.slice(0, opts.limit) : visible;
 }
 
