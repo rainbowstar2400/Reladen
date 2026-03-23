@@ -14,6 +14,7 @@ import {
   TRUST_BAND_TONE,
   CONSULT_EXPIRY_HOURS,
 } from "@repo/shared/logic/consult";
+import { relationTriggerEventPayloadSchema } from "@repo/shared/types/conversation";
 
 const generateRequestSchema = z.object({
   residentId: z.string().uuid(),
@@ -39,22 +40,14 @@ export async function POST(req: Request) {
   const { residentId, triggerId } = parsed.data;
 
   try {
-    // 住人情報を取得
-    const residents = (await listAny("residents")) as any[] | null;
-    const resident = residents?.find((r) => r.id === residentId && !r.deleted);
-    if (!resident) {
-      return NextResponse.json({ error: "resident_not_found" }, { status: 404 });
-    }
-
-    const trust: number = resident.trustToPlayer ?? resident.trust_to_player ?? 50;
-    const trustBand = getTrustBand(trust);
-    const traits = resident.traits ?? {};
     const now = new Date();
 
     // 関係遷移トリガーかどうか判定
     let isTransition = false;
     let triggerEvent: any = null;
     let participants: string[] = [residentId];
+    let consultResidentId = residentId;
+    let triggerPayload: z.infer<typeof relationTriggerEventPayloadSchema> | null = null;
 
     if (triggerId) {
       const events = (await listAny("events")) as any[] | null;
@@ -62,12 +55,33 @@ export async function POST(req: Request) {
         (e) => e.id === triggerId && e.kind === "relation_trigger" && !e.deleted,
       );
       if (triggerEvent) {
+        const payloadParsed = relationTriggerEventPayloadSchema.safeParse(triggerEvent.payload ?? {});
+        if (!payloadParsed.success) {
+          return NextResponse.json(
+            { error: "invalid_trigger_payload", details: payloadParsed.error.flatten() },
+            { status: 422 },
+          );
+        }
+        if (payloadParsed.data.handled) {
+          return NextResponse.json({ error: "trigger_already_handled" }, { status: 409 });
+        }
         isTransition = true;
-        participants = Array.isArray(triggerEvent.payload?.participants)
-          ? triggerEvent.payload.participants
-          : [residentId];
+        triggerPayload = payloadParsed.data;
+        consultResidentId = payloadParsed.data.residentId;
+        participants = [payloadParsed.data.residentId, payloadParsed.data.targetId];
       }
     }
+
+    // 住人情報を取得
+    const residents = (await listAny("residents")) as any[] | null;
+    const resident = residents?.find((r) => r.id === consultResidentId && !r.deleted);
+    if (!resident) {
+      return NextResponse.json({ error: "resident_not_found" }, { status: 404 });
+    }
+
+    const trust: number = resident.trustToPlayer ?? resident.trust_to_player ?? 50;
+    const trustBand = getTrustBand(trust);
+    const traits = resident.traits ?? {};
 
     // テーマ生成
     let themeResult;
@@ -76,7 +90,7 @@ export async function POST(req: Request) {
 
     if (isTransition && triggerEvent) {
       // 関係遷移相談: テンプレート選択肢を使用
-      const trigger = triggerEvent.payload?.trigger as "confession" | "breakup";
+      const trigger = triggerPayload!.trigger;
       const choices = buildTransitionChoices(trigger);
       category = "relation_transition";
       seed = trigger;
@@ -163,7 +177,7 @@ export async function POST(req: Request) {
       title: themeResult.title,
       content: themeResult.content,
       choices: themeResult.choices,
-      residentId,
+      residentId: consultResidentId,
       participants,
       triggerEventId: triggerId ?? null,
       category,
@@ -182,7 +196,7 @@ export async function POST(req: Request) {
 
     // notification 作成
     const notifId = newId();
-    const snippet = themeResult.content.slice(0, 57) + (themeResult.content.length > 57 ? "…" : "");
+    const snippet = themeResult.content.slice(0, 30) + (themeResult.content.length > 30 ? "…" : "");
     await putAny("notifications", {
       id: notifId,
       type: "consult",
@@ -195,6 +209,18 @@ export async function POST(req: Request) {
       priority: isTransition ? 1 : 0,
       updated_at: now.toISOString(),
     });
+
+    // relation_trigger の handled を反映
+    if (isTransition && triggerEvent && triggerPayload) {
+      await putAny("events", {
+        ...triggerEvent,
+        payload: {
+          ...triggerPayload,
+          handled: true,
+        },
+        updated_at: now.toISOString(),
+      });
+    }
 
     return NextResponse.json({ eventId, consultPayload });
   } catch (error) {

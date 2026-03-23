@@ -17,14 +17,22 @@ import type {
   Traits,
   SelectedTopic,
 } from "@repo/shared/types/conversation-generation";
-import { selectTopic, type TopicSelectionInput, type CharacterContext } from "@repo/shared/logic/topic-selection";
+import {
+  selectTopic,
+  SMALL_TALK_CATEGORY_DETAIL,
+  SMALL_TALK_CATEGORY_LABEL,
+  type TopicSelectionInput,
+  type CharacterContext,
+} from "@repo/shared/logic/topic-selection";
 import { buildConversationStructure, determineInitiator, type StructureInput } from "@repo/shared/logic/conversation-structure";
 import { shouldGeneratePromise, determineConversationType, type ConversationType } from "@repo/shared/logic/promise";
 import { checkRelationTransition, computeImpressionOnTransition, type TransitionResult } from "@repo/shared/logic/relation-transition";
+import type { ImpressionBase } from "@repo/shared/types/conversation";
 import { callGptForConversation, type CallGptResult } from "@/lib/gpt/call-gpt-for-conversation";
 import { callGptForSituation } from "@/lib/gpt/call-gpt-for-situation";
 import { callGptForNickname } from "@/lib/gpt/call-gpt-for-nickname";
 import { shouldGenerateNickname, type NicknameGenerationInput, type NicknameTendency } from "@repo/shared/logic/nickname";
+import { DEFAULT_FEELING_SCORE } from "@repo/shared/types";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
 import { KvUnauthenticatedError, listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
@@ -52,7 +60,7 @@ export type RunConversationArgs = {
     feelingBtoA: { label: string; score: number };
   };
   /** 環境 */
-  environment: { place: string; timeOfDay: string; weather?: string };
+  environment: { timeOfDay: string; weather?: string; place?: string };
   /** ゲーム内日付（例: "3月17日"） */
   gameDate?: string;
   /** 前回の会話記憶 */
@@ -77,6 +85,8 @@ export type RunConversationArgs = {
   situation?: string;
   /** ニックネーム情報（D-3） */
   nicknames?: { aCallsB?: string | null; bCallsA?: string | null };
+  /** threadId 起動時の topic_threads.status（ongoing なら約束履行会話を強制） */
+  threadStatus?: "ongoing" | "done" | null;
 };
 
 export type RunCharacterProfile = {
@@ -171,6 +181,17 @@ function toCharacterProfile(profile: RunCharacterProfile): CharacterProfile {
   };
 }
 
+function resolveFavorScoreByInitiator(
+  participants: [string, string],
+  relation: RunConversationArgs["relation"],
+  initiatorId: string,
+): number {
+  const [aId, bId] = participants;
+  if (initiatorId === aId) return relation.feelingAtoB.score;
+  if (initiatorId === bId) return relation.feelingBtoA.score;
+  return relation.feelingAtoB.score;
+}
+
 // ---------------------------------------------------------------------------
 // KV データ読み込み
 // ---------------------------------------------------------------------------
@@ -192,6 +213,12 @@ type FeelingRow = {
   fromId?: string;
   toId?: string;
   label?: string;
+  base_label?: string;
+  special_label?: string | null;
+  base_before_special?: string | null;
+  baseLabel?: string;
+  specialLabel?: string | null;
+  baseBeforeSpecial?: string | null;
   score?: number;
   recent_deltas?: number[];
   updated_at?: string;
@@ -202,6 +229,9 @@ type FeelingRow = {
 type TopicThreadRow = {
   id?: string;
   participants?: unknown;
+  status?: string;
+  updated_at?: string;
+  updatedAt?: string;
   deleted?: boolean;
 };
 
@@ -382,9 +412,9 @@ async function loadCharacterProfiles(
   return { profiles: dict, nameMap };
 }
 
-async function resolveParticipantsFromThread(
+async function resolveThreadContext(
   threadId: string,
-): Promise<[string, string]> {
+): Promise<{ participants: [string, string]; status: "ongoing" | "done" | null }> {
   const rows = (await listAny("topic_threads")) as unknown as TopicThreadRow[] | null;
   if (!Array.isArray(rows)) {
     throw new ConversationStartError(
@@ -412,7 +442,14 @@ async function resolveParticipantsFromThread(
     );
   }
 
-  return participants;
+  const status = thread.status === "ongoing" || thread.status === "done"
+    ? thread.status
+    : null;
+
+  return {
+    participants,
+    status,
+  };
 }
 
 /** 関係性タイプを KV から読み込み */
@@ -440,7 +477,62 @@ async function loadRelationForPair(
   };
 }
 
-type FeelingData = { label: string; score: number; recentDeltas: number[] };
+type FeelingData = {
+  label: string;
+  score: number;
+  recentDeltas: number[];
+  baseLabel: ImpressionBase;
+  specialLabel: 'awkward' | null;
+  baseBeforeSpecial: ImpressionBase | null;
+};
+
+const FEELING_BASE_LABELS = new Set<ImpressionBase>([
+  'dislike',
+  'maybe_dislike',
+  'none',
+  'curious',
+  'maybe_like',
+  'like',
+  'love',
+]);
+
+function normalizeFeelingScore(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_FEELING_SCORE;
+  }
+  return value;
+}
+
+function normalizeImpressionBase(value: unknown, fallback: ImpressionBase = 'none'): ImpressionBase {
+  if (typeof value === 'string' && FEELING_BASE_LABELS.has(value as ImpressionBase)) {
+    return value as ImpressionBase;
+  }
+  return fallback;
+}
+
+function normalizeNullableImpressionBase(value: unknown): ImpressionBase | null {
+  if (typeof value !== 'string') return null;
+  if (!FEELING_BASE_LABELS.has(value as ImpressionBase)) return null;
+  return value as ImpressionBase;
+}
+
+function pickFeelingBaseLabel(row: FeelingRow | undefined): ImpressionBase {
+  const fromLabel = row?.label === 'awkward'
+    ? 'none'
+    : normalizeImpressionBase(row?.label, 'none');
+  return normalizeImpressionBase(row?.base_label ?? row?.baseLabel, fromLabel);
+}
+
+function pickFeelingSpecialLabel(row: FeelingRow | undefined): 'awkward' | null {
+  const special = row?.special_label ?? row?.specialLabel;
+  if (special === 'awkward') return 'awkward';
+  if (row?.label === 'awkward') return 'awkward';
+  return null;
+}
+
+function pickFeelingBaseBeforeSpecial(row: FeelingRow | undefined): ImpressionBase | null {
+  return normalizeNullableImpressionBase(row?.base_before_special ?? row?.baseBeforeSpecial);
+}
 
 /** 好感度を KV から読み込み */
 async function loadFeelingsForPair(
@@ -450,7 +542,16 @@ async function loadFeelingsForPair(
   const [a, b] = participants;
 
   const pickLatest = (fromId: string, toId: string): FeelingData => {
-    if (!Array.isArray(rows)) return { label: "none", score: 0, recentDeltas: [] };
+    if (!Array.isArray(rows)) {
+      return {
+        label: "none",
+        score: DEFAULT_FEELING_SCORE,
+        recentDeltas: [],
+        baseLabel: 'none',
+        specialLabel: null,
+        baseBeforeSpecial: null,
+      };
+    }
     const found = rows
       .filter((row) => {
         if (!row || row.deleted) return false;
@@ -458,10 +559,19 @@ async function loadFeelingsForPair(
         return pair.fromId === fromId && pair.toId === toId;
       })
       .sort((lhs, rhs) => toUpdatedAtMillis(rhs) - toUpdatedAtMillis(lhs))[0];
+    const baseLabel = pickFeelingBaseLabel(found);
+    const specialLabel = pickFeelingSpecialLabel(found);
+    const baseBeforeSpecial = pickFeelingBaseBeforeSpecial(found);
+    const effectiveLabel = specialLabel === 'awkward'
+      ? 'awkward'
+      : normalizeImpressionBase(found?.label, baseLabel);
     return {
-      label: typeof found?.label === "string" ? found.label : "none",
-      score: typeof found?.score === "number" && Number.isFinite(found.score) ? found.score : 0,
+      label: effectiveLabel,
+      score: normalizeFeelingScore(found?.score),
       recentDeltas: Array.isArray(found?.recent_deltas) ? found.recent_deltas : [],
+      baseLabel,
+      specialLabel,
+      baseBeforeSpecial,
     };
   };
 
@@ -481,15 +591,16 @@ async function loadConversationHistory(
 ): Promise<{
   previousMemory: ConversationMemory | null;
   recentTopics: string[];
+  recentSituations: string[];
 }> {
   let allEvents: Array<Record<string, any>> | null = null;
   try {
     allEvents = (await listAny("events")) as unknown as Array<Record<string, any>> | null;
   } catch (error) {
     console.warn("[loadConversationHistory] Failed to load events.", error);
-    return { previousMemory: null, recentTopics: [] };
+    return { previousMemory: null, recentTopics: [], recentSituations: [] };
   }
-  if (!Array.isArray(allEvents)) return { previousMemory: null, recentTopics: [] };
+  if (!Array.isArray(allEvents)) return { previousMemory: null, recentTopics: [], recentSituations: [] };
 
   const [a, b] = participants;
   const pairConvEvents = allEvents
@@ -513,6 +624,7 @@ async function loadConversationHistory(
 
   // recentTopics: 直近5件のイベントから話題を集約
   const recentTopics: string[] = [];
+  const recentSituations: string[] = [];
   for (const e of pairConvEvents.slice(0, 5)) {
     const covered = e.payload?.meta?.memory?.topicsCovered;
     if (Array.isArray(covered)) {
@@ -522,9 +634,14 @@ async function loadConversationHistory(
         }
       }
     }
+
+    const situation = e.payload?.situation;
+    if (typeof situation === "string" && situation.length > 0 && !recentSituations.includes(situation)) {
+      recentSituations.push(situation);
+    }
   }
 
-  return { previousMemory, recentTopics };
+  return { previousMemory, recentTopics, recentSituations };
 }
 
 // ---------------------------------------------------------------------------
@@ -631,7 +748,7 @@ async function loadRecentEventsForCharacter(
 }
 
 /** 時間帯に基づく環境情報を決定 */
-function determineEnvironment(): { place: string; timeOfDay: string } {
+function determineEnvironment(): { timeOfDay: string } {
   const now = new Date();
   const hourText = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Tokyo",
@@ -640,10 +757,10 @@ function determineEnvironment(): { place: string; timeOfDay: string } {
   }).format(now);
   const hour = Number(hourText);
   const effectiveHour = Number.isFinite(hour) ? hour : now.getUTCHours();
-  if (effectiveHour >= 6 && effectiveHour < 11) return { place: "駅前カフェ", timeOfDay: "朝" };
-  if (effectiveHour >= 11 && effectiveHour < 16) return { place: "商店街", timeOfDay: "昼" };
-  if (effectiveHour >= 16 && effectiveHour < 20) return { place: "川沿い公園", timeOfDay: "夕方" };
-  return { place: "コンビニ", timeOfDay: "夜" };
+  if (effectiveHour >= 6 && effectiveHour < 11) return { timeOfDay: "朝" };
+  if (effectiveHour >= 11 && effectiveHour < 16) return { timeOfDay: "昼" };
+  if (effectiveHour >= 16 && effectiveHour < 20) return { timeOfDay: "夕方" };
+  return { timeOfDay: "夜" };
 }
 
 // ---------------------------------------------------------------------------
@@ -673,8 +790,8 @@ export async function runConversation(
   // 話題選定と会話構造の主導者を一致させるため、先に主導者シードを確定する。
   const seedTopic: SelectedTopic = {
     source: "small_talk",
-    label: `${args.environment.place}での出来事`,
-    detail: `${args.environment.timeOfDay}の${args.environment.place}`,
+    label: SMALL_TALK_CATEGORY_LABEL,
+    detail: SMALL_TALK_CATEGORY_DETAIL,
   };
   const { initiator: seedInitiator, responder: seedResponder } = determineInitiator(ctxA, ctxB, seedTopic);
 
@@ -689,6 +806,7 @@ export async function runConversation(
     knowledgeByB: args.knowledgeByB ?? [],
     recentTopics: args.recentTopics ?? [],
     environment: args.environment,
+    situation: args.situation,
     nameMap: args.nameMap,
     recentEventsA: args.recentEventsByCharacter?.[seedInitiator.id],
     currentDate: args.currentDate,
@@ -700,15 +818,6 @@ export async function runConversation(
     seedResponder,
   );
 
-  // --- 1.5. 約束フラグ抽選 ---
-  const isContinuation = topic.source === 'continuation';
-  const promiseFlag = !isContinuation && shouldGeneratePromise({
-    relationType: args.relation.type,
-    topicSource: topic.source,
-    favorScore: args.relation.feelingAtoB.score,
-  });
-  const conversationType = determineConversationType(topic.source, promiseFlag);
-
   // --- 2. 会話構造決定 ---
   const structureInput: StructureInput = {
     characterA: ctxA,
@@ -718,6 +827,26 @@ export async function runConversation(
     initiatorOverrideId: seedInitiator.id,
   };
   const structure = buildConversationStructure(structureInput);
+
+  // --- 2.5. 約束フラグ抽選 ---
+  // 約束抽選は「主導者 -> 相手」の好感度軸で確率計算する。
+  const initiatorFavorScore = resolveFavorScoreByInitiator(
+    args.participants,
+    args.relation,
+    structure.initiatorId,
+  );
+  const isContinuation = topic.source === "continuation";
+  const isOngoingThread = args.threadStatus === "ongoing";
+  const promiseFlag = (!isContinuation && !isOngoingThread)
+    ? shouldGeneratePromise({
+        relationType: args.relation.type,
+        topicSource: topic.source,
+        favorScore: initiatorFavorScore,
+      })
+    : false;
+  const conversationType: ConversationType = isOngoingThread
+    ? "promise_fulfillment"
+    : determineConversationType(topic.source, promiseFlag);
 
   // --- 3. プロンプト構築 + GPT呼び出し ---
   const promptInput: PromptInput = {
@@ -892,8 +1021,8 @@ async function persistTransitionResult(params: {
   transition: TransitionResult;
   favorA: number;
   favorB: number;
-  currentImpressionA: import("@repo/shared/types/conversation").ImpressionBase;
-  currentImpressionB: import("@repo/shared/types/conversation").ImpressionBase;
+  currentImpressionA: ImpressionBase;
+  currentImpressionB: ImpressionBase;
 }): Promise<void> {
   const [a, b] = params.participants;
   const now = new Date().toISOString();
@@ -940,10 +1069,24 @@ async function persistTransitionResult(params: {
         return pair.fromId === b && pair.toId === a && !f.deleted;
       });
       if (fAB) {
-        await putAny("feelings", { ...(fAB as any), label: newImpressionA, updated_at: now });
+        await putAny("feelings", {
+          ...(fAB as any),
+          label: newImpressionA,
+          base_label: newImpressionA,
+          special_label: null,
+          base_before_special: null,
+          updated_at: now,
+        });
       }
       if (fBA) {
-        await putAny("feelings", { ...(fBA as any), label: newImpressionB, updated_at: now });
+        await putAny("feelings", {
+          ...(fBA as any),
+          label: newImpressionB,
+          base_label: newImpressionB,
+          special_label: null,
+          base_before_special: null,
+          updated_at: now,
+        });
       }
     }
 
@@ -979,21 +1122,21 @@ async function persistTransitionResult(params: {
   }
 
   if (params.transition.type === 'intervention') {
-    const { trigger, subjectDirection } = params.transition;
-    const subjectId = subjectDirection === 'a' ? a : b;
+    const { trigger, residentId, targetId } = params.transition;
 
-    // system イベントとして記録（Phase 5 の相談システムで処理）
+    // relation_trigger イベントとして記録（相談システムで処理）
     await putAny("events", {
       id: newId(),
-      kind: "system",
+      kind: "relation_trigger",
       updated_at: now,
       deleted: false,
       payload: {
-        type: "relation_trigger",
         trigger,
-        subjectId,
-        participants: [a, b],
+        residentId,
+        targetId,
+        participants: [residentId, targetId],
         currentRelation: params.currentRelation,
+        handled: false,
       },
     } as any);
   }
@@ -1012,10 +1155,13 @@ export async function runConversationFromApi(
   args: RunConversationApiArgs,
 ): Promise<RunConversationApiResult> {
   let threadId: string | undefined;
+  let threadStatus: "ongoing" | "done" | null = null;
   let participants: [string, string];
   if ("threadId" in args) {
     threadId = args.threadId;
-    participants = await resolveParticipantsFromThread(args.threadId);
+    const threadContext = await resolveThreadContext(args.threadId);
+    participants = threadContext.participants;
+    threadStatus = threadContext.status;
   } else {
     participants = args.participants;
   }
@@ -1040,8 +1186,22 @@ export async function runConversationFromApi(
 
   // 3) 好感度読み込み
   let feelings: { aToB: FeelingData; bToA: FeelingData } = {
-    aToB: { label: "none", score: 0, recentDeltas: [] },
-    bToA: { label: "none", score: 0, recentDeltas: [] },
+    aToB: {
+      label: "none",
+      score: DEFAULT_FEELING_SCORE,
+      recentDeltas: [],
+      baseLabel: 'none',
+      specialLabel: null,
+      baseBeforeSpecial: null,
+    },
+    bToA: {
+      label: "none",
+      score: DEFAULT_FEELING_SCORE,
+      recentDeltas: [],
+      baseLabel: 'none',
+      specialLabel: null,
+      baseBeforeSpecial: null,
+    },
   };
   try {
     feelings = await loadFeelingsForPair(participants);
@@ -1054,8 +1214,8 @@ export async function runConversationFromApi(
   const now = new Date();
   const gameDate = `${now.getMonth() + 1}月${now.getDate()}日`;
 
-  // 5) 会話履歴読み込み（previousMemory + recentTopics）
-  const { previousMemory, recentTopics } = await loadConversationHistory(participants);
+  // 5) 会話履歴読み込み（previousMemory + recentTopics + recentSituations）
+  const { previousMemory, recentTopics, recentSituations } = await loadConversationHistory(participants);
 
   // 6) バッチ生成（スニペット + 最近の出来事）
   try {
@@ -1116,7 +1276,7 @@ export async function runConversationFromApi(
       relationType: relationType ?? "acquaintance",
       timeOfDay: environment.timeOfDay,
       date: gameDate,
-      recentSituations: recentTopics.slice(0, 5),
+      recentSituations: recentSituations.slice(0, 5),
     });
   } catch (error) {
     console.warn("[runConversationFromApi] Failed to generate situation.", error);
@@ -1148,6 +1308,7 @@ export async function runConversationFromApi(
     currentDate: now.toISOString().slice(0, 10),
     situation,
     nicknames: nicknameInfo,
+    threadStatus,
   });
 
   // 10) 評価
@@ -1177,8 +1338,16 @@ export async function runConversationFromApi(
     // Phase 2: A-3 2系列制
     relationType: relationType ?? 'acquaintance',
     currentImpression: {
-      aToB: feelings.aToB.label as import('@/lib/evaluation/weights').ImpressionBase,
-      bToA: feelings.bToA.label as import('@/lib/evaluation/weights').ImpressionBase,
+      aToB: {
+        base: feelings.aToB.baseLabel,
+        special: feelings.aToB.specialLabel,
+        baseBeforeSpecial: feelings.aToB.baseBeforeSpecial,
+      },
+      bToA: {
+        base: feelings.bToA.baseLabel,
+        special: feelings.bToA.specialLabel,
+        baseBeforeSpecial: feelings.bToA.baseBeforeSpecial,
+      },
     },
     // Phase 2: A-4 3件窓
     recentDeltas: {
@@ -1192,15 +1361,18 @@ export async function runConversationFromApi(
   const { eventId } = await persistConversation({
     gptOut: result.output,
     evalResult,
+    situation,
   });
 
   // 12) 関係遷移チェック（会話評価後・永続化後）
   const postFavorA = clampScore(feelings.aToB.score + Math.round(evalResult.deltas.aToB.favor));
   const postFavorB = clampScore(feelings.bToA.score + Math.round(evalResult.deltas.bToA.favor));
-  const postImpressionA = evalResult.deltas.aToB.impressionState.base as import("@repo/shared/types/conversation").ImpressionBase;
-  const postImpressionB = evalResult.deltas.bToA.impressionState.base as import("@repo/shared/types/conversation").ImpressionBase;
+  const postImpressionA = evalResult.deltas.aToB.impressionState.base as ImpressionBase;
+  const postImpressionB = evalResult.deltas.bToA.impressionState.base as ImpressionBase;
 
   const transition = checkRelationTransition({
+    participantAId: participants[0],
+    participantBId: participants[1],
     relationType: relationType ?? 'acquaintance',
     favorAtoB: postFavorA,
     favorBtoA: postFavorB,

@@ -129,7 +129,7 @@ export async function generateRecentEventsIfStale(): Promise<number> {
   // 3) LLM で出来事生成
   const userPrompt = buildRecentEventsUserPrompt(charInputs);
   const res = await client.responses.create({
-    model: "gpt-4o-mini",
+    model: "gpt-5-mini",
     temperature: 0.7,
     input: [
       { role: "system", content: [{ type: "input_text", text: systemPromptRecentEvents }] },

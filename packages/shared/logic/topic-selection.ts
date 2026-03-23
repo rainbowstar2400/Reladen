@@ -46,8 +46,10 @@ export type TopicSelectionInput = {
   knowledgeByB: OffscreenKnowledge[];
   /** 最近の会話で使われた話題（重複回避用） */
   recentTopics: string[];
-  /** 天気・場所（small_talk用） */
-  environment: { place: string; timeOfDay: string; weather?: string };
+  /** 時間帯・天候（small_talk用） */
+  environment: { timeOfDay: string; weather?: string };
+  /** その会話のシチュエーション描写（small_talk優先に使用） */
+  situation?: string;
   /** キャラクターID → 名前のマップ（third_party 名前解決用） */
   nameMap?: Map<string, string>;
   /** 主導者の最近の出来事（self_experience用） */
@@ -72,6 +74,78 @@ const INTIMACY: Record<string, number> = {
 
 /** 鮮度減衰: 最近使った話題のスコア減点 */
 const FRESHNESS_PENALTY = -3;
+
+/** small_talk はカテゴリのみ選定し、具体内容はプロンプト側へ委譲する */
+export const SMALL_TALK_CATEGORY_LABEL = "日常の雑談";
+export const SMALL_TALK_CATEGORY_DETAIL = "その場の空気で自然に広がる世間話";
+
+const DEFAULT_TRAIT_SCORE = 3;
+
+type TraitScoreRule = {
+  key: keyof Traits;
+  weight: number;
+};
+
+type LowIntimacyPenaltyRule = {
+  threshold: number;
+  penalty: number;
+};
+
+type TopicScoreRule = {
+  base: number;
+  intimacyWeight?: number;
+  traitRules?: TraitScoreRule[];
+  lowIntimacyPenalty?: LowIntimacyPenaltyRule;
+};
+
+/**
+ * source ごとのスコア構成をテーブル化:
+ * - base: 基本スコア
+ * - intimacyWeight: 親密度補正
+ * - traitRules: 特性補正
+ * - lowIntimacyPenalty: 低親密度ペナルティ
+ */
+export const TOPIC_SCORE_RULES: Record<TopicSource, TopicScoreRule> = {
+  shared_interest: {
+    base: 6,
+    intimacyWeight: 0.5,
+  },
+  personal_interest: {
+    base: 3,
+    intimacyWeight: 0.3,
+    traitRules: [{ key: "sociability", weight: 0.5 }],
+    lowIntimacyPenalty: { threshold: 1, penalty: -2 },
+  },
+  continuation: {
+    base: 7,
+    intimacyWeight: 0.3,
+  },
+  snippet: {
+    base: 5,
+    intimacyWeight: 0.4,
+  },
+  third_party: {
+    base: 2,
+    intimacyWeight: 0.8,
+    traitRules: [{ key: "sociability", weight: 0.3 }],
+    lowIntimacyPenalty: { threshold: 1, penalty: -3 },
+  },
+  self_experience: {
+    base: 4,
+    intimacyWeight: 0.4,
+  },
+  heart_to_heart: {
+    base: 2,
+    intimacyWeight: 0.8,
+    lowIntimacyPenalty: { threshold: 1, penalty: -3 },
+  },
+  small_talk: {
+    base: 3,
+  },
+  seasonal: {
+    base: 2,
+  },
+};
 
 // ---------------------------------------------------------------------------
 // ヘルパー
@@ -207,26 +281,14 @@ function generateHeartToHeartCandidates(
 }
 
 function generateSmallTalkCandidates(
-  input: TopicSelectionInput,
+  _input: TopicSelectionInput,
 ): TopicCandidate[] {
-  const { place, timeOfDay, weather } = input.environment;
-  const candidates: TopicCandidate[] = [
-    {
-      source: "small_talk" as TopicSource,
-      label: `${place}での出来事`,
-      detail: `${timeOfDay}の${place}`,
-      score: 0,
-    },
-  ];
-  if (weather) {
-    candidates.push({
-      source: "small_talk" as TopicSource,
-      label: `${weather}の話`,
-      detail: `今日の天気: ${weather}`,
-      score: 0,
-    });
-  }
-  return candidates;
+  return [{
+    source: "small_talk" as TopicSource,
+    label: SMALL_TALK_CATEGORY_LABEL,
+    detail: SMALL_TALK_CATEGORY_DETAIL,
+    score: 0,
+  }];
 }
 
 /** 現在日付から季節を判定 */
@@ -260,69 +322,34 @@ function scoreCandidate(
   input: TopicSelectionInput,
   initiator: CharacterContext,
 ): TopicCandidate {
-  let score = 0;
   const intimacy = INTIMACY[input.relation.type] ?? 0;
-  const sociability = initiator.traits.sociability ?? 3;
-  const expressiveness = initiator.traits.expressiveness ?? 3;
-
-  switch (candidate.source) {
-    case "shared_interest":
-      // 共通興味は安定して高スコア
-      score = 6 + intimacy * 0.5;
-      break;
-
-    case "personal_interest":
-      // 社交性が高いと個人的話題を振りやすい
-      // 親密度が低いと出しにくい
-      score = 3 + sociability * 0.5 + intimacy * 0.3;
-      if (intimacy <= 1) score -= 2;
-      break;
-
-    case "continuation":
-      // 前回の続きは自然なので基礎点高め
-      score = 7 + intimacy * 0.3;
-      break;
-
-    case "snippet":
-      // 共有した出来事は話題にしやすい
-      score = 5 + intimacy * 0.4;
-      break;
-
-    case "third_party":
-      // 第三者の話題は親しくないと不自然
-      score = 2 + intimacy * 0.8 + sociability * 0.3;
-      if (intimacy <= 1) score -= 3;
-      break;
-
-    case "self_experience":
-      // 自分の最近の出来事。中程度の基礎スコア
-      score = 4 + intimacy * 0.4;
-      break;
-
-    case "heart_to_heart":
-      // 自己開示・質問。高親密度で強い
-      score = 2 + intimacy * 0.8;
-      if (intimacy <= 1) score -= 3;
-      break;
-
-    case "small_talk":
-      // 世間話。低親密度でもOK
-      score = 3;
-      break;
-
-    case "seasonal":
-      // 季節・時事。低親密度でもOK
-      score = 2;
-      break;
-  }
-
-  // 鮮度: 最近同じ話題を使っていたら減点（部分一致で判定）
-  if (isRecentTopic(candidate.label, input.recentTopics)) {
-    score += FRESHNESS_PENALTY;
-  }
+  const baseScore = scoreByRule(candidate.source, intimacy, initiator.traits);
+  const freshnessPenalty = isRecentTopic(candidate.label, input.recentTopics)
+    ? FRESHNESS_PENALTY
+    : 0;
+  const score = baseScore + freshnessPenalty;
 
   // 最低スコアは0
   return { ...candidate, score: Math.max(0, score) };
+}
+
+function scoreByRule(
+  source: TopicSource,
+  intimacy: number,
+  traits: Partial<Traits>,
+): number {
+  const rule = TOPIC_SCORE_RULES[source];
+  const intimacyAdjustment = intimacy * (rule.intimacyWeight ?? 0);
+  const traitAdjustment = (rule.traitRules ?? []).reduce((sum, traitRule) => {
+    const traitScore = traits[traitRule.key] ?? DEFAULT_TRAIT_SCORE;
+    return sum + traitScore * traitRule.weight;
+  }, 0);
+  const lowIntimacyPenalty = rule.lowIntimacyPenalty
+    && intimacy <= rule.lowIntimacyPenalty.threshold
+    ? rule.lowIntimacyPenalty.penalty
+    : 0;
+
+  return rule.base + intimacyAdjustment + traitAdjustment + lowIntimacyPenalty;
 }
 
 // ---------------------------------------------------------------------------
@@ -375,8 +402,8 @@ export function selectTopic(
     // フォールバック: small_talk
     const fallback: SelectedTopic = {
       source: "small_talk",
-      label: `${input.environment.place}での出来事`,
-      detail: `${input.environment.timeOfDay}の${input.environment.place}`,
+      label: SMALL_TALK_CATEGORY_LABEL,
+      detail: SMALL_TALK_CATEGORY_DETAIL,
     };
     return { selected: fallback, candidates: scored };
   }

@@ -7,6 +7,11 @@ import type { NotificationRecord, EventLogStrict } from '@repo/shared/types/conv
 import { remoteFetchEventById } from '@/lib/sync/remote-events';
 import { bulkUpsert } from '@/lib/db-local';
 import { remoteFetchRecentNotifications, remoteUpsertNotification } from '@/lib/sync/remote-notifications';
+import {
+  filterExpiredUnansweredConsultNotifications,
+  filterNotificationsByRecency,
+  type ConsultPayloadLike,
+} from '@/lib/data/notification-visibility';
 
 /**
 * 通知の並び順を共通化：
@@ -21,6 +26,78 @@ function sortNotifications(items: NotificationRecord[]): NotificationRecord[] {
   });
 }
 
+function isOnline(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return navigator.onLine;
+}
+
+async function buildConsultPayloadByEventId(
+  notifications: NotificationRecord[],
+  options?: { isOnline?: boolean },
+): Promise<Map<string, ConsultPayloadLike>> {
+  const consultIds = Array.from(
+    new Set(
+      notifications
+        .filter((notification) => notification.type === 'consult')
+        .map((notification) => notification.linkedEventId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  );
+  if (consultIds.length === 0) return new Map();
+
+  const idSet = new Set(consultIds);
+  const payloadByEventId = new Map<string, ConsultPayloadLike>();
+
+  const localEvents = (await listLocal('events')) as EventLogStrict[];
+  for (const event of localEvents) {
+    if (!event || event.deleted || event.kind !== 'consult') continue;
+    if (!idSet.has(event.id)) continue;
+    payloadByEventId.set(event.id, (event.payload ?? {}) as ConsultPayloadLike);
+  }
+
+  const canFetchRemote = options?.isOnline ?? isOnline();
+  if (!canFetchRemote) {
+    return payloadByEventId;
+  }
+
+  const missingIds = consultIds.filter((id) => !payloadByEventId.has(id));
+  if (missingIds.length === 0) return payloadByEventId;
+
+  const remoteRows = await Promise.all(
+    missingIds.map(async (id) => {
+      try {
+        return await remoteFetchEventById(id);
+      } catch (error) {
+        console.warn('[notifications] consult event fetch skipped:', (error as any)?.message);
+        return null;
+      }
+    }),
+  );
+
+  for (const row of remoteRows) {
+    if (!row || row.deleted || row.kind !== 'consult') continue;
+    payloadByEventId.set(row.id, (row.payload ?? {}) as ConsultPayloadLike);
+  }
+
+  return payloadByEventId;
+}
+
+export async function resolveVisibleNotifications(
+  notifications: NotificationRecord[],
+  options?: { nowMs?: number; isOnline?: boolean },
+): Promise<NotificationRecord[]> {
+  const nowMs = options?.nowMs ?? Date.now();
+  const recencyFiltered = filterNotificationsByRecency(notifications, nowMs);
+  const consultPayloadByEventId = await buildConsultPayloadByEventId(recencyFiltered, {
+    isOnline: options?.isOnline,
+  });
+  return filterExpiredUnansweredConsultNotifications(
+    recencyFiltered,
+    consultPayloadByEventId,
+    nowMs,
+  );
+}
+
 export function useNotifications() {
   return useQuery({
     queryKey: ['notifications'],
@@ -31,24 +108,26 @@ export function useNotifications() {
       let current = sortNotifications(localFiltered);
 
       // 2) オンラインならクラウド取り込み → ローカルへ反映 → 再読み込み
-      if (typeof navigator === 'undefined' || !navigator.onLine) {
-        return current;
-      }
-
-      try {
-        const remote = await remoteFetchRecentNotifications(50);
-        if (remote?.length) {
-          await bulkUpsert('notifications', remote as any);
-          const after = (await listLocal('notifications')) as NotificationRecord[];
-          const afterFiltered = after.filter((n) => n.status !== 'archived');
-          current = sortNotifications(afterFiltered);
+      const online = isOnline();
+      if (online) {
+        try {
+          const remote = await remoteFetchRecentNotifications(50);
+          if (remote?.length) {
+            await bulkUpsert('notifications', remote as any);
+            const after = (await listLocal('notifications')) as NotificationRecord[];
+            const afterFiltered = after.filter((n) => n.status !== 'archived');
+            current = sortNotifications(afterFiltered);
+          }
+        } catch (e) {
+          // ネットワーク等の一時失敗は無視（ローカル表示を維持）
+          console.warn('[notifications] remote fetch skipped:', (e as any)?.message);
         }
-      } catch (e) {
-        // ネットワーク等の一時失敗は無視（ローカル表示を維持）
-        console.warn('[notifications] remote fetch skipped:', (e as any)?.message);
       }
 
-      return current;
+      return resolveVisibleNotifications(current, {
+        nowMs: Date.now(),
+        isOnline: online,
+      });
     },
   });
 }
@@ -107,7 +186,11 @@ export async function listNotifications(opts?: { limit?: number }): Promise<Noti
   // こちらも archived を除外し、共通ソートへ統一
   const filtered = arr.filter((n) => n.status !== 'archived');
   const sorted = sortNotifications(filtered);
-  return (typeof opts?.limit === 'number') ? sorted.slice(0, opts.limit) : sorted;
+  const visible = await resolveVisibleNotifications(sorted, {
+    nowMs: Date.now(),
+    isOnline: isOnline(),
+  });
+  return (typeof opts?.limit === 'number') ? visible.slice(0, opts.limit) : visible;
 }
 
 export async function getUnreadCount(): Promise<number> {

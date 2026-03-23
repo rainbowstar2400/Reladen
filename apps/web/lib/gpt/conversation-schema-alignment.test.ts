@@ -18,7 +18,7 @@ describe("conversation response schema alignment", () => {
     expect(knowledge.properties.about).toMatchObject({ type: "string", format: "uuid" });
   });
 
-  it("OpenAI JSON Schema の文字列フィールドに minLength=1 を設定する", () => {
+  it("OpenAI JSON Schema の必須文字列フィールド設定を維持する（summaryは空文字許容）", () => {
     const schema = conversationResponseSchema.schema;
     const lines = schema.properties.lines.items;
     const memory = schema.properties.meta.properties.memory;
@@ -26,7 +26,8 @@ describe("conversation response schema alignment", () => {
 
     expect(schema.properties.topic).toMatchObject({ type: "string", minLength: 1 });
     expect(lines.properties.text).toMatchObject({ type: "string", minLength: 1 });
-    expect(memory.properties.summary).toMatchObject({ type: "string", minLength: 1 });
+    expect(memory.properties.summary).toMatchObject({ type: "string" });
+    expect(memory.properties.summary).not.toHaveProperty("minLength");
     expect(knowledge.properties.fact).toMatchObject({ type: "string", minLength: 1 });
   });
 
@@ -60,7 +61,7 @@ describe("conversation response schema alignment", () => {
     expect(parsed.success).toBe(false);
   });
 
-  it("Zod スキーマは空文字の topic/line/summary/fact を拒否する", () => {
+  it("Zod スキーマは空文字の topic/line/fact を拒否する", () => {
     const parsed = conversationOutputSchema.safeParse({
       threadId: THREAD_ID,
       participants: [A_ID, B_ID],
@@ -74,7 +75,7 @@ describe("conversation response schema alignment", () => {
         },
         debug: [],
         memory: {
-          summary: "",
+          summary: "要約",
           topicsCovered: [],
           unresolvedThreads: [],
           knowledgeGained: [
@@ -88,6 +89,31 @@ describe("conversation response schema alignment", () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  it("Zod スキーマは空文字の summary を受理する", () => {
+    const parsed = conversationOutputSchema.safeParse({
+      threadId: THREAD_ID,
+      participants: [A_ID, B_ID],
+      topic: "雑談",
+      lines: [{ speaker: A_ID, text: "こんにちは" }],
+      meta: {
+        tags: [],
+        qualityHints: {
+          turnBalance: "balanced",
+          tone: "neutral",
+        },
+        debug: [],
+        memory: {
+          summary: "",
+          topicsCovered: [],
+          unresolvedThreads: [],
+          knowledgeGained: [],
+        },
+      },
+    });
+
+    expect(parsed.success).toBe(true);
   });
 
   it("Zod スキーマは有効な会話出力を受理する", () => {

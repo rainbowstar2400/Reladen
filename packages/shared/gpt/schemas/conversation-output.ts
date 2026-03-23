@@ -65,7 +65,7 @@ export const conversationResponseSchema = {
             type: "object",
             additionalProperties: false,
             properties: {
-              summary: { type: "string", minLength: 1 },
+              summary: { type: "string" },
               topicsCovered: {
                 type: "array",
                 items: { type: "string" },

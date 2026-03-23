@@ -31,6 +31,7 @@ export type ValidationInput = {
   structure: ConversationStructure;
   /** 各キャラの一人称。{ [characterId]: "私" } 形式 */
   firstPersonMap: Record<string, string>;
+  conversationType?: "normal" | "promise_generation" | "promise_fulfillment";
 };
 
 // ---------------------------------------------------------------------------
@@ -135,6 +136,7 @@ function validateParticipants(
 
 function validateMemory(
   output: ConversationOutput,
+  conversationType?: "normal" | "promise_generation" | "promise_fulfillment",
 ): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
   const mem = output.meta.memory;
@@ -152,6 +154,17 @@ function validateMemory(
       rule: "memory_topics",
       message: "memory.topicsCoveredが空です",
       severity: "warning",
+    });
+  }
+
+  if (
+    conversationType === "promise_generation"
+    && (!mem.unresolvedThreads || mem.unresolvedThreads.length === 0)
+  ) {
+    violations.push({
+      rule: "memory_unresolved_threads",
+      message: "promise_generation では memory.unresolvedThreads に約束内容を1件以上含めてください",
+      severity: "error",
     });
   }
 
@@ -196,6 +209,17 @@ function heuristicCheckStance(
 ): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
 
+  // 1発話あたりの上限チェック（仕様: 40文字上限）
+  for (const line of output.lines) {
+    if (line.text.length > 40) {
+      violations.push({
+        rule: "heuristic_over_length",
+        message: `${line.speaker}の発話が40文字を超えています（${line.text.length}文字）`,
+        severity: "warning",
+      });
+    }
+  }
+
   // キャラごとの発話を集計
   const linesByChar: Record<string, string[]> = {};
   for (const line of output.lines) {
@@ -234,7 +258,7 @@ function heuristicCheckStance(
     switch (stance) {
       case "enthusiastic":
         // 乗り気なのに発話が極端に短い
-        if (avg < 8) {
+        if (avg < 12) {
           violations.push({
             rule: "heuristic_enthusiastic_short",
             message: `${charName}はenthusiasticですが、平均文字数(${avg.toFixed(1)})が短すぎます`,
@@ -264,7 +288,7 @@ function heuristicCheckStance(
           });
         }
         // 興味薄なのに発話が長い
-        if (avg > 20) {
+        if (avg > 30) {
           violations.push({
             rule: "heuristic_indifferent_long",
             message: `${charName}はindifferentですが、平均文字数(${avg.toFixed(1)})が長すぎます`,
@@ -304,7 +328,7 @@ export function validateConversationOutput(
 
   violations.push(...validateFirstPerson(input.output, input.firstPersonMap));
   violations.push(...validateParticipants(input.output));
-  violations.push(...validateMemory(input.output));
+  violations.push(...validateMemory(input.output, input.conversationType));
   violations.push(...validatePunctuation(input.output));
 
   // ヒューリスティクス検証

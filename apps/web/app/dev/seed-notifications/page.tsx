@@ -60,12 +60,11 @@ function buildConsultNotification(
   consultId: string,
   now: string,
   participantId: string
-): NotificationRecord & { deleted: boolean; linkedConsultId?: string } {
+): NotificationRecord & { deleted: boolean } {
   return {
     id: newId(),
     type: 'consult',
     linkedEventId: consultId,
-    linkedConsultId: consultId,
     participants: [participantId, participantId],
     snippet: '相談が届いています',
     occurredAt: now,

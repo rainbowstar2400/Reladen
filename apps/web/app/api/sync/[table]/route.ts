@@ -42,62 +42,83 @@ function pickFirst<T>(...values: Array<T | null | undefined>): T | undefined {
   return undefined;
 }
 
+function parseDateMs(value: unknown): number | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+const REJECT_REASON_INVALID_UPDATED_AT = 'invalid_updated_at';
+
+type PushRejectedRow = {
+  index: number;
+  reason: string;
+  id?: string;
+};
+
+function resolveIncomingUpdatedAt(incomingData: Record<string, any>, fallbackUpdatedAt?: string): string | null {
+  const candidate = pickFirst(
+    incomingData.updated_at,
+    incomingData.updatedAt,
+    incomingData.updatedat,
+    fallbackUpdatedAt,
+  );
+  const candidateMs = parseDateMs(candidate);
+  if (candidateMs === null) return null;
+  const normalized = new Date(candidateMs).toISOString();
+  incomingData.updated_at = normalized;
+  return normalized;
+}
+
+function shouldApplyIncomingByLww(currentUpdatedAt: unknown, incomingUpdatedAt: unknown): boolean {
+  const incomingMs = parseDateMs(incomingUpdatedAt);
+  if (incomingMs === null) return false;
+  const currentMs = parseDateMs(currentUpdatedAt);
+  if (currentMs === null) return true;
+  // 同値時は既存優先 no-op。incoming が新しい時のみ採用。
+  return incomingMs > currentMs;
+}
+
 function isUniqueViolation(error: any): boolean {
   const code = String(error?.code ?? '');
   const message = String(error?.message ?? '');
   return code === '23505' || /duplicate key value violates unique constraint/i.test(message);
 }
 
-function isMissingColumnError(error: any, column: string): boolean {
-  const message = String(error?.message ?? '');
-  return /column .* does not exist/i.test(message) && message.includes(column);
-}
-
-type ConsultVariant = 'snake' | 'compact';
-
 function buildConsultAnswerPayload(
   incomingData: Record<string, any>,
-  variant: ConsultVariant,
   allowedCols: Set<string>,
-  fallbackUpdatedAt?: string,
+  resolvedUpdatedAt: string,
 ) {
   const payload: Record<string, any> = {};
   const id = incomingData.id;
-  const updatedAt = pickFirst(
-    incomingData.updated_at,
-    incomingData.updatedAt,
-    incomingData.updatedat,
-    fallbackUpdatedAt,
-  );
   const selectedChoiceId = pickFirst(
     incomingData.selectedChoiceId,
     incomingData.selected_choice_id,
-    incomingData.selectedchoiceid,
   );
   const decidedAt = pickFirst(
     incomingData.decidedAt,
     incomingData.decided_at,
-    incomingData.decidedat,
   );
 
   if (id && allowedCols.has('id')) payload.id = id;
   if (allowedCols.has('updated_at')) {
-    payload.updated_at =
-      typeof updatedAt === 'string' && updatedAt.length > 0 ? updatedAt : new Date().toISOString();
+    payload.updated_at = resolvedUpdatedAt;
   }
   if (typeof incomingData.deleted === 'boolean' && allowedCols.has('deleted')) {
     payload.deleted = incomingData.deleted;
   }
 
-  if (variant === 'snake') {
-    if (allowedCols.has('selected_choice_id')) payload.selected_choice_id = selectedChoiceId ?? null;
-    if (allowedCols.has('decided_at')) payload.decided_at = decidedAt ?? null;
-  } else {
-    if (allowedCols.has('selectedchoiceid')) payload.selectedchoiceid = selectedChoiceId ?? null;
-    if (allowedCols.has('decidedat')) payload.decidedat = decidedAt ?? null;
-  }
+  if (allowedCols.has('selected_choice_id')) payload.selected_choice_id = selectedChoiceId ?? null;
+  if (allowedCols.has('decided_at')) payload.decided_at = decidedAt ?? null;
 
   return payload;
+}
+
+function normalizeConsultAnswerRowForResponse(row: Record<string, any>) {
+  const normalized = { ...row };
+  // DBは snake_case に統一済みなので、そのまま返す
+  return normalized;
 }
 
 async function pushConsultAnswersRows(args: {
@@ -109,53 +130,67 @@ async function pushConsultAnswersRows(args: {
 }) {
   const { sb, table, incoming, allowedCols, ownerId } = args;
   let pushed = 0;
+  const consumedIndexes: number[] = [];
+  const rejected: PushRejectedRow[] = [];
 
-  for (const change of incoming) {
+  for (const [index, change] of incoming.entries()) {
     const incomingData = { ...(change.data ?? {}) };
-    if (incomingData.updated_at == null && typeof change.updated_at === 'string') {
-      incomingData.updated_at = change.updated_at;
+    const resolvedUpdatedAt = resolveIncomingUpdatedAt(incomingData, change.updated_at);
+    if (!resolvedUpdatedAt) {
+      rejected.push({
+        index,
+        reason: REJECT_REASON_INVALID_UPDATED_AT,
+        id: typeof incomingData.id === 'string' ? incomingData.id : undefined,
+      });
+      continue;
     }
     if (incomingData.deleted == null && typeof change.deleted === 'boolean') {
       incomingData.deleted = change.deleted;
     }
     if (!incomingData.id) continue;
 
-    const variants: ConsultVariant[] = ['snake', 'compact'];
-    let handled = false;
-
-    for (let i = 0; i < variants.length; i += 1) {
-      const variant = variants[i];
-      const payload = buildConsultAnswerPayload(incomingData, variant, allowedCols, change.updated_at);
-      if (allowedCols.has('owner_id')) payload.owner_id = ownerId;
-
-      const { error } = await sb.from(table).insert(payload);
-      if (!error) {
-        pushed += 1;
-        handled = true;
-        break;
-      }
-      if (isUniqueViolation(error)) {
-        // first-write-wins: 既存回答が正。後着は no-op 扱い。
-        handled = true;
-        break;
-      }
-
-      const shouldFallback =
-        variant === 'snake'
-        && (
-          isMissingColumnError(error, 'selected_choice_id')
-          || isMissingColumnError(error, 'decided_at')
-        );
-      if (shouldFallback && i < variants.length - 1) continue;
-      throw asHttpError('insert failed', error);
+    const payload = buildConsultAnswerPayload(incomingData, allowedCols, resolvedUpdatedAt);
+    if (allowedCols.has('owner_id')) payload.owner_id = ownerId;
+    const { error } = await sb.from(table).insert(payload);
+    if (!error) {
+      pushed += 1;
+      consumedIndexes.push(index);
+      continue;
     }
-
-    if (!handled) {
-      throw asHttpError('insert failed', new Error('consult_answers row push failed'));
+    if (isUniqueViolation(error)) {
+      // first-write-wins: 既存回答が正。後着は no-op 扱い。
+      consumedIndexes.push(index);
+      continue;
     }
+    throw asHttpError('insert failed', error);
   }
 
-  return pushed;
+  return {
+    pushed,
+    consumedIndexes,
+    rejected,
+  };
+}
+
+async function fetchExistingUpdatedAtById(args: {
+  sb: ReturnType<typeof createAuthedClient>;
+  table: AllowedTable;
+  ids: string[];
+}) {
+  const uniqueIds = [...new Set(args.ids.filter((id) => typeof id === 'string' && id.length > 0))];
+  if (uniqueIds.length === 0) return new Map<string, string>();
+
+  const { data, error } = await args.sb.from(args.table).select('id,updated_at').in('id', uniqueIds);
+  if (error) throw asHttpError('select failed', error);
+
+  const map = new Map<string, string>();
+  for (const row of data ?? []) {
+    if (typeof row?.id !== 'string') continue;
+    if (typeof row?.updated_at === 'string') {
+      map.set(row.id, row.updated_at);
+    }
+  }
+  return map;
 }
 
 // 許可リストを DB の snake_case カラム名に統一する
@@ -165,22 +200,23 @@ const RESIDENTS_ALLOWED = new Set([
   'id', 'name', 'updated_at', 'deleted', 'owner_id',
   'mbti', 'traits', 'speech_preset', 'gender', 'age',
   'birthday', 'occupation', 'first_person', 'interests', 'sleep_profile',
-  'trust_to_player'
+  'trust_to_player', 'nickname_tendency'
 ]);
 
 // relations の許可カラム
 const RELATIONS_ALLOWED = new Set([
-  'id', 'a_id', 'b_id', 'type', 'updated_at', 'deleted', 'owner_id'
+  'id', 'a_id', 'b_id', 'type', 'updated_at', 'deleted', 'owner_id', 'family_sub_type'
 ]);
 
 // feelings の許可カラム
 const FEELINGS_ALLOWED = new Set([
-  'id', 'from_id', 'to_id', 'label', 'score', 'updated_at', 'deleted', 'owner_id'
+  'id', 'from_id', 'to_id', 'label', 'score', 'updated_at', 'deleted', 'owner_id',
+  'recent_deltas', 'last_contacted_at', 'base_label', 'special_label', 'base_before_special'
 ]);
 
 // nicknames の許可カラム
 const NICKNAMES_ALLOWED = new Set([
-  'id', 'from_id', 'to_id', 'nickname', 'updated_at', 'deleted', 'owner_id'
+  'id', 'from_id', 'to_id', 'nickname', 'updated_at', 'deleted', 'owner_id', 'locked'
 ]);
 
 // events の許可カラム
@@ -201,15 +237,14 @@ const WORLD_STATES_ALLOWED = new Set([
   'owner_id', 'updated_at', 'deleted'
 ]);
 
-// consult_answers のカラム表記ゆらぎ（snake/compact）をどちらも受ける
+// consult_answers の許可カラム
 const CONSULT_ANSWERS_ALLOWED = new Set([
   'id',
   'updated_at',
   'deleted',
   'selected_choice_id',
   'decided_at',
-  'selectedchoiceid',
-  'decidedat',
+  'owner_id',
 ]);
 
 // 許可リストのマップ (キーは sync.ts と一致)
@@ -265,6 +300,8 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     // push ロジックを汎用化
     const incoming = parsed.data.changes ?? [];
     let pushed = 0;
+    const consumedIndexes: number[] = [];
+    const rejectedRows: PushRejectedRow[] = [];
     if (incoming.length > 0) {
 
       // 1. snake_case の許可リストを取得
@@ -276,21 +313,39 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
 
       // consult_answers は first-write-wins を守るため専用処理（insert + duplicate no-op）
       if (table === 'consult_answers') {
-        pushed = await pushConsultAnswersRows({
+        const consultPushResult = await pushConsultAnswersRows({
           sb,
           table: table as AllowedTable,
           incoming: incoming as Array<{ data: Record<string, any>; updated_at?: string; deleted?: boolean }>,
           allowedCols,
           ownerId: user.id,
         });
+        pushed = consultPushResult.pushed;
+        consumedIndexes.push(...consultPushResult.consumedIndexes);
+        rejectedRows.push(...consultPushResult.rejected);
       // 2. 許可リストが空の場合は upsert をスキップ
       } else if (allowedCols.size === 0) {
         console.warn(JSON.stringify({ lvl: 'warn', at: 'sync.skip', requestId, table, reason: 'allowed columns list is empty' }));
       } else {
         // 3. 許可リストがある場合、キーを変換して upsert
-        const rows = incoming.map((c) => {
+        const rowsWithMeta: Array<{
+          index: number;
+          payload: Record<string, any>;
+          id: string | null;
+          updatedAt: string;
+        }> = [];
+        for (const [index, c] of incoming.entries()) {
           const incomingData = { ...(c.data as Record<string, any>) }; // camelCase キー
           const payload: Record<string, any> = {}; // snake_case キー
+          const resolvedUpdatedAt = resolveIncomingUpdatedAt(incomingData, c.updated_at);
+          if (!resolvedUpdatedAt) {
+            rejectedRows.push({
+              index,
+              reason: REJECT_REASON_INVALID_UPDATED_AT,
+              id: typeof incomingData.id === 'string' ? incomingData.id : undefined,
+            });
+            continue;
+          }
 
           // 4. incomingData (camelCase) をループ
           for (const camelKey of Object.keys(incomingData)) {
@@ -311,18 +366,48 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
           if (typeof incomingData.deleted === 'boolean' && allowedCols.has('deleted')) {
             payload.deleted = incomingData.deleted;
           }
+          if (allowedCols.has('updated_at')) {
+            payload.updated_at = resolvedUpdatedAt;
+          }
 
           // 9. owner_id は対象テーブルが許可する場合のみ注入
           if (allowedCols.has('owner_id')) {
             payload.owner_id = user.id;
           }
 
-          return payload; // 最終的な payload は snake_case のキーを持つ
+          rowsWithMeta.push({
+            index,
+            payload, // 最終的な payload は snake_case のキーを持つ
+            id: typeof payload.id === 'string' ? payload.id : null,
+            updatedAt: resolvedUpdatedAt,
+          });
+        }
+
+        const ids = rowsWithMeta
+          .map((row) => row.id)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0);
+        const existingUpdatedAtById = await fetchExistingUpdatedAtById({
+          sb,
+          table: table as AllowedTable,
+          ids,
         });
 
+        const rowsToUpsert = rowsWithMeta.filter((row) => {
+          if (!row.id) return true;
+          const currentUpdatedAt = existingUpdatedAtById.get(row.id);
+          if (!currentUpdatedAt) return true;
+          const shouldApply = shouldApplyIncomingByLww(currentUpdatedAt, row.updatedAt);
+          if (!shouldApply) consumedIndexes.push(row.index);
+          return shouldApply;
+        });
+        const rows = rowsToUpsert.map((row) => row.payload);
+
         // 10. upsert (snake_case のデータを送信)
-        const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
-        if (error) throw asHttpError('upsert failed', error);
+        if (rows.length > 0) {
+          const { error } = await sb.from(table).upsert(rows, { onConflict: 'id' });
+          if (error) throw asHttpError('upsert failed', error);
+        }
+        consumedIndexes.push(...rowsToUpsert.map((row) => row.index));
         pushed = rows.length;
       }
     }
@@ -338,17 +423,37 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       cloud = []; // 初回は全件返さない方針
     }
 
+    const pushResult = {
+      consumedIndexes: [...new Set(consumedIndexes)].sort((a, b) => a - b),
+      rejected: [...rejectedRows].sort((a, b) => a.index - b.index),
+    };
+
     const resp = syncResponseSchema.parse({
       table,
       changes: cloud.map((row) => ({
-        data: row, // DBからは snake_case で返る (client-side Drizzle が処理する)
+        data: table === 'consult_answers'
+          ? normalizeConsultAnswerRowForResponse(row as Record<string, any>)
+          : row, // DBからは snake_case で返る (client-side Drizzle が処理する)
         updated_at: row.updated_at,
         deleted: !!row.deleted,
       })),
+      pushResult,
     });
 
     const durationMs = Date.now() - started;
-    console.log(JSON.stringify({ lvl: 'info', at: 'sync.ok', requestId, clientIp, userAgent, table, pushed, pulled: resp.changes.length, durationMs }));
+    console.log(JSON.stringify({
+      lvl: 'info',
+      at: 'sync.ok',
+      requestId,
+      clientIp,
+      userAgent,
+      table,
+      pushed,
+      consumed: resp.pushResult?.consumedIndexes.length ?? 0,
+      rejected: resp.pushResult?.rejected.length ?? 0,
+      pulled: resp.changes.length,
+      durationMs,
+    }));
     return jsonWithHeaders(resp, 200, requestId);
   } catch (e: any) {
     const durationMs = Date.now() - started;

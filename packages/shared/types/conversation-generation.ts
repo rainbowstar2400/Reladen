@@ -128,7 +128,7 @@ export type ConversationStructure = z.infer<typeof conversationStructureSchema>;
 // ---------------------------------------------------------------------------
 
 export const conversationMemorySchema = z.object({
-  summary: z.string().min(1),
+  summary: z.string(),
   topicsCovered: z.array(z.string()),
   unresolvedThreads: z.array(z.string()),
   knowledgeGained: z.array(z.object({

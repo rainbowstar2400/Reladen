@@ -103,7 +103,7 @@ async function runConsultCheck(): Promise<void> {
       const pair = [...participants].sort().join(":");
       if (cooldownPairs.has(pair)) continue;
 
-      const residentId = t.payload?.residentId ?? participants[0];
+      const residentId = typeof t.payload?.residentId === "string" ? t.payload.residentId : null;
       if (residentId && !hasDailyConsult(residentId)) {
         targetResidentId = residentId;
         triggerId = t.id;

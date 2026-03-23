@@ -21,7 +21,7 @@ const isoDate = z.string().refine(
 export const syncChangeSchema = z.object({
   data: z.record(z.any()).and(
     z.object({
-      updated_at: z.string(),          // ISO（LWWに使用）
+      updated_at: z.string().optional(), // ISO（LWWに使用。欠落時は change.updated_at を利用）
       deleted: z.boolean().optional(), // tombstone運用
       id: z.string().uuid().optional() // あるなら検証
     })
@@ -38,8 +38,20 @@ export const syncRequestSchema = z.object({
 
 export type TSyncRequest = z.infer<typeof syncRequestSchema>;
 
+export const syncPushRejectedSchema = z.object({
+  index: z.number().int().nonnegative(),
+  reason: z.string().min(1),
+  id: z.string().optional(),
+});
+
+export const syncPushResultSchema = z.object({
+  consumedIndexes: z.array(z.number().int().nonnegative()).default([]),
+  rejected: z.array(syncPushRejectedSchema).default([]),
+});
+
 export const syncResponseSchema = z.object({
   table: z.enum(allowedTables),
   changes: z.array(syncChangeSchema),
+  pushResult: syncPushResultSchema.optional(),
 });
 export type TSyncResponse = z.infer<typeof syncResponseSchema>;

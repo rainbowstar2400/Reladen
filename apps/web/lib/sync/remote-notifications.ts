@@ -4,7 +4,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseClient } from '@/lib/db-cloud/supabase';
 import type { Database } from '@/lib/supabase/types';
-import type { NotificationRecord } from '@repo/shared/types/conversation';
+import type { NotificationParticipants, NotificationRecord } from '@repo/shared/types/conversation';
 
 type NotificationRow = Database['public']['Tables']['notifications']['Row'];
 type NotificationInsert = Database['public']['Tables']['notifications']['Insert'];
@@ -38,23 +38,21 @@ function describeParticipantsValue(value: unknown): string {
 function parseNotificationParticipants(
   participants: unknown,
   notificationId: string,
-): [string, string] | undefined {
+): NotificationParticipants | undefined {
   if (participants == null) {
     return undefined;
   }
 
-  if (
-    Array.isArray(participants) &&
-    participants.length === 2 &&
-    typeof participants[0] === 'string' &&
-    typeof participants[1] === 'string'
-  ) {
-    return [participants[0], participants[1]];
+  if (Array.isArray(participants) && (participants.length === 1 || participants.length === 2)) {
+    const allStrings = participants.every((participant) => typeof participant === 'string');
+    if (allStrings) {
+      return participants as NotificationParticipants;
+    }
   }
 
   throw new Error(
     `[notifications] Invalid participants for notification ${notificationId}. ` +
-      `Expected [string, string] | null, received ${describeParticipantsValue(participants)}`,
+      `Expected [string] | [string, string] | null, received ${describeParticipantsValue(participants)}`,
   );
 }
 

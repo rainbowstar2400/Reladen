@@ -227,6 +227,104 @@ describe("conversation scheduler", () => {
     expect(body).toEqual({ threadId: "thread_1" });
   });
 
+  it("sleeping な ongoing スレッドがあっても起床中の新規ペアへフォールバックする", async () => {
+    mocks.listLocal.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "residents":
+          return [
+            { id: "resident_A", name: "A", deleted: false },
+            { id: "resident_B", name: "B", deleted: false },
+            { id: "resident_C", name: "C", deleted: false },
+            { id: "resident_D", name: "D", deleted: false },
+          ];
+        case "relations":
+          return [];
+        case "topic_threads":
+          return [
+            {
+              id: "thread_sleeping",
+              participants: ["resident_A", "resident_B"],
+              status: "ongoing",
+              updated_at: "2026-01-01T00:00:00.000Z",
+              deleted: false,
+            },
+          ];
+        default:
+          return [];
+      }
+    });
+    mocks.selectConversationCandidates.mockImplementation(() => ([
+      { id: "resident_C", name: "C", deleted: false },
+      { id: "resident_D", name: "D", deleted: false },
+    ]));
+
+    const result = await triggerConversationNow({
+      force: true,
+      baseIntervalMs: 900_000,
+    });
+
+    expect(result).toMatchObject({
+      status: "started",
+      threadId: undefined,
+      participants: ["resident_C", "resident_D"],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}");
+    expect(body).toEqual({ participants: ["resident_C", "resident_D"] });
+  });
+
+  it("sleeping な ongoing しかなく代替候補が尽きた時のみ participant_sleeping を返す", async () => {
+    mocks.listLocal.mockImplementation(async (table: string) => {
+      switch (table) {
+        case "residents":
+          return [
+            { id: "resident_A", name: "A", deleted: false },
+            { id: "resident_B", name: "B", deleted: false },
+            { id: "resident_C", name: "C", deleted: false },
+            { id: "resident_D", name: "D", deleted: false },
+          ];
+        case "relations":
+          return [
+            {
+              id: "rel_cd_none",
+              a_id: "resident_C",
+              b_id: "resident_D",
+              type: "none",
+              deleted: false,
+            },
+          ];
+        case "topic_threads":
+          return [
+            {
+              id: "thread_sleeping",
+              participants: ["resident_A", "resident_B"],
+              status: "ongoing",
+              updated_at: "2026-01-01T00:00:00.000Z",
+              deleted: false,
+            },
+          ];
+        default:
+          return [];
+      }
+    });
+    mocks.selectConversationCandidates.mockImplementation(() => ([
+      { id: "resident_C", name: "C", deleted: false },
+      { id: "resident_D", name: "D", deleted: false },
+    ]));
+
+    const result = await triggerConversationNow({
+      force: true,
+      baseIntervalMs: 900_000,
+    });
+
+    expect(result).toEqual({
+      status: "skipped",
+      reason: "participant_sleeping",
+      participants: ["resident_A", "resident_B"],
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("thread_not_found の場合は participants で再試行する", async () => {
     mocks.listLocal.mockImplementation(async (table: string) => {
       switch (table) {
