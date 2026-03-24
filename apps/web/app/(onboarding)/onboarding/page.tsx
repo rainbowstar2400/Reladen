@@ -10,6 +10,7 @@ import { StepIndicator } from '@/components/onboarding/step-indicator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { triggerConversationNow } from '@/lib/scheduler/conversation-scheduler';
+import { GlassPanel } from '@/components/ui-demo/glass-panel';
 
 /**
  * Steps:
@@ -130,20 +131,30 @@ export default function OnboardingPage() {
     );
   }
 
+  // Steps 0-2 use a compact GlassPanel; steps 3-4 (ResidentForm) need more space
+  const isFormStep = step >= 3;
+
   return (
     <div className="w-full max-w-2xl mx-auto px-4 py-8 space-y-8">
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold text-white/90">Reladen へようこそ</h1>
-        <p className="text-sm text-white/60">住人たちの暮らす世界をつくりましょう</p>
+        <h1 className="text-2xl font-bold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.25)]">
+          Reladen へようこそ
+        </h1>
+        <p className="text-sm text-white/80 drop-shadow-[0_1px_4px_rgba(0,0,0,0.2)]">
+          住人たちの暮らす世界をつくりましょう
+        </p>
       </div>
 
       <StepIndicator current={step} />
 
-      <div className="mt-6">
+      <GlassPanel
+        className={isFormStep ? 'mx-auto w-full' : 'mx-auto max-w-md'}
+        contentClassName="px-6 py-8"
+      >
         {/* Step 0: Login */}
         {step === 0 && (
-          <div className="flex flex-col items-center gap-6 py-8">
-            <p className="text-white/70 text-center">
+          <div className="flex flex-col items-center gap-6">
+            <p className="text-white/80 text-center text-sm">
               はじめに、Googleアカウントでログインしてください。
             </p>
             <Button onClick={handleSignIn} size="lg">
@@ -155,8 +166,8 @@ export default function OnboardingPage() {
         {/* Step 1: Privacy Policy */}
         {step === 1 && (
           <div className="space-y-4">
-            <div className="rounded-lg border border-white/20 bg-white/5 p-4 max-h-[50vh] overflow-y-auto text-sm text-white/80 space-y-3">
-              <h2 className="text-lg font-semibold text-white/90">プライバシーポリシー</h2>
+            <div className="rounded-lg border border-white/25 bg-white/10 p-4 max-h-[40vh] overflow-y-auto text-sm text-white/80 space-y-3">
+              <h2 className="text-base font-semibold text-white/90">プライバシーポリシー</h2>
               <p>
                 Reladenでは、ゲーム体験の提供のために以下の情報を利用します。
               </p>
@@ -184,12 +195,12 @@ export default function OnboardingPage() {
 
         {/* Step 2: Player Name */}
         {step === 2 && (
-          <div className="flex flex-col items-center gap-6 py-4">
+          <div className="flex flex-col items-center gap-6">
             <div className="text-center space-y-2">
-              <p className="text-white/70">
+              <p className="text-white/80 text-sm">
                 あなたの名前を教えてください。
               </p>
-              <p className="text-xs text-white/50">
+              <p className="text-xs text-white/60">
                 住人たちがあなたをこの名前で呼びます。あとから変更もできます。
               </p>
             </div>
@@ -220,10 +231,10 @@ export default function OnboardingPage() {
         {step === 3 && (
           <div className="space-y-4">
             <div className="text-center space-y-1">
-              <p className="text-white/70">
+              <p className="text-white/80 text-sm">
                 最初の住人を登録しましょう。
               </p>
-              <p className="text-xs text-white/50">1人目 / 2人</p>
+              <p className="text-xs text-white/60">1人目 / 2人</p>
             </div>
             <ResidentForm onSubmitted={handleResident1Done} />
           </div>
@@ -233,15 +244,15 @@ export default function OnboardingPage() {
         {step === 4 && (
           <div className="space-y-4">
             <div className="text-center space-y-1">
-              <p className="text-white/70">
+              <p className="text-white/80 text-sm">
                 もう1人、住人を登録しましょう。
               </p>
-              <p className="text-xs text-white/50">2人目 / 2人</p>
+              <p className="text-xs text-white/60">2人目 / 2人</p>
             </div>
             <ResidentForm onSubmitted={handleResident2Done} />
           </div>
         )}
-      </div>
+      </GlassPanel>
     </div>
   );
 }
