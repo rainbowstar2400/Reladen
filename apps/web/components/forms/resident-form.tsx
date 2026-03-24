@@ -42,15 +42,6 @@ const MBTI_TYPES = [
   'ISTP', 'ISFP', 'ESTP', 'ESFP',
 ] as const;
 
-// 追加: 0時〜23時の選択肢を生成
-const HOURS_OPTIONS = Array.from({ length: 24 }, (_, i) => {
-  const hour = String(i);
-  return {
-    value: hour, // "0", "1", ... "23"
-    label: `${i} 時頃`,
-  };
-});
-
 // 職業・一人称の <Select> で使う「手動入力」用の特別な値
 const MANUAL_INPUT_KEY = '--manual--';
 
@@ -650,13 +641,6 @@ export function ResidentForm({
   return (
     <Form {...form}>
 
-      {/* 0時〜23時の Datalist (Age を参考に) */}
-      <datalist id="hour-options">
-        {Array.from({ length: 24 }, (_, i) => i).map((n) => (
-          <option key={n} value={n} />
-        ))}
-      </datalist>
-
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
 
         {/* 基本情報 */}
@@ -689,27 +673,19 @@ export function ResidentForm({
                   <FormItem className="space-y-2">
                     <FormLabel className="block">年齢</FormLabel>
                     <FormControl>
-                      <div className="space-y-1">
-                        <Input
-                          list="age-options"
-                          placeholder="例：20"
-                          value={field.value ?? ''}
-                          onChange={(e) =>
-                            field.onChange(e.target.value === '' ? '' : Number(e.target.value))
-                          }
-                          onBlur={field.onBlur}
-                          inputMode="numeric"
-                          type="text"
-                          pattern="^\d{1,3}$"
-                          className="w-[100px]"
-                          aria-describedby="age-help"
-                        />
-                        <datalist id="age-options">
+                      <Select
+                        value={field.value != null ? String(field.value) : undefined}
+                        onValueChange={(v) => field.onChange(v === '' ? '' : Number(v))}
+                      >
+                        <SelectTrigger className="w-[100px]">
+                          <SelectValue placeholder="選択" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[240px]">
                           {Array.from({ length: 120 }, (_, i) => i + 1).map((n) => (
-                            <option key={n} value={n} />
+                            <SelectItem key={n} value={String(n)}>{n} 歳</SelectItem>
                           ))}
-                        </datalist>
-                      </div>
+                        </SelectContent>
+                      </Select>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1151,9 +1127,9 @@ export function ResidentForm({
             </div>
             <div className="flex flex-wrap gap-2 pt-2">
               {fields.map((field, index) => (
-                <div key={field.id} className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm">
+                <div key={field.id} className="flex items-center gap-1 rounded-full bg-white/15 border border-white/25 px-3 py-1 text-sm">
                   <span>{field.value}</span>
-                  <button type="button" onClick={() => remove(index)} className="ml-1 font-bold text-muted-foreground hover:text-destructive">
+                  <button type="button" onClick={() => remove(index)} className="ml-1 font-bold text-white/50 hover:text-red-400">
                     ×
                   </button>
                 </div>
@@ -1176,22 +1152,20 @@ export function ResidentForm({
                 <FormItem>
                   <FormLabel>就寝 <span className="text-red-500">*</span></FormLabel> {/* 変更済 */}
                   <FormControl>
-                    {/* Input + Suffix */}
                     <div className="flex items-center gap-2">
-                      <Input
-                        list="hour-options"
-                        placeholder="例: 23"
-                        value={field.value ?? ''}
-                        onChange={(e) =>
-                          field.onChange(e.target.value === '' ? '' : Number(e.target.value))
-                        }
-                        onBlur={field.onBlur}
-                        inputMode="numeric"
-                        type="text"
-                        pattern="^\d{1,2}$" // 0-23
-                        className="w-[120px]"
-                      />
-                      <span className="text-sm text-muted-foreground">時頃</span>
+                      <Select
+                        value={field.value != null ? String(field.value) : undefined}
+                        onValueChange={(v) => field.onChange(v === '' ? '' : Number(v))}
+                      >
+                        <SelectTrigger className="w-[120px]">
+                          <SelectValue placeholder="選択" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[240px]">
+                          {Array.from({ length: 24 }, (_, i) => i).map((n) => (
+                            <SelectItem key={n} value={String(n)}>{n} 時頃</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </FormControl>
                   <FormMessage />
@@ -1205,22 +1179,20 @@ export function ResidentForm({
                 <FormItem>
                   <FormLabel>起床 <span className="text-red-500">*</span></FormLabel> {/* 変更済 */}
                   <FormControl>
-                    {/* Input + Suffix */}
                     <div className="flex items-center gap-2">
-                      <Input
-                        list="hour-options"
-                        placeholder="例: 7"
-                        value={field.value ?? ''}
-                        onChange={(e) =>
-                          field.onChange(e.target.value === '' ? '' : Number(e.target.value))
-                        }
-                        onBlur={field.onBlur}
-                        inputMode="numeric"
-                        type="text"
-                        pattern="^\d{1,2}$" // 0-23
-                        className="w-[120px]"
-                      />
-                      <span className="text-sm text-muted-foreground">時頃</span>
+                      <Select
+                        value={field.value != null ? String(field.value) : undefined}
+                        onValueChange={(v) => field.onChange(v === '' ? '' : Number(v))}
+                      >
+                        <SelectTrigger className="w-[120px]">
+                          <SelectValue placeholder="選択" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[240px]">
+                          {Array.from({ length: 24 }, (_, i) => i).map((n) => (
+                            <SelectItem key={n} value={String(n)}>{n} 時頃</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </FormControl>
                   <FormMessage />
