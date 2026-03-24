@@ -27,16 +27,18 @@ export type ThemePromptInput = {
   category: string;
   seed: string;
   recentSummaries: string[];
+  playerName?: string;
 };
 
 export function buildThemePrompt(input: ThemePromptInput): {
   system: string;
   user: string;
 } {
-  const { character: c, trustBandTone, category, seed, recentSummaries } = input;
+  const { character: c, trustBandTone, category, seed, recentSummaries, playerName } = input;
+  const playerLabel = playerName ? `${playerName}（管理人）` : 'プレイヤー（管理人）';
 
   const system = `あなたは生活シミュレーションゲームの相談テキストを生成するAIです。
-住人がプレイヤー（管理人）に相談を持ちかけるシーンを生成してください。
+住人が${playerLabel}に相談を持ちかけるシーンを生成してください。
 
 ## 出力形式（JSON）
 {
@@ -51,7 +53,7 @@ export function buildThemePrompt(input: ThemePromptInput): {
 
 ## ルール
 - content はキャラクターの口調と信頼度帯の態度で書くこと
-- choices は 3つ。プレイヤーの返答として自然なバリエーション（肯定的・中立・否定的 の3段階）
+- choices は 3つ。${playerLabel}の返答として自然なバリエーション（肯定的・中立・否定的 の3段階）
 - 相談は「ちょっと深いけど重すぎない」程度の深さ
 - JSON以外の出力は一切不要`;
 
@@ -66,7 +68,7 @@ export function buildThemePrompt(input: ThemePromptInput): {
   const user = `キャラクター: ${c.name}${c.gender ? `（${c.gender}）` : ""}${c.age ? `、${c.age}歳` : ""}
 性格: ${traitDesc}${mbtiDesc ? `\nMBTI: ${mbtiDesc}` : ""}
 ${speechPart}
-プレイヤーへの態度: ${trustBandTone}
+${playerLabel}への態度: ${trustBandTone}
 テーマカテゴリ: ${category}
 テーマシード: ${seed}${recentPart}
 
@@ -84,16 +86,18 @@ export type ReplyPromptInput = {
   trustBandTone: string;
   consultContent: string;
   selectedChoiceLabel: string;
+  playerName?: string;
 };
 
 export function buildReplyPrompt(input: ReplyPromptInput): {
   system: string;
   user: string;
 } {
-  const { character: c, trustBandTone, consultContent, selectedChoiceLabel } = input;
+  const { character: c, trustBandTone, consultContent, selectedChoiceLabel, playerName } = input;
+  const playerLabel = playerName ? `${playerName}（管理人）` : 'プレイヤー（管理人）';
 
   const system = `あなたは生活シミュレーションゲームのキャラクター返答を生成するAIです。
-住人がプレイヤーの回答を聞いた後のリアクションを生成してください。
+住人が${playerLabel}の回答を聞いた後のリアクションを生成してください。
 
 ## 出力形式（JSON）
 {
@@ -102,8 +106,8 @@ export function buildReplyPrompt(input: ReplyPromptInput): {
 }
 
 ## ルール
-- reply: プレイヤーの選択に対するキャラクターの自然な反応。口調を守ること。
-- favorability: プレイヤーの回答がキャラクターにとってどう受け止められたか
+- reply: ${playerLabel}の選択に対するキャラクターの自然な反応。口調を守ること。
+- favorability: ${playerLabel}の回答がキャラクターにとってどう受け止められたか
   - positive: 嬉しい・心強い・前向き
   - neutral: まあそうだよね、程度
   - negative: がっかり・不満・納得いかない
@@ -115,12 +119,12 @@ export function buildReplyPrompt(input: ReplyPromptInput): {
   const user = `キャラクター: ${c.name}
 性格: ${traitDesc}
 ${speechPart}
-プレイヤーへの態度: ${trustBandTone}
+${playerLabel}への態度: ${trustBandTone}
 
 相談内容:
 ${consultContent}
 
-プレイヤーの回答: ${selectedChoiceLabel}
+${playerLabel}の回答: ${selectedChoiceLabel}
 
 この回答に対するキャラクターの返答と好ましさをJSON形式で生成してください。`;
 

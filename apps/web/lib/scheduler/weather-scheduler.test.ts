@@ -118,9 +118,11 @@ describe('weather scheduler', () => {
     mocks.isWithinQuietHours.mockReturnValue(true);
     const scheduler = startWeatherScheduler({ baseIntervalMs: 60_000 });
 
+    // 初回は3秒後に実行される
     expect(vi.getTimerCount()).toBe(1);
 
-    await vi.advanceTimersByTimeAsync(54_000);
+    // 初回tick (3s) → quiet hours で早期return → scheduleNext で次タイマー
+    await vi.advanceTimersByTimeAsync(4_000);
     expect(vi.getTimerCount()).toBe(1);
 
     await vi.advanceTimersByTimeAsync(54_000);
@@ -133,16 +135,16 @@ describe('weather scheduler', () => {
   it('複数起動でも最短間隔内のコメント生成は1回だけ', async () => {
     const s1 = startWeatherScheduler({ baseIntervalMs: 3_600_000 });
 
-    // 2つ目のタブ起動を模擬（同じlocalStorageを共有）
-    await vi.advanceTimersByTimeAsync(600_000);
-    const s2 = startWeatherScheduler({ baseIntervalMs: 3_600_000 });
-
-    // 1つ目の初回実行（3,240,000ms）
-    await vi.advanceTimersByTimeAsync(2_640_000);
+    // s1の初回tick (3秒後) → 天気更新＋コメント生成
+    await vi.advanceTimersByTimeAsync(4_000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    // 2つ目の初回実行（3,840,000ms）は最短間隔未満のためスキップ
-    await vi.advanceTimersByTimeAsync(600_000);
+    // 2つ目のタブ起動を模擬（同じlocalStorageを共有）
+    await vi.advanceTimersByTimeAsync(596_000);
+    const s2 = startWeatherScheduler({ baseIntervalMs: 3_600_000 });
+
+    // s2の初回tick (3秒後) → 最短間隔未満のためスキップ
+    await vi.advanceTimersByTimeAsync(4_000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     s1.stop();

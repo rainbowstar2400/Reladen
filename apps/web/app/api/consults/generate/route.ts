@@ -72,6 +72,10 @@ export async function POST(req: Request) {
       }
     }
 
+    // プレイヤー名を取得
+    const playerProfiles = (await listAny("player_profiles")) as any[] | null;
+    const playerName: string | undefined = playerProfiles?.find((p) => !p.deleted)?.player_name;
+
     // 住人情報を取得
     const residents = (await listAny("residents")) as any[] | null;
     const resident = residents?.find((r) => r.id === consultResidentId && !r.deleted);
@@ -117,6 +121,7 @@ export async function POST(req: Request) {
         category: trigger === "confession" ? "告白の相談" : "別れの相談",
         seed: trigger === "confession" ? "好きな人に告白するか迷っている" : "相手と別れるか迷っている",
         recentSummaries: [],
+        playerName,
       });
 
       // GPT生成のchoicesをテンプレート選択肢で上書き
@@ -167,6 +172,7 @@ export async function POST(req: Request) {
         category,
         seed,
         recentSummaries,
+        playerName,
       });
     }
 

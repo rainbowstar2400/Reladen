@@ -98,6 +98,10 @@ export async function POST(
       speechSummary = preset?.label ?? null;
     }
 
+    // プレイヤー名を取得
+    const playerProfiles = (await listAny("player_profiles")) as any[] | null;
+    const playerName: string | undefined = playerProfiles?.find((p) => !p.deleted)?.player_name;
+
     // GPT 返答生成
     const replyResult = await generateConsultReply({
       character: {
@@ -111,6 +115,7 @@ export async function POST(
       trustBandTone: TRUST_BAND_TONE[trustBand],
       consultContent: consultPayload.content ?? "",
       selectedChoiceLabel: selectedChoice.label,
+      playerName,
     });
 
     // 判定基準は「選択肢定義の favorability」を正とする

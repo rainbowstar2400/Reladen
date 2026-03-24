@@ -238,7 +238,11 @@ export function startWeatherScheduler(opts?: SchedulerOptions) {
     }, ms);
   };
 
-  scheduleNext();
+  // 初回は短い遅延で実行（タブ起動直後に天気が更新される。hasRecentWeatherRun で重複防止済み）
+  timer = window.setTimeout(() => {
+    timer = null;
+    void tick();
+  }, 3_000); // 3秒後
 
   const stop = () => {
     stopped = true;

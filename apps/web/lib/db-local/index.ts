@@ -1,7 +1,7 @@
 'use client';
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import { EventLog, Feeling, Relation, Resident, Nickname, Preset, WorldStateRecord } from '@/types';
+import { EventLog, Feeling, Relation, Resident, Nickname, Preset, WorldStateRecord, PlayerProfile } from '@/types';
 import {
   NotificationRecord,
   TopicThread,
@@ -19,7 +19,8 @@ export type LocalTableName =
   | 'consult_answers'
   | 'nicknames'
   | 'presets'
-  | 'world_states';
+  | 'world_states'
+  | 'player_profiles';
 
 type Entity =
   & BaseEntity
@@ -34,6 +35,7 @@ type Entity =
     | Nickname
     | Preset
     | WorldStateRecord
+    | PlayerProfile
   );
 
 type PartialEntity<T extends Entity> = Partial<T> & Partial<BaseEntity>;
@@ -57,6 +59,7 @@ interface ReladenSchema extends DBSchema {
   };
   presets: { key: string; value: Preset; };
   world_states: { key: string; value: WorldStateRecord; };
+  player_profiles: { key: string; value: PlayerProfile; };
 }
 
 type Snapshot = Record<LocalTableName, Record<string, Entity>>;
@@ -87,6 +90,7 @@ function createEmptySnapshot(): Snapshot {
     nicknames: {},
     presets: {},
     world_states: {},
+    player_profiles: {},
   };
 }
 
@@ -94,7 +98,7 @@ let dbPromise: Promise<IDBPDatabase<ReladenSchema>> | null = null;
 let tauriState: { snapshot: Snapshot; persist: () => Promise<void> } | null = null;
 
 const DB_NAME = 'reladen-db';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 async function getDb() {
   if (!dbPromise) {
@@ -126,6 +130,9 @@ async function getDb() {
         }
         if (!database.objectStoreNames.contains('presets')) {
           database.createObjectStore('presets');
+        }
+        if (oldVersion < 7) {
+          database.createObjectStore('player_profiles');
         }
       },
     });
@@ -249,7 +256,8 @@ export async function clearLocalAll() {
   const db = await getDb();
   const stores: LocalTableName[] = [
     'residents', 'relations', 'feelings', 'events',
-    'topic_threads', 'notifications', 'consult_answers', 'nicknames', 'presets', 'world_states'
+    'topic_threads', 'notifications', 'consult_answers', 'nicknames', 'presets', 'world_states',
+    'player_profiles'
   ];
   const tx = db.transaction(stores, 'readwrite');
   await Promise.all(stores.map((name) => tx.objectStore(name).clear()));

@@ -56,12 +56,7 @@ type ResidentStatusItem = {
 
 type HomePanelMode = 'none' | 'right-detail' | 'right-peek' | 'popup-consult';
 
-const RESIDENT_STATUS_SAMPLE: ResidentStatusItem[] = [
-  { id: 'A', name: 'ハル', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]', trustToPlayer: 50 },
-  { id: 'B', name: 'ミオ', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]', trustToPlayer: 45 },
-  { id: 'C', name: 'コウ', tone: 'bg-[#4dbb63] shadow-[0_0_8px_rgba(77,187,99,0.6)]', trustToPlayer: 60 },
-  { id: 'D', name: 'レイ', tone: 'bg-[#3a7bd5] shadow-[0_0_8px_rgba(58,123,213,0.6)]', trustToPlayer: 55 },
-];
+// モックデータは廃止: 未登録時は空状態メッセージを表示する
 
 function getNotificationTitle(n: NotificationRecord, residentNameMap: Record<string, string>) {
   const participantIds = Array.isArray(n.participants) ? n.participants : [];
@@ -139,7 +134,7 @@ export function HomeContent() {
 
   const nowMinute = now ? now.getHours() * 60 + now.getMinutes() : 0;
   const residentStatusList = useMemo<ResidentStatusItem[]>(() => {
-    if (residents.length === 0) return RESIDENT_STATUS_SAMPLE;
+    if (residents.length === 0) return [];
     return residents.map((r) => {
       const situation = now
         ? calcSituation(now, (r.sleepProfile ?? {}) as SleepProfile)
@@ -901,29 +896,36 @@ export function HomeContent() {
           />
 
           <div className="flex flex-col gap-3">
-            {filteredResidentStatusList.map((item) => (
-              <div
-                key={item.id}
-                className="grid grid-cols-[20px_1fr_auto] items-center gap-2 rounded-xl border border-white/55 bg-white/25 px-3 py-2"
-              >
-                <span className={`h-3 w-3 rounded-full ${item.tone}`} />
-                <span className="font-medium">{item.name}</span>
-                <button
-                  className="rounded-[10px] border border-black/10 bg-white/60 px-3 py-1 text-[12px] font-medium transition hover:-translate-y-0.5 hover:bg-white/75"
-                  type="button"
-                  onClick={() => {
-                    setActivePeekResidentId(item.id);
-                    setActiveConversationId(null);
-                    setActiveConsultId(null);
-                    setLogDetail(null);
-                    setConsultDetail(null);
-                    setPanelMode('right-peek');
-                  }}
-                >
-                  覗く
-                </button>
+            {filteredResidentStatusList.length === 0 ? (
+              <div className="rounded-xl border border-white/30 bg-white/10 px-4 py-6 text-center text-sm text-white/60">
+                まだ住人が登録されていません。<br />
+                管理室から住人を追加してみましょう。
               </div>
-            ))}
+            ) : (
+              filteredResidentStatusList.map((item) => (
+                <div
+                  key={item.id}
+                  className="grid grid-cols-[20px_1fr_auto] items-center gap-2 rounded-xl border border-white/55 bg-white/25 px-3 py-2"
+                >
+                  <span className={`h-3 w-3 rounded-full ${item.tone}`} />
+                  <span className="font-medium">{item.name}</span>
+                  <button
+                    className="rounded-[10px] border border-black/10 bg-white/60 px-3 py-1 text-[12px] font-medium transition hover:-translate-y-0.5 hover:bg-white/75"
+                    type="button"
+                    onClick={() => {
+                      setActivePeekResidentId(item.id);
+                      setActiveConversationId(null);
+                      setActiveConsultId(null);
+                      setLogDetail(null);
+                      setConsultDetail(null);
+                      setPanelMode('right-peek');
+                    }}
+                  >
+                    覗く
+                  </button>
+                </div>
+              ))
+            )}
           </div>
             </GlassPanel>
           </motion.div>

@@ -32,7 +32,8 @@ type Table =
   | "shared_snippets"
   | "recent_events"
   | "offscreen_knowledge"
-  | "nicknames";
+  | "nicknames"
+  | "player_profiles";
 
 type OwnerColumnConfig =
   | { type: "fixed"; column: string }
@@ -75,7 +76,7 @@ async function resolveOwnerColumn(
   }
 
   for (const column of config.columns) {
-    const { error } = await sb.from(table).select(column).limit(1);
+    const { error } = await sb.from(table as any).select(column).limit(1);
     if (!error) {
       ownerColumnCache.set(table, column);
       return column;
@@ -111,7 +112,7 @@ export async function putKV(table: Table, rec: any) {
     payload = { ...rec, [ownerColumn]: ownerId };
   }
 
-  const { error } = await sb.from(table).upsert(payload, { onConflict: "id" });
+  const { error } = await sb.from(table as any).upsert(payload, { onConflict: "id" });
   if (error) {
     if (isAuthError(error)) {
       throw new KvUnauthenticatedError();
@@ -123,7 +124,7 @@ export async function putKV(table: Table, rec: any) {
 
 export async function listKV<T = any>(table: Table): Promise<T[]> {
   const sb = sbServer();
-  const { data, error } = await sb.from(table).select("*");
+  const { data, error } = await sb.from(table as any).select("*");
   if (error) {
     if (isAuthError(error)) {
       throw new KvUnauthenticatedError();

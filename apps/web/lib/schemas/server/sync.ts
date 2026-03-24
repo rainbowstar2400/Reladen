@@ -10,6 +10,7 @@ export const allowedTables = [
   'presets',
   'nicknames',
   'world_states',
+  'player_profiles',
 ] as const;
 export type AllowedTable = typeof allowedTables[number];
 
