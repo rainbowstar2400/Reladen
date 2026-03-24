@@ -282,4 +282,12 @@ export const worldStates = pgTable('world_states', {
   updatedIdx: index('world_states_updated_idx').on(t.updatedAt),
 }));
 
-
+export const playerProfiles = pgTable('player_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  playerName: text('player_name').notNull(),
+  privacyAcceptedAt: timestamp('privacy_accepted_at', { withTimezone: true }),
+  onboardingCompleted: boolean('onboarding_completed').notNull().default(false),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  deleted: boolean('deleted').notNull().default(false),
+  ownerId: uuid('owner_id'),
+});

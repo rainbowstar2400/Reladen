@@ -247,6 +247,12 @@ const CONSULT_ANSWERS_ALLOWED = new Set([
   'owner_id',
 ]);
 
+// player_profiles の許可カラム
+const PLAYER_PROFILES_ALLOWED = new Set([
+  'id', 'player_name', 'privacy_accepted_at', 'onboarding_completed',
+  'owner_id', 'updated_at', 'deleted',
+]);
+
 // 許可リストのマップ (キーは sync.ts と一致)
 const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
   residents: RESIDENTS_ALLOWED,
@@ -257,6 +263,7 @@ const ALLOWED_COLUMNS_MAP: Record<AllowedTable, Set<string>> = {
   presets: PRESETS_ALLOWED,
   consult_answers: CONSULT_ANSWERS_ALLOWED,
   world_states: WORLD_STATES_ALLOWED,
+  player_profiles: PLAYER_PROFILES_ALLOWED,
 };
 
 export async function POST(req: NextRequest, { params }: { params: { table: string } }) {

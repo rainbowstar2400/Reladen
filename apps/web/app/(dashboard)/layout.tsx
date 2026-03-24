@@ -8,7 +8,8 @@ import DetailLayer from '@/components/logs/detail-layer';
 import ConsultDetailLayer from '@/components/consults/detail-layer';
 import RealtimeSubscriber from '@/components/Realtime/RealtimeSubscriber';
 import { useAuth } from '@/lib/auth/use-auth'; // useAuth をインポート
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useOnboardingGuard } from '@/lib/hooks/use-onboarding-guard';
 
 export default function DashboardLayout({
   children,
@@ -17,7 +18,15 @@ export default function DashboardLayout({
 }) {
   // `ready` に加えて `user` も取得
   const { ready, user } = useAuth();
+  const router = useRouter();
+  const { loading: guardLoading, needsOnboarding } = useOnboardingGuard();
   const pathname = usePathname();
+
+  // オンボーディング未完了のログインユーザーをリダイレクト
+  if (ready && user && !guardLoading && needsOnboarding) {
+    router.replace('/onboarding');
+    return null;
+  }
   const isHomeRoute = pathname === '/home';
   const isReportRoute = pathname === '/reports';
   const isOfficeRoute =

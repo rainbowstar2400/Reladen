@@ -184,8 +184,14 @@ export const presetSchema = baseEntitySchema.extend({
   speechProfileData: speechProfileDataSchema.nullable().optional(),
 });
 
+export const playerProfileSchema = baseEntitySchema.extend({
+  player_name: z.string().min(1),
+  privacy_accepted_at: z.string().datetime().nullable().optional(),
+  onboarding_completed: z.boolean().default(false),
+});
+
 export const syncPayloadSchema = z.object({
-  table: z.enum(['residents', 'relations', 'feelings', 'events', 'presets', 'nicknames', 'consult_answers', 'world_states']),
+  table: z.enum(['residents', 'relations', 'feelings', 'events', 'presets', 'nicknames', 'consult_answers', 'world_states', 'player_profiles']),
   changes: z.array(z.object({
     data: z.record(z.any()),
     updated_at: z.string().datetime(),
@@ -209,6 +215,7 @@ export type Nickname = z.infer<typeof nicknameSchema>;
 export type EventLog = z.infer<typeof eventSchema>;
 export type SyncPayload = z.infer<typeof syncPayloadSchema>;
 export type Preset = z.infer<typeof presetSchema>;
+export type PlayerProfile = z.infer<typeof playerProfileSchema>;
 export * from './conversation';
 export * from './conversation-generation';
 export * from './base';
