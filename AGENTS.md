@@ -18,11 +18,12 @@ Reladen プロジェクトで作業するエージェント向けのガイドで
 - 関係と感情: 関係（`relations.type`）は対称、印象/好感度（`feelings`）は非対称。`relation = none` は会話対象外。
 - 会話生成: 10段パイプラインで、話題選定（9ソース）→ 構造決定（主導者/スタンス/温度感/発話長）→ LLM生成 → バリデーション（最大1回再生成）→ 評価・永続化。
 - 世界シミュレーション: 睡眠・天候・共有スニペット・最近の出来事・知識伝播により、プレイヤー不在でも世界が進行する。
-- プレイヤー介入: 相談（consult）が中心。`trustToPlayer` は住人間好感度と別軸で、主に相談で変動する。
+- プレイヤー介入: 相談（consult）が中心。`trustToPlayer` は住人間好感度と別軸で、主に相談で変動する。`player_profiles` テーブルにプレイヤー名等を保持し、相談プロンプトで利用。
+- オンボーディング: 初回起動時に `(onboarding)` ルートグループで ログイン→同意→名前→住人2人登録 のフローを提供。`useOnboardingGuard` フックでダッシュボードからリダイレクト。
 - スケジューリング: 現行はクライアント側15分間隔（開発用）だが、仕様上はサーバー側1時間間隔へ移行予定。
 
 ## ディレクトリと役割
-- `apps/web/app`: 画面と API（`/api/conversations/start`, `/api/sync/[table]` など）。
+- `apps/web/app`: 画面と API（`/api/conversations/start`, `/api/sync/[table]` など）。`(onboarding)` ルートグループはオンボーディングフロー用。
 - `apps/web/lib`: DB / 同期 / 会話オーケストレーション / 評価 / スケジューラーの実装。
 - `apps/web/lib/conversation`: 会話パイプライン（`run-conversation.ts`）。
 - `apps/web/lib/evaluation`: favor・印象・thread進行の評価ロジック。
