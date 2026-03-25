@@ -5,8 +5,9 @@ import { usePlayerProfile } from '@/lib/data/player-profile';
 
 /**
  * Returns whether the current user still needs onboarding.
- * - Anonymous users (no login) → needsOnboarding: false (allow browsing)
- * - Logged in + no profile or onboarding_completed=false → needsOnboarding: true
+ * - Anonymous (no login) → needsOnboarding: true (must go to /onboarding)
+ * - Logged in + no profile / no privacy / no name → needsOnboarding: true
+ * - Logged in + name set (onboarding may be incomplete but tutorial continues in dashboard) → false
  */
 export function useOnboardingGuard(): { loading: boolean; needsOnboarding: boolean } {
   const { ready, user } = useAuth();
@@ -16,12 +17,21 @@ export function useOnboardingGuard(): { loading: boolean; needsOnboarding: boole
     return { loading: true, needsOnboarding: false };
   }
 
-  // Not logged in — don't redirect (anonymous mode)
+  // Not logged in → onboarding required
   if (!user) {
-    return { loading: false, needsOnboarding: false };
+    return { loading: false, needsOnboarding: true };
   }
 
-  // Logged in but no profile or onboarding not completed
-  const needsOnboarding = !profile || !profile.onboarding_completed;
-  return { loading: false, needsOnboarding };
+  // Logged in but pre-login onboarding steps incomplete
+  if (
+    !profile ||
+    !profile.privacy_accepted_at ||
+    !profile.player_name ||
+    profile.player_name === '_pending'
+  ) {
+    return { loading: false, needsOnboarding: true };
+  }
+
+  // Name set → stay in dashboard (tutorial mode handles the rest)
+  return { loading: false, needsOnboarding: false };
 }

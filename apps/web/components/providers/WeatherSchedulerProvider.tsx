@@ -4,6 +4,7 @@
 import { useEffect, useRef } from "react";
 import { startWeatherScheduler } from "@/lib/scheduler/weather-scheduler";
 import { useAuth } from "@/lib/auth/use-auth";
+import { usePlayerProfile } from "@/lib/data/player-profile";
 
 type Props = {
   enabled?: boolean;
@@ -20,7 +21,8 @@ export default function WeatherSchedulerProvider(props: Props) {
 
   const stopRef = useRef<null | { stop: () => void }>(null);
   const { user, ready } = useAuth();
-  const shouldRun = Boolean(enabled && ready && user);
+  const { data: playerProfile } = usePlayerProfile();
+  const shouldRun = Boolean(enabled && ready && user && playerProfile?.onboarding_completed);
 
   useEffect(() => {
     stopRef.current?.stop?.();

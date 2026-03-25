@@ -2,11 +2,11 @@
 
 import { cn } from '@/lib/utils';
 
-const STEPS = ['ログイン', '同意', 'あなたの名前', '住人登録'] as const;
+const STEPS = ['同意', 'ログイン', 'あなたの名前'] as const;
 
 export function StepIndicator({ current }: { current: number }) {
-  // Steps 0=login, 1=privacy, 2=name, 3&4=resident registration (shown as one segment)
-  const segment = current >= 3 ? 3 : current;
+  // Steps: 1=privacy, 2=login, 3=name → mapped to segments 0,1,2
+  const segment = current - 1;
 
   return (
     <div className="flex items-center gap-2 w-full max-w-md mx-auto">

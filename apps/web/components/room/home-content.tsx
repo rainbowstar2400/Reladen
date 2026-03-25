@@ -27,6 +27,8 @@ import {
   shouldReusePeekCache,
   type PeekCacheEntry,
 } from '@/lib/peek/peek-cache';
+import { usePlayerProfile } from '@/lib/data/player-profile';
+import { useAuth } from '@/lib/auth/use-auth';
 
 const notoSans = Noto_Sans_JP({
   weight: ['300', '400', '500', '600'],
@@ -87,6 +89,8 @@ function getInitialFromTitle(title: string) {
 export function HomeContent() {
   const router = useRouter();
   const deskTransition = useDeskTransition();
+  const { user } = useAuth();
+  const { data: playerProfile } = usePlayerProfile();
   const residentNameMap = useResidentNameMap();
   const { data: weatherState } = useWorldWeather();
   const { data: notifications = [], isLoading: isLoadingNotifications } = useNotifications();
@@ -95,6 +99,9 @@ export function HomeContent() {
   const queryClient = useQueryClient();
   const { data: residents = [] } = useResidents();
   const { data: feelings = [] } = useFeelings();
+
+  // Tutorial mode: logged in, name set, but onboarding not completed (< 2 residents)
+  const isTutorialMode = Boolean(user && playerProfile && !playerProfile.onboarding_completed);
   const [now, setNow] = useState<Date | null>(null);
   const [panelMode, setPanelMode] = useState<HomePanelMode>('none');
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -690,6 +697,32 @@ export function HomeContent() {
       </header>
 
       <main className="relative flex-1">
+        {isTutorialMode ? (
+          <div className="flex items-center justify-center py-8">
+            <GlassPanel
+              className="w-[min(100%,520px)] px-8 py-10"
+              contentClassName="flex flex-col items-center gap-6 text-center"
+            >
+              <h2 className="text-xl font-semibold">
+                ようこそ、{playerProfile?.player_name ?? 'プレイヤー'}さん
+              </h2>
+              <p className="text-base leading-relaxed">
+                管理室から住人を2人以上登録して、<br />
+                世界を始めましょう。
+              </p>
+              <p className="text-sm text-black/50">
+                登録済み：{residents.filter((r) => !(r as any).deleted).length}人 / 2人
+              </p>
+              <button
+                type="button"
+                onClick={() => navigateDesk('/office/new', 'desk')}
+                className="rounded-xl border border-black/10 bg-white/60 px-6 py-3 text-base font-medium shadow-sm transition hover:-translate-y-0.5 hover:bg-white/75"
+              >
+                管理室へ →
+              </button>
+            </GlassPanel>
+          </div>
+        ) : (
         <div
           className="relative grid items-start gap-[clamp(16px,1.25vw,32px)] max-[1240px]:grid-cols-1"
           style={panelGridStyle}
@@ -1091,6 +1124,7 @@ export function HomeContent() {
             )}
           </AnimatePresence>
         </div>
+        )}
       </main>
 
       <footer className="mt-auto grid grid-cols-[1fr_auto_1fr] items-end gap-4 translate-y-[clamp(-64px,-2.5vw,-32px)] max-[1240px]:grid-cols-1 max-[1240px]:justify-items-center">

@@ -22,8 +22,8 @@ export default function DashboardLayout({
   const { loading: guardLoading, needsOnboarding } = useOnboardingGuard();
   const pathname = usePathname();
 
-  // オンボーディング未完了のログインユーザーをリダイレクト
-  if (ready && user && !guardLoading && needsOnboarding) {
+  // 未ログイン or オンボーディング未完了 → /onboarding へリダイレクト
+  if (ready && !guardLoading && needsOnboarding) {
     router.replace('/onboarding');
     return null;
   }
