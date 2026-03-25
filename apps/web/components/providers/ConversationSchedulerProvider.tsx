@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { startConversationScheduler, triggerConversationNow } from "@/lib/scheduler/conversation-scheduler";
 import { startConsultScheduler } from "@/lib/scheduler/consult-scheduler";
 import { useAuth } from "@/lib/auth/use-auth";
+import { usePlayerProfile } from "@/lib/data/player-profile";
 import { ensureUserPresetBootstrap } from "@/lib/data/presets";
 
 type Props = {
@@ -25,7 +26,8 @@ export default function ConversationSchedulerProvider(props: Props) {
   const stopRef = useRef<null | { stop: () => void }>(null);
   const consultStopRef = useRef<null | { stop: () => void }>(null);
   const { user, ready } = useAuth();
-  const shouldRunScheduler = Boolean(enabled && ready && user);
+  const { data: playerProfile } = usePlayerProfile();
+  const shouldRunScheduler = Boolean(enabled && ready && user && playerProfile?.onboarding_completed);
   const manualTriggerFlag = (process.env.NEXT_PUBLIC_ENABLE_CONV_MANUAL_TRIGGER ?? "").toLowerCase();
   const canExposeManualTrigger =
     process.env.NODE_ENV !== "production" ||
