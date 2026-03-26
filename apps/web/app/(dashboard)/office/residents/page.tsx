@@ -1,6 +1,7 @@
 'use client';
 
 import { useResidents, useDeleteResident } from '@/lib/data/residents';
+import { usePlayerProfile } from '@/lib/data/player-profile';
 import { Card, CardContent } from '@/components/ui/card'; // CardHeader, CardTitle を削除
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -11,6 +12,8 @@ import { OfficePanelShell } from '@/components/room/office-panel-shell';
 export default function ResidentsPage() {
   const { data, isLoading } = useResidents();
   const remove = useDeleteResident();
+  const { data: profile } = usePlayerProfile();
+  const isTutorialMode = profile && !profile.onboarding_completed;
 
   return (
     <DeskPanel className="mx-auto mt-[clamp(24px,3vw,56px)] w-[min(100%,960px)]">
@@ -36,6 +39,11 @@ export default function ResidentsPage() {
               </Link>
             </Button>
           </div>
+          {isTutorialMode && data && data.length >= 1 && (
+            <div className="rounded-lg border border-amber-200/50 bg-amber-50/30 px-4 py-3 text-sm text-amber-900/70">
+              左上の「新規追加」ボタンからもう1人登録してみましょう。
+            </div>
+          )}
           {isLoading && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />読み込み中…

@@ -4,12 +4,15 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useResidents } from '@/lib/data/residents';
+import { usePlayerProfile } from '@/lib/data/player-profile';
 import { useDeskTransition } from '@/components/room/room-transition-context';
 
 export function OfficeContent() {
   const router = useRouter();
   const deskTransition = useDeskTransition();
   const { data, isLoading } = useResidents();
+  const { data: profile } = usePlayerProfile();
+  const isTutorialMode = profile && !profile.onboarding_completed;
   const count = isLoading ? '—' : (data?.length ?? 0);
 
   const Btn = ({ href, label }: { href: string; label: string }) => (
@@ -55,6 +58,12 @@ export function OfficeContent() {
           現在の総住人数：<span className="tabular-nums text-base font-semibold">{count}</span> 人
         </p>
       </div>
+
+      {isTutorialMode && (
+        <div className="rounded-lg border border-amber-200/50 bg-amber-50/30 px-4 py-3 text-sm text-amber-900/70">
+          まずは住人を登録してみましょう。「新規住人登録」から始められます。
+        </div>
+      )}
 
       <div className="mx-auto flex max-w-2xl flex-col gap-8">
         <div className="space-y-4">
