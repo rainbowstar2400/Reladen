@@ -23,16 +23,16 @@ export default function DashboardLayout({
   // カーテンが exit アニメーション中でもコンテンツを見せるためのフラグ
   const [curtainDismissed, setCurtainDismissed] = useState(false);
 
+  const handleCurtainComplete = useCallback(() => {
+    setCurtainDismissed(true);
+  }, []);
+
   // 状態未確定 → カーテンと同色の背景（フラッシュ防止）
   if (!ready || profileLoading) {
     return <div className="min-h-screen bg-[#0d2136]" />;
   }
 
   const showCurtain = !curtainDismissed && (!profile || !profile.onboarding_completed);
-
-  const handleCurtainComplete = useCallback(() => {
-    setCurtainDismissed(true);
-  }, []);
 
   const isHomeRoute = pathname === '/home';
   const isReportRoute = pathname === '/reports';
