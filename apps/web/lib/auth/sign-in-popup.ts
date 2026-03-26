@@ -40,10 +40,17 @@ export function signInWithGooglePopup(): Promise<void> {
       });
 
       // ポップアップが手動で閉じられた場合のフォールバック
+      // 別オリジン（Google）に遷移すると COOP により popup.closed にアクセスできなくなるため、
+      // その場合はポーリングを停止し onAuthStateChange のみに頼る。
       const timer = setInterval(() => {
-        if (popup?.closed) {
-          cleanup();
-          resolve();
+        try {
+          if (popup?.closed) {
+            cleanup();
+            resolve();
+          }
+        } catch {
+          // Cross-Origin-Opener-Policy によりアクセス不可 → ポーリング停止
+          clearInterval(timer);
         }
       }, 500);
 
