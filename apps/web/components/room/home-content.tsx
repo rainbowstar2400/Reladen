@@ -701,25 +701,22 @@ export function HomeContent() {
           <div className="flex items-center justify-center py-8">
             <GlassPanel
               className="w-[min(100%,520px)] px-8 py-10"
-              contentClassName="flex flex-col items-center gap-6 text-center"
+              contentClassName="flex flex-col items-center gap-5 text-center"
             >
               <h2 className="text-xl font-semibold">
-                ようこそ、{playerProfile?.player_name ?? 'プレイヤー'}さん
+                Reladen へようこそ、{playerProfile?.player_name ?? 'プレイヤー'}さん
               </h2>
               <p className="text-base leading-relaxed">
-                管理室から住人を2人以上登録して、<br />
-                世界を始めましょう。
+                ここでは住人の様子を見たり、<br />
+                住人からの相談に答えたりすることができます。
+              </p>
+              <p className="text-base leading-relaxed">
+                まずは、管理室から住人を<br />
+                2人以上登録してみましょう。
               </p>
               <p className="text-sm text-black/50">
                 登録済み：{residents.filter((r) => !(r as any).deleted).length}人 / 2人
               </p>
-              <button
-                type="button"
-                onClick={() => navigateDesk('/office/new', 'desk')}
-                className="rounded-xl border border-black/10 bg-white/60 px-6 py-3 text-base font-medium shadow-sm transition hover:-translate-y-0.5 hover:bg-white/75"
-              >
-                管理室へ →
-              </button>
             </GlassPanel>
           </div>
         ) : (
