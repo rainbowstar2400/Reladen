@@ -6,12 +6,17 @@ import skyImage from '@/app/ui-demo/pre_sky.jpg';
 import deskImage from '@/app/ui-demo/desk.png';
 import { DeskPanelVisibilityProvider } from '@/components/room/desk-panel-context';
 import { DeskTransitionProvider } from '@/components/room/room-transition-context';
+import { OnboardingCurtain } from '@/components/room/onboarding-curtain';
 
 type RoomFace = 'front' | 'right' | 'left';
 
 type RoomStageProps = {
   activeFace: RoomFace;
   children: ReactNode;
+  /** true のときカーテン（暗い幕）を空の上に被せてオンボーディングUIを表示 */
+  showCurtain?: boolean;
+  /** カーテン上のオンボーディング完了時に呼ばれる */
+  onCurtainComplete?: () => void;
 };
 
 const FACE_ROTATION: Record<RoomFace, { y: number; x: number }> = {
@@ -26,7 +31,7 @@ const FACE_TRANSFORMS: Record<RoomFace, string> = {
   left: 'rotateY(-90deg) translateZ(0px)',
 };
 
-export function RoomStage({ activeFace, children }: RoomStageProps) {
+export function RoomStage({ activeFace, children, showCurtain = false, onCurtainComplete }: RoomStageProps) {
   const rotation = FACE_ROTATION[activeFace];
   const isDeskMode = activeFace !== 'front';
   const prevFaceRef = useRef<RoomFace>(activeFace);
@@ -205,8 +210,22 @@ export function RoomStage({ activeFace, children }: RoomStageProps) {
         </motion.div>
       </div>
 
+      {/* オンボーディングカーテン: 空と机の上に被さる暗い幕 */}
+      <AnimatePresence>
+        {showCurtain && (
+          <motion.div
+            key="onboarding-curtain"
+            className="absolute inset-0 z-30 bg-[#0d2136]"
+            exit={{ y: '-100%' }}
+            transition={{ duration: 0.8, ease: 'easeInOut' }}
+          >
+            <OnboardingCurtain onComplete={onCurtainComplete ?? (() => {})} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <DeskTransitionProvider beginDeskTransition={beginDeskTransition}>
-        <div className="relative z-10 min-h-screen" style={deskView ? undefined : { perspective: '1800px' }}>
+        <div className={`relative z-10 min-h-screen${showCurtain ? ' pointer-events-none opacity-0' : ''}`} style={deskView ? undefined : { perspective: '1800px' }}>
         {deskView ? (
           <div className="absolute inset-0 overflow-hidden">
             {outgoingToRender && (

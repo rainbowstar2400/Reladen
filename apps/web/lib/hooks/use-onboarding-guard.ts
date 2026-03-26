@@ -5,9 +5,10 @@ import { usePlayerProfile } from '@/lib/data/player-profile';
 
 /**
  * Returns whether the current user still needs onboarding.
- * - Anonymous (no login) → needsOnboarding: true (must go to /onboarding)
- * - Logged in + no profile / no privacy / no name → needsOnboarding: true
- * - Logged in + name set (onboarding may be incomplete but tutorial continues in dashboard) → false
+ * Used by dashboard layout to determine curtain visibility (not for routing).
+ * - Anonymous (no login) → needsOnboarding: true
+ * - Logged in + onboarding not completed → needsOnboarding: true
+ * - Completed → false
  */
 export function useOnboardingGuard(): { loading: boolean; needsOnboarding: boolean } {
   const { ready, user } = useAuth();
