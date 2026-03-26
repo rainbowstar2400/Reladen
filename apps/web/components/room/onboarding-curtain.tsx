@@ -12,6 +12,7 @@ import {
   clearOnboardingStorage,
 } from '@/lib/onboarding/onboarding-storage';
 import { StepIndicator } from '@/components/onboarding/step-indicator';
+import { GlassPanel } from '@/components/ui-demo/glass-panel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -170,15 +171,18 @@ export function OnboardingCurtain({ onComplete }: Props) {
 
   if (!ready || profileLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex h-full items-center justify-center">
         <p className="text-white/40 text-sm animate-pulse">読み込み中...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4">
-      <div className="w-full max-w-md space-y-8">
+    <div className="flex h-full flex-col items-center justify-center px-4">
+      <GlassPanel
+        className="w-full max-w-md border-white/20 bg-white/10"
+        contentClassName="px-6 py-8 space-y-6"
+      >
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold text-white/90">Reladen</h1>
           <p className="text-sm text-white/50">住人たちの暮らす世界をつくりましょう</p>
@@ -186,100 +190,98 @@ export function OnboardingCurtain({ onComplete }: Props) {
 
         {step > 0 && <StepIndicator current={step} />}
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 px-6 py-8 backdrop-blur-sm">
-          {/* Step 0: 選択画面 */}
-          {step === 0 && (
-            <div className="flex flex-col items-center gap-6">
-              <p className="text-white/70 text-center text-sm">
-                はじめまして、あるいはお帰りなさい。
-              </p>
-              <div className="flex flex-col gap-3 w-full max-w-xs">
-                <Button onClick={handleNewGame} size="lg" className="w-full">
-                  新規で開始
-                </Button>
-                <Button
-                  onClick={handleLoginContinue}
-                  variant="outline"
-                  size="lg"
-                  className="w-full border-white/20 text-white/80 hover:bg-white/10"
-                  disabled={loggingIn}
-                >
-                  {loggingIn ? 'ログイン中...' : 'ログインして続ける'}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 1: プラポリ同意 */}
-          {step === 1 && (
-            <div className="space-y-4">
-              <div className="rounded-lg border border-white/15 bg-white/5 p-4 max-h-[40vh] overflow-y-auto text-sm text-white/70 space-y-3">
-                <h2 className="text-base font-semibold text-white/80">プライバシーポリシー</h2>
-                <p>Reladenでは、ゲーム体験の提供のために以下の情報を利用します。</p>
-                <ul className="list-disc list-inside space-y-1 pl-2">
-                  <li>Googleアカウント情報（ログイン・データ同期のため）</li>
-                  <li>あなたが入力する住人情報・関係性データ</li>
-                  <li>会話生成のためにOpenAI APIへのデータ送信</li>
-                </ul>
-                <p>
-                  データはお使いの端末（IndexedDB）とクラウド（Supabase）に保存されます。
-                  詳細は設定画面の「プライバシーポリシー」からいつでも確認できます。
-                </p>
-              </div>
-              <div className="flex justify-center">
-                <Button onClick={handleAcceptPrivacy} size="lg">
-                  同意して次へ
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Googleログイン (ポップアップ) */}
-          {step === 2 && (
-            <div className="flex flex-col items-center gap-6">
-              <p className="text-white/70 text-center text-sm">
-                Googleアカウントでログインしてください。
-              </p>
-              <Button onClick={handleGoogleLogin} size="lg" disabled={loggingIn}>
-                {loggingIn ? 'ログイン中...' : 'Googleでログイン'}
+        {/* Step 0: 選択画面 */}
+        {step === 0 && (
+          <div className="flex flex-col items-center gap-6">
+            <p className="text-white/70 text-center text-sm">
+              はじめまして、あるいはお帰りなさい。
+            </p>
+            <div className="flex flex-col gap-3 w-full max-w-xs">
+              <Button onClick={handleNewGame} size="lg" className="w-full">
+                新規で開始
+              </Button>
+              <Button
+                onClick={handleLoginContinue}
+                variant="outline"
+                size="lg"
+                className="w-full border-white/20 text-white/80 hover:bg-white/10"
+                disabled={loggingIn}
+              >
+                {loggingIn ? 'ログイン中...' : 'ログインして続ける'}
               </Button>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Step 3: プレイヤー名 */}
-          {step === 3 && (
-            <div className="flex flex-col items-center gap-6">
-              <div className="text-center space-y-2">
-                <p className="text-white/70 text-sm">あなたの名前を教えてください。</p>
-                <p className="text-xs text-white/50">
-                  住人たちがあなたをこの名前で呼びます。あとから変更もできます。
-                </p>
-              </div>
-              <div className="w-full max-w-xs space-y-4">
-                <Input
-                  value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
-                  placeholder="プレイヤー名"
-                  maxLength={20}
-                  autoFocus
-                  className="bg-white/10 border-white/20 text-white placeholder:text-white/30"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void handleSubmitName();
-                  }}
-                />
-                <Button
-                  onClick={handleSubmitName}
-                  disabled={!playerName.trim() || submitting}
-                  className="w-full"
-                  size="lg"
-                >
-                  {submitting ? '保存中...' : 'はじめる'}
-                </Button>
-              </div>
+        {/* Step 1: プラポリ同意 */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-white/15 bg-white/5 p-4 max-h-[40vh] overflow-y-auto text-sm text-white/70 space-y-3">
+              <h2 className="text-base font-semibold text-white/80">プライバシーポリシー</h2>
+              <p>Reladenでは、ゲーム体験の提供のために以下の情報を利用します。</p>
+              <ul className="list-disc list-inside space-y-1 pl-2">
+                <li>Googleアカウント情報（ログイン・データ同期のため）</li>
+                <li>あなたが入力する住人情報・関係性データ</li>
+                <li>会話生成のためにOpenAI APIへのデータ送信</li>
+              </ul>
+              <p>
+                データはお使いの端末（IndexedDB）とクラウド（Supabase）に保存されます。
+                詳細は設定画面の「プライバシーポリシー」からいつでも確認できます。
+              </p>
             </div>
-          )}
-        </div>
-      </div>
+            <div className="flex justify-center">
+              <Button onClick={handleAcceptPrivacy} size="lg">
+                同意して次へ
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Googleログイン (ポップアップ) */}
+        {step === 2 && (
+          <div className="flex flex-col items-center gap-6">
+            <p className="text-white/70 text-center text-sm">
+              Googleアカウントでログインしてください。
+            </p>
+            <Button onClick={handleGoogleLogin} size="lg" disabled={loggingIn}>
+              {loggingIn ? 'ログイン中...' : 'Googleでログイン'}
+            </Button>
+          </div>
+        )}
+
+        {/* Step 3: プレイヤー名 */}
+        {step === 3 && (
+          <div className="flex flex-col items-center gap-6">
+            <div className="text-center space-y-2">
+              <p className="text-white/70 text-sm">あなたの名前を教えてください。</p>
+              <p className="text-xs text-white/50">
+                住人たちがあなたをこの名前で呼びます。あとから変更もできます。
+              </p>
+            </div>
+            <div className="w-full max-w-xs space-y-4">
+              <Input
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="プレイヤー名"
+                maxLength={20}
+                autoFocus
+                className="bg-white/10 border-white/20 text-white placeholder:text-white/30"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleSubmitName();
+                }}
+              />
+              <Button
+                onClick={handleSubmitName}
+                disabled={!playerName.trim() || submitting}
+                className="w-full"
+                size="lg"
+              >
+                {submitting ? '保存中...' : 'はじめる'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </GlassPanel>
     </div>
   );
 }

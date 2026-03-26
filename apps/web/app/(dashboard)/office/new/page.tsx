@@ -47,13 +47,6 @@ export default function NewResidentPage() {
     <DeskPanel className="mx-auto mt-[clamp(24px,3vw,56px)] w-[min(100%,960px)]">
       <OfficePanelShell title="住人を追加">
         <div className="space-y-4">
-          {isTutorialMode && (
-            <div className="rounded-lg border border-white/20 bg-white/8 px-4 py-3 text-sm text-white/70">
-              {activeResidentCount === 0
-                ? '最初の住人を登録しましょう。（1人目 / 2人）'
-                : 'もう1人、住人を登録しましょう。（2人目 / 2人）'}
-            </div>
-          )}
           <CardHeader className="px-0">
             <CardTitle>住人を追加</CardTitle>
           </CardHeader>
