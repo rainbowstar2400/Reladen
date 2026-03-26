@@ -210,12 +210,12 @@ export function RoomStage({ activeFace, children, showCurtain = false, onCurtain
         </motion.div>
       </div>
 
-      {/* オンボーディングカーテン: 空と机の上に被さる暗い幕 */}
+      {/* オンボーディングカーテン: 窓（空）部分のみ覆う幕。机は見えたまま */}
       <AnimatePresence>
         {showCurtain && (
           <motion.div
             key="onboarding-curtain"
-            className="absolute inset-0 z-30 bg-[#0d2136]"
+            className="absolute inset-x-0 top-0 bottom-[24%] z-30 bg-[#0d2136]"
             exit={{ y: '-100%' }}
             transition={{ duration: 0.8, ease: 'easeInOut' }}
           >
