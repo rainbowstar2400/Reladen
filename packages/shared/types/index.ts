@@ -238,6 +238,9 @@ export type TempRelationData = {
   // nicknames テーブル
   nicknameTo: string;   // 自分が相手を呼ぶ
   nicknameFrom: string; // 相手が自分を呼ぶ
+  // 好感度の手動編集フラグ（関係タイプ変更時の自動セットを制御）
+  scoreManuallyEditedTo?: boolean;
+  scoreManuallyEditedFrom?: boolean;
 };
 
 // === 5. （任意）リレーションを含む型定義 ===

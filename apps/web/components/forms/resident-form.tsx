@@ -27,6 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { NumberStepper } from '@/components/ui/number-stepper';
 import { relationTypeEnum } from '@/lib/drizzle/schema';
 import { useFormDirty } from '@/components/providers/FormDirtyProvider';
 import { useLeaveConfirm } from '@/lib/hooks/useLeaveConfirm';
@@ -359,8 +360,27 @@ export function ResidentForm({
     setTempRelations(prev => {
       // ターゲットIDの現在の設定 (なければデフォルト)
       const currentRelation = prev[targetId] ?? { ...DEFAULT_TEMP_RELATION };
-      // 特定のフィールドを更新
       const updatedRelation = { ...currentRelation, [field]: value };
+
+      // 関係タイプ変更時: 手動編集されていない好感度を推奨値に自動セット
+      if (field === 'relationType') {
+        const newType = value as RelationType;
+        const recommended = defaultScores[newType];
+        if (!currentRelation.scoreManuallyEditedTo) {
+          updatedRelation.feelingScoreTo = recommended;
+        }
+        if (!currentRelation.scoreManuallyEditedFrom) {
+          updatedRelation.feelingScoreFrom = recommended;
+        }
+      }
+
+      // 好感度を直接編集したら手動編集フラグを立てる
+      if (field === 'feelingScoreTo') {
+        updatedRelation.scoreManuallyEditedTo = true;
+      }
+      if (field === 'feelingScoreFrom') {
+        updatedRelation.scoreManuallyEditedFrom = true;
+      }
 
       return {
         ...prev,
@@ -424,11 +444,15 @@ export function ResidentForm({
         relationType: relation?.type ?? 'none',
         familySubType: (relation as any)?.family_sub_type ?? null,
 
-        feelingLabelTo: feelingTo?.label ?? 'none',
-        feelingScoreTo: feelingTo?.score ?? 50,
+        feelingLabelTo: feelingTo?.label ?? DEFAULT_TEMP_RELATION.feelingLabelTo,
+        feelingScoreTo: feelingTo?.score ?? DEFAULT_TEMP_RELATION.feelingScoreTo,
 
-        feelingLabelFrom: feelingFrom?.label ?? 'none',
-        feelingScoreFrom: feelingFrom?.score ?? 50,
+        feelingLabelFrom: feelingFrom?.label ?? DEFAULT_TEMP_RELATION.feelingLabelFrom,
+        feelingScoreFrom: feelingFrom?.score ?? DEFAULT_TEMP_RELATION.feelingScoreFrom,
+
+        // 既存データがある場合はスコアが手動設定済みとみなす
+        scoreManuallyEditedTo: Boolean(feelingTo),
+        scoreManuallyEditedFrom: Boolean(feelingFrom),
 
         nicknameTo: nicknameTo?.nickname ?? '',
         nicknameFrom: nicknameFrom?.nickname ?? '',
@@ -673,19 +697,14 @@ export function ResidentForm({
                   <FormItem className="space-y-2">
                     <FormLabel className="block">年齢</FormLabel>
                     <FormControl>
-                      <Select
-                        value={field.value != null ? String(field.value) : undefined}
-                        onValueChange={(v) => field.onChange(v === '' ? '' : Number(v))}
-                      >
-                        <SelectTrigger className="w-[100px]">
-                          <SelectValue placeholder="選択" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[240px]">
-                          {Array.from({ length: 120 }, (_, i) => i + 1).map((n) => (
-                            <SelectItem key={n} value={String(n)}>{n} 歳</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <NumberStepper
+                        value={field.value != null ? Number(field.value) : undefined}
+                        onChange={(v) => field.onChange(v)}
+                        min={1}
+                        max={120}
+                        suffix="歳"
+                        placeholder="20"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1150,23 +1169,17 @@ export function ResidentForm({
               name="sleepBedtime"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>就寝 <span className="text-red-500">*</span></FormLabel> {/* 変更済 */}
+                  <FormLabel>就寝 <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={field.value != null ? String(field.value) : undefined}
-                        onValueChange={(v) => field.onChange(v === '' ? '' : Number(v))}
-                      >
-                        <SelectTrigger className="w-[120px]">
-                          <SelectValue placeholder="選択" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[240px]">
-                          {Array.from({ length: 24 }, (_, i) => i).map((n) => (
-                            <SelectItem key={n} value={String(n)}>{n} 時頃</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <NumberStepper
+                      value={field.value != null ? Number(field.value) : undefined}
+                      onChange={(v) => field.onChange(v)}
+                      min={0}
+                      max={23}
+                      loop
+                      suffix="時"
+                      placeholder="23"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -1177,23 +1190,17 @@ export function ResidentForm({
               name="sleepWakeTime"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>起床 <span className="text-red-500">*</span></FormLabel> {/* 変更済 */}
+                  <FormLabel>起床 <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={field.value != null ? String(field.value) : undefined}
-                        onValueChange={(v) => field.onChange(v === '' ? '' : Number(v))}
-                      >
-                        <SelectTrigger className="w-[120px]">
-                          <SelectValue placeholder="選択" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[240px]">
-                          {Array.from({ length: 24 }, (_, i) => i).map((n) => (
-                            <SelectItem key={n} value={String(n)}>{n} 時頃</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <NumberStepper
+                      value={field.value != null ? Number(field.value) : undefined}
+                      onChange={(v) => field.onChange(v)}
+                      min={0}
+                      max={23}
+                      loop
+                      suffix="時"
+                      placeholder="7"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
