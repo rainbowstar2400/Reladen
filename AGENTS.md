@@ -19,11 +19,11 @@ Reladen プロジェクトで作業するエージェント向けのガイドで
 - 会話生成: 10段パイプラインで、話題選定（9ソース）→ 構造決定（主導者/スタンス/温度感/発話長）→ LLM生成 → バリデーション（最大1回再生成）→ 評価・永続化。
 - 世界シミュレーション: 睡眠・天候・共有スニペット・最近の出来事・知識伝播により、プレイヤー不在でも世界が進行する。
 - プレイヤー介入: 相談（consult）が中心。`trustToPlayer` は住人間好感度と別軸で、主に相談で変動する。`player_profiles` テーブルにプレイヤー名等を保持し、相談プロンプトで利用。
-- オンボーディング: 初回起動時に `(onboarding)` ルートグループで 選択（新規/ログイン）→同意→ログイン→名前入力 を行う。住人登録はダッシュボード内のチュートリアルモード（ホーム画面の案内パネル→管理室で2人登録）で完了。`useOnboardingGuard` フックで未ログイン・名前未設定ユーザーを `/onboarding` にリダイレクト。スケジューラー3種は `onboarding_completed === true` まで停止。
+- オンボーディング: `(onboarding)` ルートグループは廃止。ダッシュボード内の RoomStage 上にカーテンオーバーレイ（`#0d2136`）を表示し、選択→同意→Googleログイン（`window.open` ポップアップ）→名前入力→カーテン上昇の順で進む。ログイン前の状態は localStorage に仮保存し、ログイン後に `player_profiles` へ転記。住人登録はチュートリアルモード（ホーム画面のウェルカムメッセージ＋既存フッター「管理室→」→管理室で2人登録）で完了。スケジューラー3種は `onboarding_completed === true` まで停止。
 - スケジューリング: 現行はクライアント側15分間隔（開発用）だが、仕様上はサーバー側1時間間隔へ移行予定。
 
 ## ディレクトリと役割
-- `apps/web/app`: 画面と API（`/api/conversations/start`, `/api/sync/[table]` など）。`(onboarding)` ルートグループはオンボーディングフロー用。
+- `apps/web/app`: 画面と API（`/api/conversations/start`, `/api/sync/[table]` など）。オンボーディングはダッシュボード内のカーテンオーバーレイで実装（`(onboarding)` ルートグループは廃止済み）。
 - `apps/web/lib`: DB / 同期 / 会話オーケストレーション / 評価 / スケジューラーの実装。
 - `apps/web/lib/conversation`: 会話パイプライン（`run-conversation.ts`）。
 - `apps/web/lib/evaluation`: favor・印象・thread進行の評価ロジック。
