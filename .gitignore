@@ -9,3 +9,5 @@ node_modules
 Todo.md
 /.claude
 /documents/memo
+/review
+/.agents
