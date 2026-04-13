@@ -1,11 +1,5 @@
-import { Noto_Sans_JP } from 'next/font/google'
+import { fontJp } from '@/styles/fonts'
 import styles from './UiDemo.module.css'
-
-const notoSans = Noto_Sans_JP({
-  weight: ['300', '400', '500', '600'],
-  subsets: ['latin'],
-  display: 'swap',
-})
 
 type UiDemoPageProps = {
   searchParams?: { glass?: string }
@@ -15,7 +9,7 @@ export default function UiDemoPage({ searchParams }: UiDemoPageProps) {
   const isStrongGlass = searchParams?.glass === 'strong'
 
   return (
-    <div className={`${styles.page} ${notoSans.className} ${isStrongGlass ? styles.glassStrong : ''}`}>
+    <div className={`${styles.page} ${fontJp.className} ${isStrongGlass ? styles.glassStrong : ''}`}>
       <div className={styles.sky} aria-hidden="true" />
       <div className={styles.desk} aria-hidden="true" />
       <div className={styles.deskEdgeShadow} aria-hidden="true" />

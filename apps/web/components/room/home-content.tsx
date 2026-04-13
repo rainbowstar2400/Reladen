@@ -1,6 +1,5 @@
 'use client';
 
-import { Noto_Sans_JP } from 'next/font/google';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -29,12 +28,7 @@ import {
 } from '@/lib/peek/peek-cache';
 import { usePlayerProfile } from '@/lib/data/player-profile';
 import { useAuth } from '@/lib/auth/use-auth';
-
-const notoSans = Noto_Sans_JP({
-  weight: ['300', '400', '500', '600'],
-  subsets: ['latin'],
-  display: 'swap',
-});
+import { fontJp } from '@/styles/fonts';
 
 const WEATHER_LABELS: Record<WeatherKind, string> = {
   sunny: '晴れ',
@@ -682,7 +676,7 @@ export function HomeContent() {
 
   return (
     <div
-      className={`relative z-10 flex min-h-screen flex-col gap-[clamp(24px,2.5vw,56px)] px-[clamp(32px,7.5vw,144px)] py-[clamp(16px,1.25vw,32px)] pb-[clamp(18px,1.5vw,36px)] ${notoSans.className}`}
+      className={`relative z-10 flex min-h-screen flex-col gap-[clamp(24px,2.5vw,56px)] px-[clamp(32px,7.5vw,144px)] py-[clamp(16px,1.25vw,32px)] pb-[clamp(18px,1.5vw,36px)] ${fontJp.className}`}
     >
       <header className="flex justify-center">
         <GlassPanel
