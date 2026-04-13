@@ -4,6 +4,17 @@ import { act, cleanup, render, renderHook, waitFor } from '@testing-library/reac
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const TABLE_COUNT = 9;
+const TABLE_CURSOR_ID_BY_TABLE: Record<string, string> = {
+  presets: '10000000-0000-4000-8000-000000000001',
+  residents: '10000000-0000-4000-8000-000000000002',
+  relations: '10000000-0000-4000-8000-000000000003',
+  feelings: '10000000-0000-4000-8000-000000000004',
+  nicknames: '10000000-0000-4000-8000-000000000005',
+  events: '10000000-0000-4000-8000-000000000006',
+  consult_answers: '10000000-0000-4000-8000-000000000007',
+  world_states: '10000000-0000-4000-8000-000000000008',
+  player_profiles: '10000000-0000-4000-8000-000000000009',
+};
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -84,6 +95,10 @@ function makeSyncResponse(input: RequestInfo | URL): Response {
       table,
       changes: [],
       pushResult: { consumedIndexes: [], rejected: [] },
+      maxCursor: {
+        updated_at: '2026-03-20T00:00:00.000Z',
+        id: TABLE_CURSOR_ID_BY_TABLE[table] ?? '10000000-0000-4000-8000-000000000000',
+      },
     }),
     {
       status: 200,
@@ -232,6 +247,7 @@ describe('useSync', () => {
     expect(fetchMock).toHaveBeenCalledTimes(TABLE_COUNT);
     const firstBody = requestBodyAt(0);
     expect(firstBody).not.toHaveProperty('since');
+    expect(firstBody).not.toHaveProperty('sinceCursor');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4100);
@@ -247,7 +263,11 @@ describe('useSync', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(TABLE_COUNT * 2);
     const secondBody = requestBodyAt(TABLE_COUNT);
-    expect(secondBody.since).toEqual(expect.any(String));
+    expect(secondBody).not.toHaveProperty('since');
+    expect(secondBody.sinceCursor).toEqual({
+      updated_at: '2026-03-20T00:00:00.000Z',
+      id: TABLE_CURSOR_ID_BY_TABLE.player_profiles,
+    });
   });
 
   it('lastSyncedAt=null の初回 syncAll は since 未指定で送信される', async () => {
@@ -260,6 +280,7 @@ describe('useSync', () => {
     expect(fetchMock).toHaveBeenCalled();
     const firstBody = requestBodyAt(0);
     expect(firstBody).not.toHaveProperty('since');
+    expect(firstBody).not.toHaveProperty('sinceCursor');
   });
 
   it('offline -> online -> syncing -> online/error の phase 遷移が正しい', async () => {
@@ -305,10 +326,56 @@ describe('useSync', () => {
     fetchMock.mockRejectedValueOnce(new Error('network down'));
     await act(async () => {
       const syncResult = await result.current.sync();
-      expect(syncResult).toEqual({ ok: false, reason: 'error', message: 'network down' });
+      expect(syncResult).toEqual({ ok: true });
     });
-    expect(result.current.phase).toBe('error');
+    expect(result.current.phase).toBe('online');
 
+    errorSpy.mockRestore();
+  });
+
+  it('1テーブルのみ失敗しても他テーブル同期が成功すれば online を維持する', async () => {
+    const failedTable = 'presets';
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const table = tableFromInput(input);
+      if (table === failedTable) {
+        return Promise.reject(new Error('partial failure'));
+      }
+      return Promise.resolve(makeSyncResponse(input));
+    });
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSync(), { wrapper });
+
+    await act(async () => {
+      const syncResult = await result.current.sync();
+      expect(syncResult).toEqual({ ok: true });
+    });
+
+    expect(result.current.phase).toBe('online');
+    expect(result.current.tableCursors.presets).toBeNull();
+    expect(result.current.tableCursors.player_profiles).toEqual({
+      updated_at: '2026-03-20T00:00:00.000Z',
+      id: TABLE_CURSOR_ID_BY_TABLE.player_profiles,
+    });
+    errorSpy.mockRestore();
+  });
+
+  it('全テーブル失敗時は error になる', async () => {
+    fetchMock.mockRejectedValue(new Error('all tables failed'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useSync(), { wrapper });
+
+    await act(async () => {
+      const syncResult = await result.current.sync();
+      expect(syncResult).toEqual({
+        ok: false,
+        reason: 'error',
+        message: 'All tables failed to sync',
+      });
+    });
+
+    expect(result.current.phase).toBe('error');
     errorSpy.mockRestore();
   });
 });

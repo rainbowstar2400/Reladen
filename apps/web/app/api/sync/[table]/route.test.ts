@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   select: vi.fn(),
   in: vi.fn(),
   gte: vi.fn(),
+  or: vi.fn(),
+  order: vi.fn(),
 }));
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -39,6 +41,24 @@ function makeGenericTableFromMock() {
   };
 }
 
+function makeCursorTableFromMock() {
+  return {
+    upsert: mocks.upsert,
+    insert: mocks.insert,
+    select: (columns?: string) => {
+      if (columns === 'id,updated_at') return { in: mocks.in };
+      return {
+        or: (_query: string) => ({
+          order: (_column: string, _opts: unknown) => ({
+            order: (_column2: string, _opts2: unknown) => mocks.order(),
+          }),
+        }),
+        gte: mocks.gte,
+      };
+    },
+  };
+}
+
 describe('POST /api/sync/[table]', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -56,6 +76,7 @@ describe('POST /api/sync/[table]', () => {
     });
     mocks.in.mockResolvedValue({ data: [], error: null });
     mocks.select.mockResolvedValue({ data: [], error: null });
+    mocks.order.mockResolvedValue({ data: [], error: null });
 
     if (!POST) {
       ({ POST } = await import('@/app/api/sync/[table]/route'));
@@ -115,6 +136,44 @@ describe('POST /api/sync/[table]', () => {
     expect(mocks.gte).toHaveBeenCalledWith('updated_at', since);
     expect(data.changes).toHaveLength(1);
     expect(data.changes[0].data.id).toBe('60606060-6060-4606-8606-606060606060');
+  });
+
+  it('sinceCursor 指定時はキーセット条件で差分を取得し maxCursor を返す', async () => {
+    const cloudRows = [
+      {
+        id: '70707070-7070-4707-8707-707070707070',
+        category: 'speech',
+        label: '差分1',
+        updated_at: '2026-03-22T00:00:00.000Z',
+        deleted: false,
+      },
+      {
+        id: '80808080-8080-4808-8808-808080808080',
+        category: 'speech',
+        label: '差分2',
+        updated_at: '2026-03-22T00:00:00.000Z',
+        deleted: false,
+      },
+    ];
+    mocks.order.mockResolvedValue({ data: cloudRows, error: null });
+    mocks.from.mockImplementation((_table: string) => makeCursorTableFromMock());
+
+    const req = makeRequest('presets', {
+      changes: [],
+      sinceCursor: {
+        updated_at: '2026-03-21T00:00:00.000Z',
+        id: '60606060-6060-4606-8606-606060606060',
+      },
+    });
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.changes).toHaveLength(2);
+    expect(data.maxCursor).toEqual({
+      updated_at: '2026-03-22T00:00:00.000Z',
+      id: '80808080-8080-4808-8808-808080808080',
+    });
   });
 
   it('consult_answers を初回 insert できる（owner_id を注入する）', async () => {

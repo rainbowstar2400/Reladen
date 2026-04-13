@@ -34,6 +34,10 @@ export const syncChangeSchema = z.object({
 export const syncRequestSchema = z.object({
   table: z.enum(allowedTables),
   since: isoDate.optional(),
+  sinceCursor: z.object({
+    updated_at: z.string().datetime(),
+    id: z.string().uuid(),
+  }).nullable().optional(),
   changes: z.array(syncChangeSchema).default([]),
 });
 
@@ -54,5 +58,9 @@ export const syncResponseSchema = z.object({
   table: z.enum(allowedTables),
   changes: z.array(syncChangeSchema),
   pushResult: syncPushResultSchema.optional(),
+  maxCursor: z.object({
+    updated_at: z.string().datetime(),
+    id: z.string().uuid(),
+  }).nullable().optional(),
 });
 export type TSyncResponse = z.infer<typeof syncResponseSchema>;

@@ -56,6 +56,33 @@ type PushRejectedRow = {
   id?: string;
 };
 
+type SyncCursor = {
+  updated_at: string;
+  id: string;
+};
+
+function computeMaxCursor(rows: any[]): SyncCursor | null {
+  if (!rows.length) return null;
+  let max = rows[0] as { updated_at?: string; id?: string };
+
+  for (const row of rows) {
+    const rowUpdatedAt = String(row?.updated_at ?? '');
+    const maxUpdatedAt = String(max?.updated_at ?? '');
+    if (rowUpdatedAt > maxUpdatedAt) {
+      max = row;
+      continue;
+    }
+    if (rowUpdatedAt === maxUpdatedAt && String(row?.id ?? '') > String(max?.id ?? '')) {
+      max = row;
+    }
+  }
+
+  return {
+    updated_at: String(max.updated_at),
+    id: String(max.id),
+  };
+}
+
 function resolveIncomingUpdatedAt(incomingData: Record<string, any>, fallbackUpdatedAt?: string): string | null {
   const candidate = pickFirst(
     incomingData.updated_at,
@@ -420,10 +447,20 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     }
 
     // --- pull (select) ---
-    const since = (parsed.data.since && new Date(parsed.data.since).toISOString()) || null;
+    const sinceCursor = parsed.data.sinceCursor ?? null;
+    const sinceLegacy = (parsed.data.since && new Date(parsed.data.since).toISOString()) || null;
     let cloud: any[] = [];
-    if (since) {
-      const { data, error } = await sb.from(table).select('*').gte('updated_at', since);
+    if (sinceCursor) {
+      const { data, error } = await sb
+        .from(table)
+        .select('*')
+        .or(`updated_at.gt.${sinceCursor.updated_at},and(updated_at.eq.${sinceCursor.updated_at},id.gt.${sinceCursor.id})`)
+        .order('updated_at', { ascending: true })
+        .order('id', { ascending: true });
+      if (error) throw asHttpError('select failed', error);
+      cloud = data ?? [];
+    } else if (sinceLegacy) {
+      const { data, error } = await sb.from(table).select('*').gte('updated_at', sinceLegacy);
       if (error) throw asHttpError('select failed', error);
       cloud = data ?? [];
     } else {
@@ -431,6 +468,7 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       if (error) throw asHttpError('select failed', error);
       cloud = data ?? [];
     }
+    const maxCursor = computeMaxCursor(cloud);
 
     const pushResult = {
       consumedIndexes: [...new Set(consumedIndexes)].sort((a, b) => a - b),
@@ -447,6 +485,7 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
         deleted: !!row.deleted,
       })),
       pushResult,
+      maxCursor,
     });
 
     const durationMs = Date.now() - started;

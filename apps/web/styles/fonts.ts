@@ -11,4 +11,5 @@ export const fontJp = Noto_Sans_JP({
 export const fontRounded = localFont({
   src: [{ path: '../public/fonts/KiwiMaru-Regular.woff2', weight: '400', style: 'normal' }],
   display: 'swap',
+  fallback: ['var(--font-jp)', 'Hiragino Kaku Gothic ProN', 'Meiryo', 'sans-serif'],
 });

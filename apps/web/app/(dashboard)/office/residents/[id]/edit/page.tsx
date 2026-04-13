@@ -1,6 +1,5 @@
 'use client';
 
-import { ResidentForm } from '@/components/forms/resident-form';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { SafeLink } from '@/components/layout/SafeLink';
 import { Button } from '@/components/ui/button';
@@ -15,6 +14,14 @@ import type {
   Feeling,
   Nickname,
 } from '@/types';
+import dynamic from 'next/dynamic';
+
+const ResidentForm = dynamic(
+  () => import('@/components/forms/resident-form').then((m) => m.ResidentForm),
+  {
+    loading: () => <div className="h-96 animate-pulse rounded-md bg-muted/40" />,
+  },
+);
 
 export default function EditResidentPage({ params }: { params: { id: string } }) {
   const residentId = params.id;

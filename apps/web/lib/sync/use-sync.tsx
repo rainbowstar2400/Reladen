@@ -22,6 +22,21 @@ const TABLES: SyncPayload['table'][] = [
   'player_profiles',
 ];
 
+const TABLE_GROUPS: SyncPayload['table'][][] = [
+  ['player_profiles', 'presets', 'world_states'],
+  ['residents', 'relations', 'feelings'],
+  ['nicknames', 'events', 'consult_answers'],
+];
+
+type SyncCursor = { updated_at: string; id: string } | null;
+
+function createInitialTableCursors(): Record<SyncPayload['table'], SyncCursor> {
+  return Object.fromEntries(TABLES.map((table) => [table, null])) as Record<
+    SyncPayload['table'],
+    SyncCursor
+  >;
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (id?: string | null) => !!id && UUID_REGEX.test(id);
 
@@ -35,7 +50,10 @@ async function getAccessToken(): Promise<string | null> {
 }
 
 // --- API 呼び出し ---
-async function fetchDiff(table: SyncPayload['table'], body: Omit<SyncPayload, 'table'>) {
+async function fetchDiff(
+  table: SyncPayload['table'],
+  body: Pick<SyncPayload, 'changes' | 'since' | 'sinceCursor'>,
+) {
   const token = await getAccessToken();
 
   if (!token) {
@@ -67,8 +85,14 @@ type SyncResult =
 
 function useSyncInternal() {
   const [phase, setPhase] = useState<SyncPhase>('offline');
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [tableCursors, setTableCursors] = useState<Record<SyncPayload['table'], SyncCursor>>(
+    () => createInitialTableCursors(),
+  );
   const [error, setError] = useState<string | null>(null);
+  const tableCursorsRef = useRef(tableCursors);
+  useEffect(() => {
+    tableCursorsRef.current = tableCursors;
+  }, [tableCursors]);
 
   // 設定からsyncEnabledを取得（refで保持してcallback内から参照）
   const { s: settings } = useSettings();
@@ -112,20 +136,28 @@ function useSyncInternal() {
     setError(null);
 
     try {
-      const pendingSince = lastSyncedAt;
-
-      for (const table of TABLES) {
-        const localChanges = await since(table, pendingSince);
+      const syncOneTable = async (
+        table: SyncPayload['table'],
+        cursor: SyncCursor,
+      ): Promise<{ maxCursor: SyncCursor }> => {
+        const localChanges = await since(table, cursor?.updated_at ?? null);
         const isWorldStateTable = table === 'world_states';
 
         // outbox の pending を取得し、localChanges と LWW でマージ
         const pending = await listPendingByTable(table);
-        const mergedMap = new Map<string, { data: any; updated_at: string; deleted?: boolean; __key?: string }>();
+        const mergedMap = new Map<
+          string,
+          { data: any; updated_at: string; deleted?: boolean; __key?: string }
+        >();
 
         for (const it of localChanges) {
           const id = (it as any).id;
           if (isWorldStateTable && !isUuid(id)) continue;
-          mergedMap.set(id, { data: it, updated_at: (it as any).updated_at, deleted: (it as any).deleted });
+          mergedMap.set(id, {
+            data: it,
+            updated_at: (it as any).updated_at,
+            deleted: (it as any).deleted,
+          });
         }
         for (const ob of pending) {
           if (isWorldStateTable && !isUuid(ob.id)) {
@@ -134,7 +166,12 @@ function useSyncInternal() {
           }
           const cur = mergedMap.get(ob.id);
           if (!cur || new Date(ob.updated_at).getTime() >= new Date(cur.updated_at).getTime()) {
-            mergedMap.set(ob.id, { data: ob.data, updated_at: ob.updated_at, deleted: ob.deleted, __key: makeOutboxKey(table, ob.id) });
+            mergedMap.set(ob.id, {
+              data: ob.data,
+              updated_at: ob.updated_at,
+              deleted: ob.deleted,
+              __key: makeOutboxKey(table, ob.id),
+            });
           }
         }
         const merged = Array.from(mergedMap.values());
@@ -145,11 +182,11 @@ function useSyncInternal() {
             updated_at: item.updated_at,
             deleted: item.deleted,
           })),
-          since: pendingSince ?? undefined,
+          sinceCursor: cursor ?? undefined,
         });
 
         const cloudChanges = payload.changes.map((c) =>
-          normalizePulledRow(table, c.data as Record<string, any>)
+          normalizePulledRow(table, c.data as Record<string, any>),
         );
         if (cloudChanges.length > 0) {
           await bulkUpsert(table, cloudChanges as any);
@@ -160,10 +197,39 @@ function useSyncInternal() {
           markSentFn: markSent,
           markFailedFn: markFailed,
         });
+
+        return { maxCursor: payload.maxCursor ?? null };
+      };
+
+      const currentFailures = new Set<SyncPayload['table']>();
+      const newCursors: Record<SyncPayload['table'], SyncCursor> = {
+        ...tableCursorsRef.current,
+      };
+
+      for (const group of TABLE_GROUPS) {
+        const results = await Promise.allSettled(
+          group.map((table) => syncOneTable(table, tableCursorsRef.current[table])),
+        );
+
+        results.forEach((result, index) => {
+          const table = group[index];
+          if (result.status === 'rejected') {
+            currentFailures.add(table);
+            console.error(`Sync failed for ${table}:`, result.reason);
+            return;
+          }
+          if (result.value.maxCursor) {
+            newCursors[table] = result.value.maxCursor;
+          }
+        });
       }
 
-      // サーバー時刻を返していない想定なので、クライアント時刻で更新
-      setLastSyncedAt(new Date().toISOString());
+      setTableCursors(newCursors);
+
+      if (currentFailures.size === TABLES.length) {
+        throw new Error('All tables failed to sync');
+      }
+
       setPhase('online');
       // 同期成功時にリトライカウントをリセット
       retryCountRef.current = 0; return { ok: true };
@@ -223,7 +289,7 @@ function useSyncInternal() {
       syncingRef.current = false;
     }
 
-  }, [lastSyncedAt]);
+  }, []);
 
   const syncAllRef = useRef(syncAll);
   syncAllRef.current = syncAll;
@@ -302,15 +368,26 @@ function useSyncInternal() {
     return () => sub?.subscription?.unsubscribe();
   }, [requestDebouncedSync]);
 
+  const lastSyncedAt = useMemo(() => {
+    const cursors = Object.values(tableCursors).filter(
+      (cursor): cursor is NonNullable<SyncCursor> => cursor !== null,
+    );
+    if (cursors.length === 0) return null;
+    return cursors.reduce((min, cursor) =>
+      cursor.updated_at < min ? cursor.updated_at : min,
+    cursors[0].updated_at);
+  }, [tableCursors]);
+
   return useMemo(
     () => ({
       phase,
       error,
       lastSyncedAt,
+      tableCursors,
       sync: syncAll,
       isOnline: phase === 'online',
     }),
-    [phase, error, lastSyncedAt, syncAll]
+    [phase, error, lastSyncedAt, tableCursors, syncAll]
   );
 }
 
