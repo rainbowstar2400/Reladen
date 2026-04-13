@@ -48,6 +48,21 @@ describe('POST /api/weather/comment', () => {
     expect(mocks.generateWeatherComment).not.toHaveBeenCalled();
   });
 
+  it('不正な payload は 400 を返す', async () => {
+    const res = await POST(
+      makeRequest({
+        resident: { id: 'resident-1', name: 'A' },
+        weatherKind: 'sunny',
+        now: 'invalid-date',
+      }),
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data).toEqual({ error: 'invalid_payload' });
+    expect(mocks.generateWeatherComment).not.toHaveBeenCalled();
+  });
+
   it('認証済みならコメントを返す', async () => {
     mocks.generateWeatherComment.mockResolvedValue('今日は気持ちいい天気だね。');
 

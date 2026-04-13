@@ -47,6 +47,20 @@ describe('POST /api/presets/extract-speech-profile', () => {
     expect(mocks.extractSpeechProfile).not.toHaveBeenCalled();
   });
 
+  it('不正な payload は 400 を返す', async () => {
+    const res = await POST(
+      makeRequest({
+        label: '',
+        description: '',
+      }),
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('invalid_payload');
+    expect(mocks.extractSpeechProfile).not.toHaveBeenCalled();
+  });
+
   it('認証済みなら抽出結果を返す', async () => {
     mocks.extractSpeechProfile.mockResolvedValue({
       summary: '落ち着いた口調',

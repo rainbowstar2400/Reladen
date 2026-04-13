@@ -24,6 +24,18 @@ function makeRequest(body: unknown, origin?: string) {
   });
 }
 
+function makeRawRequest(body: string, origin?: string) {
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+  });
+  if (origin) headers.set('Origin', origin);
+  return new Request('http://localhost/api/auth/callback', {
+    method: 'POST',
+    headers,
+    body,
+  });
+}
+
 describe('POST /api/auth/callback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -53,6 +65,24 @@ describe('POST /api/auth/callback', () => {
 
     expect(res.status).toBe(403);
     expect(data).toEqual({ error: 'forbidden' });
+    expect(mocks.sbServer).not.toHaveBeenCalled();
+  });
+
+  it('不正な body の場合は 400 を返す', async () => {
+    const res = await POST(makeRawRequest('{', 'http://localhost:3000'));
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data).toEqual({ ok: false, reason: 'invalid body' });
+    expect(mocks.sbServer).not.toHaveBeenCalled();
+  });
+
+  it('未対応 event の場合は 400 を返す', async () => {
+    const res = await POST(makeRequest({ event: 'USER_UPDATED', session: null }, 'http://localhost:3000'));
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data).toEqual({ ok: false, reason: 'unsupported event' });
     expect(mocks.sbServer).not.toHaveBeenCalled();
   });
 
