@@ -109,6 +109,9 @@ pnpm tauri:dev        # デスクトップアプリ開発
 - **オフラインファースト**: UI ロジックは IndexedDB を主ソースとして扱い、Supabase は同期先
 - **LLM コスト**: 補助タスクは gpt-5-mini、主要生成のみ GPT-5.1 を使う
 - **RLS**: Supabase の全テーブルに `owner_id = auth.uid()` ポリシーが適用される。バイパスしない
+  - 定義 SQL: `apps/web/drizzle/0019_rebuild_owner_rls_policies.sql`
+  - 現在は手動で Supabase SQL Editor から適用する運用。変更時は SQL を更新 → PR → マージ後に手動実行
+  - 将来的に Supabase CLI (`supabase db push`) による自動適用へ移行予定
 - **マイグレーション**: スキーマ変更は `drizzle-kit generate` → `drizzle-kit push` の順。直接 SQL 編集しない
 - **テスト**: ビジネスロジックの変更には Vitest テストを書く。モックより実 DB を優先
 
