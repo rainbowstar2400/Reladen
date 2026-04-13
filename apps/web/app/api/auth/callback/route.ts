@@ -12,14 +12,9 @@ const SYNC_EVENTS: AuthChangeEvent[] = ['SIGNED_IN', 'TOKEN_REFRESHED', 'SIGNED_
 
 export async function POST(request: Request) {
   const origin = request.headers.get('origin');
-  const allowedOrigin = process.env.NEXT_PUBLIC_APP_URL;
+  const selfOrigin = new URL(request.url).origin;
 
-  if (!allowedOrigin) {
-    console.error('[auth/callback] NEXT_PUBLIC_APP_URL is not configured');
-    return NextResponse.json({ error: 'server_misconfigured' }, { status: 500 });
-  }
-
-  if (!origin || origin !== allowedOrigin) {
+  if (!origin || origin !== selfOrigin) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

@@ -12,24 +12,24 @@ vi.mock('@/lib/supabase/server', () => ({
 
 import { POST } from '@/app/api/auth/callback/route';
 
-function makeRequest(body: unknown, origin?: string) {
+function makeRequest(body: unknown, origin?: string, requestUrl = 'http://localhost/api/auth/callback') {
   const headers = new Headers({
     'Content-Type': 'application/json',
   });
   if (origin) headers.set('Origin', origin);
-  return new Request('http://localhost/api/auth/callback', {
+  return new Request(requestUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
   });
 }
 
-function makeRawRequest(body: string, origin?: string) {
+function makeRawRequest(body: string, origin?: string, requestUrl = 'http://localhost/api/auth/callback') {
   const headers = new Headers({
     'Content-Type': 'application/json',
   });
   if (origin) headers.set('Origin', origin);
-  return new Request('http://localhost/api/auth/callback', {
+  return new Request(requestUrl, {
     method: 'POST',
     headers,
     body,
@@ -39,7 +39,6 @@ function makeRawRequest(body: string, origin?: string) {
 describe('POST /api/auth/callback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
     mocks.sbServer.mockReturnValue({
       auth: {
         setSession: mocks.setSession,
@@ -69,7 +68,7 @@ describe('POST /api/auth/callback', () => {
   });
 
   it('不正な body の場合は 400 を返す', async () => {
-    const res = await POST(makeRawRequest('{', 'http://localhost:3000'));
+    const res = await POST(makeRawRequest('{', 'http://localhost'));
     const data = await res.json();
 
     expect(res.status).toBe(400);
@@ -78,22 +77,11 @@ describe('POST /api/auth/callback', () => {
   });
 
   it('未対応 event の場合は 400 を返す', async () => {
-    const res = await POST(makeRequest({ event: 'USER_UPDATED', session: null }, 'http://localhost:3000'));
+    const res = await POST(makeRequest({ event: 'USER_UPDATED', session: null }, 'http://localhost'));
     const data = await res.json();
 
     expect(res.status).toBe(400);
     expect(data).toEqual({ ok: false, reason: 'unsupported event' });
-    expect(mocks.sbServer).not.toHaveBeenCalled();
-  });
-
-  it('NEXT_PUBLIC_APP_URL 未設定時は 500 を返す', async () => {
-    delete process.env.NEXT_PUBLIC_APP_URL;
-
-    const res = await POST(makeRequest({ event: 'SIGNED_IN', session: null }, 'http://localhost:3000'));
-    const data = await res.json();
-
-    expect(res.status).toBe(500);
-    expect(data).toEqual({ error: 'server_misconfigured' });
     expect(mocks.sbServer).not.toHaveBeenCalled();
   });
 
@@ -108,7 +96,10 @@ describe('POST /api/auth/callback', () => {
       },
     } as any;
 
-    const res = await POST(makeRequest({ event: 'SIGNED_IN', session }, 'http://localhost:3000'));
+    const previewUrl = 'https://reladen-preview-abc123.vercel.app/api/auth/callback';
+    const res = await POST(
+      makeRequest({ event: 'SIGNED_IN', session }, 'https://reladen-preview-abc123.vercel.app', previewUrl),
+    );
     const data = await res.json();
 
     expect(res.status).toBe(200);
@@ -118,7 +109,7 @@ describe('POST /api/auth/callback', () => {
   });
 
   it('Origin 一致 + SIGNED_OUT で signOut を実行する', async () => {
-    const res = await POST(makeRequest({ event: 'SIGNED_OUT', session: null }, 'http://localhost:3000'));
+    const res = await POST(makeRequest({ event: 'SIGNED_OUT', session: null }, 'http://localhost'));
     const data = await res.json();
 
     expect(res.status).toBe(200);
