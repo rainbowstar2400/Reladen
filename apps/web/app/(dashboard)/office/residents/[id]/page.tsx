@@ -85,11 +85,14 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
     return new Map(allResidents.map(r => [r.id, r.name ?? '（名前なし）']));
   }, [allResidents]);
 
-  const relatedRelations =
+  const relatedRelations = useMemo(() => (
     relations?.filter((relation) => (
       [relation.a_id, relation.b_id].includes(residentId) && relation.type !== 'none'
-    )) ?? [];
-  const relatedFeelings = feelings?.filter((feeling) => feeling.from_id === residentId || feeling.to_id === residentId) ?? [];
+    )) ?? []
+  ), [relations, residentId]);
+  const relatedFeelings = useMemo(() => (
+    feelings?.filter((feeling) => feeling.from_id === residentId || feeling.to_id === residentId) ?? []
+  ), [feelings, residentId]);
 
   const feelingMap = useMemo(() => {
     if (!relatedFeelings) return new Map<string, Feeling['label']>();
@@ -102,27 +105,6 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
     }
     return map;
   }, [relatedFeelings, residentId]);
-
-  // allResidents と isLoadingPresets もローディング条件に追加
-  if (isLoading || !allResidents || isLoadingPresets) {
-    return (
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> 読み込み中…
-      </div>
-    );
-  }
-
-  if (!resident) {
-    return <p className="text-sm text-muted-foreground">住人が見つかりません。</p>;
-  }
-
-  // --- (ここから) プリセットIDからラベルを取得 ---
-  // allPresets から find する
-  const speechPreset = allPresets.find(p => p.id === resident.speechPreset);
-  const occupationPreset = allPresets.find(p => p.id === resident.occupation);
-  const firstPersonPreset = allPresets.find(p => p.id === resident.firstPerson);
-
-  // G-1: 最近の変化データを構築
   const nameMapObj = useMemo(() => {
     const obj: Record<string, string> = {};
     residentNameMap.forEach((v, k) => { obj[k] = v; });
@@ -196,6 +178,25 @@ export default function ResidentDetailPage({ params }: { params: { id: string } 
     return entries
       .sort((a, b) => b.timestamp - a.timestamp);
   }, [residentEvents, nameMapObj]);
+
+  // allResidents と isLoadingPresets もローディング条件に追加
+  if (isLoading || !allResidents || isLoadingPresets) {
+    return (
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> 読み込み中…
+      </div>
+    );
+  }
+
+  if (!resident) {
+    return <p className="text-sm text-muted-foreground">住人が見つかりません。</p>;
+  }
+
+  // --- (ここから) プリセットIDからラベルを取得 ---
+  // allPresets から find する
+  const speechPreset = allPresets.find(p => p.id === resident.speechPreset);
+  const occupationPreset = allPresets.find(p => p.id === resident.occupation);
+  const firstPersonPreset = allPresets.find(p => p.id === resident.firstPerson);
 
   const sleepProfile = (resident.sleepProfile ?? {}) as Partial<SleepProfile>;
   // traits にデフォルト値をマージ (DBに traits が null の場合に対応)

@@ -8,6 +8,7 @@
     "lint": "pnpm --filter web lint",
     "build": "pnpm --filter web build",
     "test": "pnpm --filter web test",
+    "typecheck": "pnpm --filter web typecheck",
     "db:push": "pnpm --filter web db:push",
     "seed": "pnpm --filter web seed",
     "tauri:dev": "pnpm --filter desktop tauri dev",

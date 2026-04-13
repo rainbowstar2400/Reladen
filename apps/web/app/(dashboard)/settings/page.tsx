@@ -17,6 +17,7 @@ const ROLLOVERS = ['00:00', '04:00', '05:00', '06:00', '07:00', '08:00'] as cons
 
 export default function SettingsPage() {
   const { s, setS } = useSettings()
+  const { user } = useAuth();
   const { setTheme } = useTheme()
   const cardStyle = { backgroundColor: 'rgba(255,255,255,0.34)', borderColor: 'rgba(255,255,255,0.65)' }
   const cardButtonStyle = {
@@ -79,7 +80,7 @@ export default function SettingsPage() {
             <Button
               variant="destructive"
               // ログイン中でない、またはSupabase未設定の場合はボタンを無効化
-              disabled={!supabaseClient || !useAuth().user}
+              disabled={!supabaseClient || !user}
               onClick={async () => {
                 // ローカルデータも削除されることを明示
                 if (!confirm('【最終確認】アカウントと全てのデータが削除されます。元に戻せません。本当に実行しますか？')) return;

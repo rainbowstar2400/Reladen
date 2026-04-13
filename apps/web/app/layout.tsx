@@ -1,14 +1,8 @@
 import '@/app/globals.css'
 import type { Metadata } from 'next'
-import { ReactNode } from 'react'
-import { ThemeProvider } from '@/components/theme-provider'
-import { QueryClientProvider } from '@/components/query-client-provider'
-import { SyncProvider } from '@/lib/sync/use-sync'
 import { fontSans } from '@/styles/fonts'
 import clsx from 'clsx'
 import * as Sentry from '@sentry/nextjs'
-import { SonnerToaster } from '@/components/sonner-toaster'
-import ConversationSchedulerProvider from "@/components/providers/ConversationSchedulerProvider";
 import { Providers } from './providers'
 
 export const runtime = 'nodejs';

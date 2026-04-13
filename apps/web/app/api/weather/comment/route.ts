@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { generateWeatherComment } from '@/lib/weather/generate-weather-comment';
 import type { Resident } from '@/types';
 import type { WeatherKind } from '@repo/shared/types';
+import { getUserOrThrow } from '@/lib/supabase/get-user';
 
 const payloadSchema = z.object({
   resident: z.any(), // 軽いバリデーション。詳細は generateWeatherComment に委譲
@@ -14,6 +15,8 @@ const payloadSchema = z.object({
 
 export async function POST(req: Request) {
   try {
+    await getUserOrThrow();
+
     const body = await req.json();
     const parsed = payloadSchema.safeParse(body);
     if (!parsed.success) {
@@ -31,6 +34,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ text });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'No authenticated user found' || message.startsWith('Failed to get user:')) {
+      return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+    }
     console.error('[weather/comment] failed', error);
     return NextResponse.json({ error: 'internal_error' }, { status: 500 });
   }

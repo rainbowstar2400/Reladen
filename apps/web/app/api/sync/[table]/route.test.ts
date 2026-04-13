@@ -55,17 +55,73 @@ describe('POST /api/sync/[table]', () => {
       from: mocks.from,
     });
     mocks.in.mockResolvedValue({ data: [], error: null });
+    mocks.select.mockResolvedValue({ data: [], error: null });
 
     if (!POST) {
       ({ POST } = await import('@/app/api/sync/[table]/route'));
     }
   });
 
+  it('since 未指定の初回同期では全件取得を返す', async () => {
+    const cloudRows = [
+      {
+        id: '50505050-5050-4505-8505-505050505050',
+        category: 'speech',
+        label: '初回同期',
+        updated_at: '2026-03-20T00:00:00.000Z',
+        deleted: false,
+      },
+    ];
+    mocks.select.mockResolvedValue({ data: cloudRows, error: null });
+    mocks.from.mockImplementation((_table: string) => ({
+      upsert: mocks.upsert,
+      insert: mocks.insert,
+      select: (columns?: string) => {
+        if (columns === 'id,updated_at') return { in: mocks.in };
+        if (columns === '*') return mocks.select(columns);
+        return { gte: mocks.gte };
+      },
+    }));
+
+    const req = makeRequest('presets', { changes: [] });
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(mocks.select).toHaveBeenCalledWith('*');
+    expect(data.changes).toHaveLength(1);
+    expect(data.changes[0].data.id).toBe('50505050-5050-4505-8505-505050505050');
+  });
+
+  it('since 指定時は updated_at gte の差分のみ取得する', async () => {
+    const since = '2026-03-21T00:00:00.000Z';
+    const cloudRows = [
+      {
+        id: '60606060-6060-4606-8606-606060606060',
+        category: 'speech',
+        label: '差分同期',
+        updated_at: '2026-03-21T00:00:00.000Z',
+        deleted: false,
+      },
+    ];
+    mocks.gte.mockResolvedValue({ data: cloudRows, error: null });
+    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+
+    const req = makeRequest('presets', { changes: [], since });
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(mocks.gte).toHaveBeenCalledWith('updated_at', since);
+    expect(data.changes).toHaveLength(1);
+    expect(data.changes[0].data.id).toBe('60606060-6060-4606-8606-606060606060');
+  });
+
   it('consult_answers を初回 insert できる（owner_id を注入する）', async () => {
     mocks.insert.mockResolvedValue({ error: null });
     mocks.from.mockImplementation((table: string) => {
       if (table === 'consult_answers') {
-        return { insert: mocks.insert };
+        return { insert: mocks.insert, select: mocks.select };
       }
       return { upsert: mocks.upsert, select: mocks.select };
     });
@@ -109,7 +165,7 @@ describe('POST /api/sync/[table]', () => {
       },
     });
     mocks.from.mockImplementation((table: string) => {
-      if (table === 'consult_answers') return { insert: mocks.insert };
+      if (table === 'consult_answers') return { insert: mocks.insert, select: mocks.select };
       return { upsert: mocks.upsert, select: mocks.select };
     });
 
@@ -140,7 +196,7 @@ describe('POST /api/sync/[table]', () => {
   it('camelCase 入力を受理し、snake_case 列へ正規化して insert する', async () => {
     mocks.insert.mockResolvedValue({ error: null });
     mocks.from.mockImplementation((table: string) => {
-      if (table === 'consult_answers') return { insert: mocks.insert };
+      if (table === 'consult_answers') return { insert: mocks.insert, select: mocks.select };
       return { upsert: mocks.upsert, select: mocks.select };
     });
 

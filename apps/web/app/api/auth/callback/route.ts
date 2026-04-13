@@ -11,6 +11,13 @@ type Payload = {
 const SYNC_EVENTS: AuthChangeEvent[] = ['SIGNED_IN', 'TOKEN_REFRESHED', 'SIGNED_OUT'];
 
 export async function POST(request: Request) {
+  const origin = request.headers.get('origin');
+  const selfOrigin = new URL(request.url).origin;
+
+  if (!origin || origin !== selfOrigin) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+
   let payload: Payload | null = null;
   try {
     payload = (await request.json()) as Payload;

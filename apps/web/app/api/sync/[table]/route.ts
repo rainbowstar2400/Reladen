@@ -427,7 +427,9 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       if (error) throw asHttpError('select failed', error);
       cloud = data ?? [];
     } else {
-      cloud = []; // 初回は全件返さない方針
+      const { data, error } = await sb.from(table).select('*');
+      if (error) throw asHttpError('select failed', error);
+      cloud = data ?? [];
     }
 
     const pushResult = {

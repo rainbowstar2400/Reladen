@@ -85,13 +85,6 @@ function useSyncInternal() {
 
   // Realtimeイベントのデバウンス
   const debounceTimerRef = useRef<number | null>(null);
-  const requestDebouncedSync = useCallback(() => {
-    if (debounceTimerRef.current != null) return;
-    debounceTimerRef.current = window.setTimeout(() => {
-      debounceTimerRef.current = null;
-      void syncAll();
-    }, 1000);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const syncAll = useCallback(async (): Promise<SyncResult> => {
     // 同期がOFFならスキップ
@@ -230,7 +223,18 @@ function useSyncInternal() {
       syncingRef.current = false;
     }
 
-  }, [lastSyncedAt, requestDebouncedSync]);
+  }, [lastSyncedAt]);
+
+  const syncAllRef = useRef(syncAll);
+  syncAllRef.current = syncAll;
+
+  const requestDebouncedSync = useCallback(() => {
+    if (debounceTimerRef.current != null) return;
+    debounceTimerRef.current = window.setTimeout(() => {
+      debounceTimerRef.current = null;
+      void syncAllRef.current();
+    }, 1000);
+  }, []);
 
   // online/offline での同期（重複登録・多重実行を避ける）
   useEffect(() => {
@@ -321,6 +325,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
 export function useSync() {
   const ctx = useContext(SyncContext);
-  if (ctx) return ctx;
-  return useSyncInternal();
+  if (!ctx) throw new Error('useSync must be used within <SyncProvider>');
+  return ctx;
 }
