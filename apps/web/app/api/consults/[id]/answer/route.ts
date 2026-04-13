@@ -23,6 +23,7 @@ import {
 } from "@repo/shared/types/conversation";
 import { DEFAULT_FEELING_SCORE } from "@repo/shared/types";
 import { newId } from "@/lib/newId";
+import { normalizeRelationPair } from "@/lib/data/relation-pair";
 
 const answerRequestSchema = z.object({
   selectedChoiceId: z.string(),
@@ -346,12 +347,15 @@ async function updateRelationType(params: {
   newType: string;
   now: string;
 }) {
-  const base = params.relation ?? {
-    id: newId(),
-    a_id: params.residentId,
-    b_id: params.targetId,
-    deleted: false,
-  };
+  const base = params.relation ?? (() => {
+    const pair = normalizeRelationPair(params.residentId, params.targetId);
+    return {
+      id: newId(),
+      a_id: pair.aId,
+      b_id: pair.bId,
+      deleted: false,
+    };
+  })();
   await putAny("relations", {
     ...base,
     type: params.newType,

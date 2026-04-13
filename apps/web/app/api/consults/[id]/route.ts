@@ -1,17 +1,7 @@
 // apps/web/app/api/consults/[id]/route.ts
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-/**
- * サーバー用の Supabase クライアント（Anonで読取のみ）
- * RLS で SELECT を許可しておく必要があります。
- */
-function getSb() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  if (!url || !anon) return null;
-  return createClient(url, anon, { auth: { persistSession: false } });
-}
+import { sbServer } from '@/lib/supabase/server';
+import { getUserOrThrow } from '@/lib/supabase/get-user';
 
 /**
  * 既存UIが「ダミーと同じ形」で受け取れるよう、payload を正規化。
@@ -54,8 +44,8 @@ export async function GET(
     const id = ctx?.params?.id;
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-    const sb = getSb();
-    if (!sb) return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
+    const user = await getUserOrThrow();
+    const sb = sbServer();
 
     // consult イベントを 1 件取得
     const { data, error } = await sb
@@ -63,6 +53,7 @@ export async function GET(
       .select('*')
       .eq('id', id)
       .eq('kind', 'consult')
+      .eq('owner_id', user.id)
       .single();
 
     if (error) {
@@ -79,6 +70,7 @@ export async function GET(
         .from('consult_answers')
         .select('*')
         .eq('id', id)
+        .eq('owner_id', user.id)
         .maybeSingle();
       if (answerError) {
         console.warn('[Consult API] Failed to load consult_answers row', answerError.message);
@@ -93,6 +85,10 @@ export async function GET(
     const consult = normalizeConsultRow(data);
     return NextResponse.json({ consult, answer }, { status: 200 });
   } catch (e: any) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === 'No authenticated user found' || message.startsWith('Failed to get user:')) {
+      return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+    }
     return NextResponse.json({ error: e?.message ?? 'unexpected error' }, { status: 500 });
   }
 }

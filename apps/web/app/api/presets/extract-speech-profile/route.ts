@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { extractSpeechProfile } from '@/lib/gpt/extract-speech-profile';
+import { getUserOrThrow } from '@/lib/supabase/get-user';
 
 const requestSchema = z.object({
   label: z.string().min(1),
@@ -9,6 +10,17 @@ const requestSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  try {
+    await getUserOrThrow();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'No authenticated user found' || message.startsWith('Failed to get user:')) {
+      return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+    }
+    console.error('[extract-speech-profile][auth]', error);
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();

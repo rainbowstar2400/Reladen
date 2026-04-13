@@ -304,4 +304,77 @@ describe("POST /api/consults/[id]/answer", () => {
     expect(normalizedFeeling?.label).toBe("none");
     expect(normalizedFeeling?.score).toBe(DEFAULT_FEELING_SCORE);
   });
+
+  it("relation fallback 作成時は a_id/b_id を辞書順で正規化する", async () => {
+    const residentId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    const targetId = "11111111-1111-4111-8111-111111111111";
+    const db: InMemoryDb = {
+      residents: [
+        { id: residentId, name: "住人X", deleted: false, trustToPlayer: 50, traits: { empathy: 3 } },
+        { id: targetId, name: "住人Y", deleted: false, trustToPlayer: 50, traits: { empathy: 3 } },
+      ],
+      presets: [],
+      relations: [],
+      feelings: [
+        {
+          id: "88888888-8888-4888-8888-888888888888",
+          from_id: residentId,
+          to_id: targetId,
+          label: "love",
+          score: 60,
+          deleted: false,
+        },
+        {
+          id: "99999999-9999-4999-8999-999999999999",
+          from_id: targetId,
+          to_id: residentId,
+          label: "like",
+          score: 40,
+          deleted: false,
+        },
+      ],
+      events: [
+        {
+          id: CONSULT_ID,
+          kind: "consult",
+          updated_at: "2026-03-20T00:00:00.000Z",
+          deleted: false,
+          payload: {
+            residentId,
+            content: "相談内容",
+            participants: [residentId, targetId],
+            triggerEventId: TRIGGER_ID,
+            choices: [
+              { id: "positive", label: "背中を押す", favorability: "positive" },
+              { id: "neutral", label: "様子を見る", favorability: "neutral" },
+              { id: "negative", label: "止める", favorability: "negative" },
+            ],
+          },
+        },
+        {
+          id: TRIGGER_ID,
+          kind: "relation_trigger",
+          updated_at: "2026-03-20T00:00:00.000Z",
+          deleted: false,
+          payload: {
+            trigger: "breakup",
+            residentId,
+            targetId,
+            participants: [residentId, targetId],
+            currentRelation: "lover",
+            handled: true,
+          },
+        },
+      ],
+    };
+    configureDb(db);
+
+    const res = await POST(makeRequest("positive"), { params: { id: CONSULT_ID } } as any);
+    expect(res.status).toBe(200);
+
+    const createdRelation = db.relations.find((r) => r.type === "friend" && !r.deleted);
+    expect(createdRelation).toBeDefined();
+    expect(createdRelation?.a_id).toBe(targetId);
+    expect(createdRelation?.b_id).toBe(residentId);
+  });
 });
