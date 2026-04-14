@@ -3,6 +3,8 @@ import type { EvalInput, EvaluationResult } from "@/lib/evaluation/evaluate-conv
 
 const mocks = vi.hoisted(() => ({
   listKV: vi.fn(),
+  listActiveKV: vi.fn(),
+  getKV: vi.fn(),
   putKV: vi.fn(),
   MockKvUnauthenticatedError: class MockKvUnauthenticatedError extends Error {},
   callGptForConversation: vi.fn(),
@@ -19,6 +21,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/db/kv-server", () => ({
   listKV: mocks.listKV,
+  listActiveKV: mocks.listActiveKV,
+  getKV: mocks.getKV,
   putKV: mocks.putKV,
   KvUnauthenticatedError: mocks.MockKvUnauthenticatedError,
 }));
@@ -185,6 +189,15 @@ describe("run-conversation", () => {
         default:
           return [];
       }
+    });
+    mocks.listActiveKV.mockImplementation(async (table: string) => {
+      const rows = await mocks.listKV(table);
+      if (!Array.isArray(rows)) return [];
+      return rows.filter((row) => !row?.deleted);
+    });
+    mocks.getKV.mockImplementation(async (table: string, id: string) => {
+      const rows = await mocks.listActiveKV(table);
+      return rows.find((row: Record<string, unknown>) => row?.id === id) ?? null;
     });
 
     mocks.selectTopic.mockImplementation((_input, initiator) => ({
@@ -408,12 +421,13 @@ describe("run-conversation", () => {
   });
 
   it("presets 取得失敗時は preset_load_failed を返す", async () => {
+    const fallbackGetKV = mocks.getKV.getMockImplementation();
     mocks.listKV.mockImplementation(async (table: string) => {
-      if (table === "presets") {
-        throw new Error("presets unavailable");
-      }
       if (table === "residents") {
-        return baseResidents();
+        return [
+          { ...baseResidents()[0], speech_preset: "preset-a" },
+          baseResidents()[1],
+        ];
       }
       if (table === "relations") {
         return [{ a_id: A_ID, b_id: B_ID, type: "friend", deleted: false }];
@@ -423,6 +437,13 @@ describe("run-conversation", () => {
       }
       return [];
     });
+    mocks.getKV.mockImplementation(async (table: string, id: string) => {
+      if (table === "presets" && id === "preset-a") {
+        throw new Error("presets unavailable");
+      }
+      if (!fallbackGetKV) return null;
+      return fallbackGetKV(table, id);
+    });
 
     await expect(runConversationFromApi({ participants: [A_ID, B_ID] })).rejects.toMatchObject({
       code: "preset_load_failed",
@@ -431,11 +452,25 @@ describe("run-conversation", () => {
   });
 
   it("presets 取得時の認証エラーはそのまま再throwする", async () => {
+    const fallbackGetKV = mocks.getKV.getMockImplementation();
     mocks.listKV.mockImplementation(async (table: string) => {
-      if (table === "presets") {
+      if (table === "residents") {
+        return [
+          { ...baseResidents()[0], speech_preset: "preset-a" },
+          baseResidents()[1],
+        ];
+      }
+      if (table === "relations") {
+        return [{ a_id: A_ID, b_id: B_ID, type: "friend", deleted: false }];
+      }
+      return table === "feelings" ? [] : [];
+    });
+    mocks.getKV.mockImplementation(async (table: string, id: string) => {
+      if (table === "presets" && id === "preset-a") {
         throw new mocks.MockKvUnauthenticatedError("unauthenticated");
       }
-      return [];
+      if (!fallbackGetKV) return null;
+      return fallbackGetKV(table, id);
     });
 
     await expect(runConversationFromApi({ participants: [A_ID, B_ID] })).rejects.toBeInstanceOf(

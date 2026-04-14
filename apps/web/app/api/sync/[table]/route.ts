@@ -61,6 +61,12 @@ type SyncCursor = {
   id: string;
 };
 
+const SYNC_PULL_PAGE_SIZE = 500;
+
+function buildCursorFilter(cursor: SyncCursor): string {
+  return `updated_at.gt.${cursor.updated_at},and(updated_at.eq.${cursor.updated_at},id.gt.${cursor.id})`;
+}
+
 function computeMaxCursor(rows: any[]): SyncCursor | null {
   if (!rows.length) return null;
   let max = rows[0] as { updated_at?: string; id?: string };
@@ -81,6 +87,41 @@ function computeMaxCursor(rows: any[]): SyncCursor | null {
     updated_at: String(max.updated_at),
     id: String(max.id),
   };
+}
+
+async function pullRowsByKeyset(
+  sb: ReturnType<typeof createAuthedClient>,
+  table: AllowedTable,
+  startCursor: SyncCursor | null,
+): Promise<any[]> {
+  const rows: any[] = [];
+  let cursor = startCursor;
+
+  while (true) {
+    let query = sb
+      .from(table)
+      .select('*');
+
+    if (cursor) {
+      query = query.or(buildCursorFilter(cursor));
+    }
+
+    const { data, error } = await query
+      .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(SYNC_PULL_PAGE_SIZE);
+    if (error) throw asHttpError('select failed', error);
+
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < SYNC_PULL_PAGE_SIZE) break;
+
+    const last = page[page.length - 1] as { updated_at?: unknown; id?: unknown };
+    if (typeof last?.updated_at !== 'string' || typeof last?.id !== 'string') break;
+    cursor = { updated_at: last.updated_at, id: last.id };
+  }
+
+  return rows;
 }
 
 function resolveIncomingUpdatedAt(incomingData: Record<string, any>, fallbackUpdatedAt?: string): string | null {
@@ -451,22 +492,13 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     const sinceLegacy = (parsed.data.since && new Date(parsed.data.since).toISOString()) || null;
     let cloud: any[] = [];
     if (sinceCursor) {
-      const { data, error } = await sb
-        .from(table)
-        .select('*')
-        .or(`updated_at.gt.${sinceCursor.updated_at},and(updated_at.eq.${sinceCursor.updated_at},id.gt.${sinceCursor.id})`)
-        .order('updated_at', { ascending: true })
-        .order('id', { ascending: true });
-      if (error) throw asHttpError('select failed', error);
-      cloud = data ?? [];
+      cloud = await pullRowsByKeyset(sb, table as AllowedTable, sinceCursor);
     } else if (sinceLegacy) {
       const { data, error } = await sb.from(table).select('*').gte('updated_at', sinceLegacy);
       if (error) throw asHttpError('select failed', error);
       cloud = data ?? [];
     } else {
-      const { data, error } = await sb.from(table).select('*');
-      if (error) throw asHttpError('select failed', error);
-      cloud = data ?? [];
+      cloud = await pullRowsByKeyset(sb, table as AllowedTable, null);
     }
     const maxCursor = computeMaxCursor(cloud);
 

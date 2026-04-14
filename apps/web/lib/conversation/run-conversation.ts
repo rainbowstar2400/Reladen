@@ -35,7 +35,12 @@ import { shouldGenerateNickname, type NicknameGenerationInput, type NicknameTend
 import { DEFAULT_FEELING_SCORE } from "@repo/shared/types";
 import type { PromptInput, CharacterProfile } from "@repo/shared/gpt/prompts/conversation-prompt";
 import { newId } from "@/lib/newId";
-import { KvUnauthenticatedError, listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
+import {
+  KvUnauthenticatedError,
+  getKV as getAny,
+  listActiveKV as listActiveAny,
+  putKV as putAny,
+} from "@/lib/db/kv-server";
 import { extractSpeechProfile } from "@/lib/gpt/extract-speech-profile";
 import { generateSnippetsIfStale } from "@/lib/batch/generate-snippets";
 import { generateRecentEventsIfStale } from "@/lib/batch/generate-recent-events";
@@ -278,51 +283,66 @@ async function loadCharacterProfiles(
   const uniqueIds = Array.from(new Set(participantIds));
   if (uniqueIds.length === 0) return { profiles: {}, nameMap: new Map() };
 
-  let presetRows: Array<Record<string, unknown>> | null = null;
-  try {
-    presetRows = (await listAny("presets")) as unknown as Array<Record<string, unknown>> | null;
-  } catch (error) {
-    if (error instanceof KvUnauthenticatedError) {
-      throw error;
-    }
-    const msg = (error as Error)?.message ?? String(error);
-    console.error("[runConversationFromApi] Failed to load presets required for style-aware conversation.", {
-      participants: participantIds,
-      message: msg,
-    });
-    throw new ConversationStartError(
-      "preset_load_failed",
-      503,
-      `[runConversationFromApi] Failed to load presets required for style-aware conversation generation: ${msg}`,
-    );
-  }
-
-  const presetMap = new Map<string, Record<string, unknown>>();
-  if (Array.isArray(presetRows)) {
-    for (const raw of presetRows) {
-      const id = typeof raw?.id === "string" ? raw.id : undefined;
-      if (!id || Boolean((raw as any)?.deleted)) continue;
-      presetMap.set(id, raw);
-    }
-  }
-
-  const rows = (await listAny("residents")) as unknown as Array<Record<string, unknown>> | null;
+  const rows = (await listActiveAny("residents")) as unknown as Array<Record<string, unknown>>;
   const dict: Record<string, RunCharacterProfile> = {};
   const nameMap = new Map<string, string>();
-  if (!Array.isArray(rows)) return { profiles: dict, nameMap };
+  if (rows.length === 0) return { profiles: dict, nameMap };
 
   // 全住民の名前マップを構築（third_party 名前解決用）
   for (const raw of rows) {
     const rid = typeof raw?.id === "string" ? raw.id : undefined;
-    if (!rid || Boolean((raw as any)?.deleted)) continue;
+    if (!rid) continue;
     const rname = typeof (raw as any)?.name === "string" ? (raw as any).name : undefined;
     if (rname) nameMap.set(rid, rname);
   }
 
-  const idSet = new Set(uniqueIds);
-  for (const raw of rows) {
+  const participantRows = rows.filter((raw) => {
     const id = typeof raw?.id === "string" ? raw.id : undefined;
-    if (!id || !idSet.has(id)) continue;
+    return !!id && uniqueIds.includes(id);
+  });
+
+  const presetIds = new Set<string>();
+  for (const raw of participantRows) {
+    const r = raw as any;
+    const firstPersonId = typeof r.first_person === "string" ? r.first_person : null;
+    if (firstPersonId) presetIds.add(firstPersonId);
+    const speechPresetId = typeof r.speech_preset === "string" ? r.speech_preset : null;
+    if (speechPresetId) presetIds.add(speechPresetId);
+  }
+
+  const presetMap = new Map<string, Record<string, unknown>>();
+  if (presetIds.size > 0) {
+    try {
+      const presetEntries = await Promise.all(
+        Array.from(presetIds).map(async (id) => {
+          const preset = await getAny<Record<string, unknown>>("presets", id);
+          return preset ? ([id, preset] as const) : null;
+        }),
+      );
+      for (const entry of presetEntries) {
+        if (!entry) continue;
+        presetMap.set(entry[0], entry[1]);
+      }
+    } catch (error) {
+      if (error instanceof KvUnauthenticatedError) {
+        throw error;
+      }
+      const msg = (error as Error)?.message ?? String(error);
+      console.error("[runConversationFromApi] Failed to load presets required for style-aware conversation.", {
+        participants: participantIds,
+        message: msg,
+      });
+      throw new ConversationStartError(
+        "preset_load_failed",
+        503,
+        `[runConversationFromApi] Failed to load presets required for style-aware conversation generation: ${msg}`,
+      );
+    }
+  }
+
+  for (const raw of participantRows) {
+    const id = typeof raw?.id === "string" ? raw.id : undefined;
+    if (!id) continue;
 
     const r = raw as any;
 
@@ -415,16 +435,7 @@ async function loadCharacterProfiles(
 async function resolveThreadContext(
   threadId: string,
 ): Promise<{ participants: [string, string]; status: "ongoing" | "done" | null }> {
-  const rows = (await listAny("topic_threads")) as unknown as TopicThreadRow[] | null;
-  if (!Array.isArray(rows)) {
-    throw new ConversationStartError(
-      "thread_not_found",
-      404,
-      `[runConversationFromApi] Thread not found: ${threadId}`,
-    );
-  }
-
-  const thread = rows.find((row) => row?.id === threadId && !row?.deleted);
+  const thread = (await getAny("topic_threads", threadId)) as unknown as TopicThreadRow | null;
   if (!thread) {
     throw new ConversationStartError(
       "thread_not_found",
@@ -456,7 +467,7 @@ async function resolveThreadContext(
 async function loadRelationForPair(
   participants: [string, string],
 ): Promise<{ type: string; familySubType?: string | null } | undefined> {
-  const rows = (await listAny("relations")) as unknown as RelationRow[] | null;
+  const rows = (await listActiveAny("relations")) as unknown as RelationRow[] | null;
   if (!Array.isArray(rows)) return undefined;
   const [a, b] = participants;
 
@@ -538,7 +549,7 @@ function pickFeelingBaseBeforeSpecial(row: FeelingRow | undefined): ImpressionBa
 async function loadFeelingsForPair(
   participants: [string, string],
 ): Promise<{ aToB: FeelingData; bToA: FeelingData }> {
-  const rows = (await listAny("feelings")) as unknown as FeelingRow[] | null;
+  const rows = (await listActiveAny("feelings")) as unknown as FeelingRow[] | null;
   const [a, b] = participants;
 
   const pickLatest = (fromId: string, toId: string): FeelingData => {
@@ -584,7 +595,7 @@ async function loadFeelingsForPair(
 
 /**
  * 同ペアの過去の会話イベントから、前回の記憶と最近の話題を読み込む。
- * 1回の listAny("events") で両方を解決する。
+ * 1回の listActiveAny("events") で両方を解決する。
  */
 async function loadConversationHistory(
   participants: [string, string],
@@ -595,7 +606,7 @@ async function loadConversationHistory(
 }> {
   let allEvents: Array<Record<string, any>> | null = null;
   try {
-    allEvents = (await listAny("events")) as unknown as Array<Record<string, any>> | null;
+    allEvents = (await listActiveAny("events")) as unknown as Array<Record<string, any>> | null;
   } catch (error) {
     console.warn("[loadConversationHistory] Failed to load events.", error);
     return { previousMemory: null, recentTopics: [], recentSituations: [] };
@@ -656,7 +667,7 @@ async function loadRecentSnippets(
 ): Promise<SharedSnippet[]> {
   let rows: Array<Record<string, any>> | null = null;
   try {
-    rows = (await listAny("shared_snippets")) as unknown as Array<Record<string, any>> | null;
+    rows = (await listActiveAny("shared_snippets")) as unknown as Array<Record<string, any>> | null;
   } catch (error) {
     console.warn("[loadRecentSnippets] Failed to load shared_snippets.", error);
     return [];
@@ -698,7 +709,7 @@ async function loadOffscreenKnowledge(
 ): Promise<OffscreenKnowledge[]> {
   let rows: Array<Record<string, any>> | null = null;
   try {
-    rows = (await listAny("offscreen_knowledge")) as unknown as Array<Record<string, any>> | null;
+    rows = (await listActiveAny("offscreen_knowledge")) as unknown as Array<Record<string, any>> | null;
   } catch (error) {
     console.warn("[loadOffscreenKnowledge] Failed to load offscreen_knowledge.", error);
     return [];
@@ -726,7 +737,7 @@ async function loadRecentEventsForCharacter(
 ): Promise<import("@repo/shared/types/conversation-generation").RecentEvent[]> {
   let rows: Array<Record<string, any>> | null = null;
   try {
-    rows = (await listAny("recent_events")) as unknown as Array<Record<string, any>> | null;
+    rows = (await listActiveAny("recent_events")) as unknown as Array<Record<string, any>> | null;
   } catch (error) {
     console.warn("[loadRecentEventsForCharacter] Failed to load recent_events.", error);
     return [];
@@ -937,7 +948,7 @@ async function generateNicknamesOnTransition(params: {
   const [a, b] = params.participants;
 
   // 住人情報を取得（nicknameTendency 含む）
-  const residents = (await listAny("residents")) as unknown as Array<Record<string, any>> | null;
+  const residents = (await listActiveAny("residents")) as unknown as Array<Record<string, any>> | null;
   if (!Array.isArray(residents)) return;
 
   const resA = residents.find((r) => r?.id === a && !r?.deleted);
@@ -945,7 +956,7 @@ async function generateNicknamesOnTransition(params: {
   if (!resA || !resB) return;
 
   // 既存ニックネーム確認（locked チェック）
-  const nicknames = (await listAny("nicknames")) as unknown as NicknameRow[] | null;
+  const nicknames = (await listActiveAny("nicknames")) as unknown as NicknameRow[] | null;
   const existingAtoB = Array.isArray(nicknames)
     ? nicknames.find((n) => {
         const from = n.from_id ?? n.fromId;
@@ -1041,7 +1052,7 @@ async function persistTransitionResult(params: {
     });
 
     // relations テーブル更新
-    const relations = (await listAny("relations")) as unknown as RelationRow[] | null;
+    const relations = (await listActiveAny("relations")) as unknown as RelationRow[] | null;
     if (Array.isArray(relations)) {
       const match = relations.find((rel) => {
         if (!rel || rel.deleted) return false;
@@ -1058,7 +1069,7 @@ async function persistTransitionResult(params: {
     }
 
     // feelings の印象リセット
-    const feelings = (await listAny("feelings")) as unknown as FeelingRow[] | null;
+    const feelings = (await listActiveAny("feelings")) as unknown as FeelingRow[] | null;
     if (Array.isArray(feelings)) {
       const fAB = feelings.find((f) => {
         const pair = pickFeelingPair(f);
@@ -1241,7 +1252,7 @@ export async function runConversationFromApi(
   // 7.5) ニックネーム読み込み（D-3: プロンプト注入用）
   let nicknameInfo: { aCallsB?: string | null; bCallsA?: string | null } | undefined;
   try {
-    const nicknameRows = (await listAny("nicknames")) as unknown as NicknameRow[] | null;
+    const nicknameRows = (await listActiveAny("nicknames")) as unknown as NicknameRow[] | null;
     if (Array.isArray(nicknameRows)) {
       const [pa, pb] = participants;
       const aToB = nicknameRows.find((n) => {

@@ -1,13 +1,13 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  listKV: vi.fn(),
+  listActiveKV: vi.fn(),
   putKV: vi.fn(),
   newId: vi.fn(),
 }));
 
 vi.mock("@/lib/db/kv-server", () => ({
-  listKV: mocks.listKV,
+  listActiveKV: mocks.listActiveKV,
   putKV: mocks.putKV,
 }));
 
@@ -27,7 +27,7 @@ describe("runDailyDecay", () => {
     vi.clearAllMocks();
     mocks.newId.mockReturnValue("99999999-9999-4999-8999-999999999999");
     mocks.putKV.mockResolvedValue(undefined);
-    mocks.listKV.mockImplementation(async (table: string) => {
+    mocks.listActiveKV.mockImplementation(async (table: string) => {
       if (table === "feelings") {
         return [
           {
