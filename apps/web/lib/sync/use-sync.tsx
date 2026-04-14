@@ -85,6 +85,7 @@ type SyncResult =
 
 function useSyncInternal() {
   const [phase, setPhase] = useState<SyncPhase>('offline');
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [tableCursors, setTableCursors] = useState<Record<SyncPayload['table'], SyncCursor>>(
     () => createInitialTableCursors(),
   );
@@ -230,6 +231,7 @@ function useSyncInternal() {
         throw new Error('All tables failed to sync');
       }
 
+      setLastSyncedAt(new Date().toISOString());
       setPhase('online');
       // 同期成功時にリトライカウントをリセット
       retryCountRef.current = 0; return { ok: true };
@@ -367,16 +369,6 @@ function useSyncInternal() {
 
     return () => sub?.subscription?.unsubscribe();
   }, [requestDebouncedSync]);
-
-  const lastSyncedAt = useMemo(() => {
-    const cursors = Object.values(tableCursors).filter(
-      (cursor): cursor is NonNullable<SyncCursor> => cursor !== null,
-    );
-    if (cursors.length === 0) return null;
-    return cursors.reduce((min, cursor) =>
-      cursor.updated_at < min ? cursor.updated_at : min,
-    cursors[0].updated_at);
-  }, [tableCursors]);
 
   return useMemo(
     () => ({

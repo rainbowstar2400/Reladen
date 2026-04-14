@@ -270,9 +270,10 @@ describe('useSync', () => {
     });
   });
 
-  it('lastSyncedAt=null の初回 syncAll は since 未指定で送信される', async () => {
+  it('初回 syncAll は since 未指定で送信し lastSyncedAt を更新する', async () => {
     const { result } = renderHook(() => useSync(), { wrapper });
 
+    expect(result.current.lastSyncedAt).toBeNull();
     await act(async () => {
       await result.current.sync();
     });
@@ -281,6 +282,7 @@ describe('useSync', () => {
     const firstBody = requestBodyAt(0);
     expect(firstBody).not.toHaveProperty('since');
     expect(firstBody).not.toHaveProperty('sinceCursor');
+    expect(result.current.lastSyncedAt).toEqual(expect.any(String));
   });
 
   it('offline -> online -> syncing -> online/error の phase 遷移が正しい', async () => {
@@ -357,6 +359,7 @@ describe('useSync', () => {
       updated_at: '2026-03-20T00:00:00.000Z',
       id: TABLE_CURSOR_ID_BY_TABLE.player_profiles,
     });
+    expect(result.current.lastSyncedAt).toEqual(expect.any(String));
     errorSpy.mockRestore();
   });
 
@@ -376,6 +379,7 @@ describe('useSync', () => {
     });
 
     expect(result.current.phase).toBe('error');
+    expect(result.current.lastSyncedAt).toBeNull();
     errorSpy.mockRestore();
   });
 });
