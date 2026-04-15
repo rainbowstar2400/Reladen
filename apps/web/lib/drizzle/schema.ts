@@ -1,5 +1,5 @@
-import { boolean, jsonb, pgEnum, pgTable, text, timestamp, integer, uuid, index } from 'drizzle-orm/pg-core';
-import { relations as createRelations } from 'drizzle-orm';
+import { bigint, boolean, jsonb, pgEnum, pgTable, text, timestamp, integer, uuid, index } from 'drizzle-orm/pg-core';
+import { relations as createRelations, sql } from 'drizzle-orm';
 
 export const nicknameTendencyEnum = pgEnum('nickname_tendency_enum', ['nickname', 'bare', 'san', 'kun_chan', 'hierarchy']);
 
@@ -40,6 +40,7 @@ export const presets = pgTable('presets', {
   speechProfileData: jsonb('speech_profile_data'),
   isManaged: boolean('is_managed').notNull().default(false),
   ownerId: uuid('owner_id'),
+  syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(sql`nextval('public.presets_sync_version_seq')`),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
 }, (t) => ({
@@ -68,6 +69,7 @@ export const residents = pgTable('residents', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
   ownerId: uuid('owner_id'),
+  syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(sql`nextval('public.residents_sync_version_seq')`),
 });
 
 // relations テーブル
@@ -82,6 +84,7 @@ export const relations = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
     ownerId: uuid('owner_id'),
+    syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(sql`nextval('public.relations_sync_version_seq')`),
   },
   (table) => ({
     uniquePair: { columns: [table.aId, table.bId], isUnique: true },
@@ -112,6 +115,7 @@ export const feelings = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
     ownerId: uuid('owner_id'),
+    syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(sql`nextval('public.feelings_sync_version_seq')`),
   },
   (table) => ({
     uniqueDirectional: { columns: [table.fromId, table.toId], isUnique: true },
@@ -130,6 +134,7 @@ export const nicknames = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deleted: boolean('deleted').notNull().default(false),
     ownerId: uuid('owner_id'),
+    syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(sql`nextval('public.nicknames_sync_version_seq')`),
   },
   (table) => ({
     // fromId と toId のペアでユニーク制約を設ける
@@ -144,6 +149,7 @@ export const events = pgTable('events', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
   deleted: boolean('deleted').notNull().default(false),
   ownerId: uuid('owner_id'),
+  syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(sql`nextval('public.events_sync_version_seq')`),
 }, (t) => ({
   byKind: index('events_kind_idx').on(t.kind),
   byUpdated: index('events_updated_idx').on(t.updatedAt),
@@ -215,6 +221,7 @@ export const consultAnswers = pgTable('consult_answers', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
   ownerId: uuid('owner_id'),
+  syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(sql`nextval('public.consult_answers_sync_version_seq')`),
 });
 
 export const notifications = pgTable('notifications', {
@@ -278,6 +285,7 @@ export const worldStates = pgTable('world_states', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
   ownerId: uuid('owner_id'),
+  syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(sql`nextval('public.world_states_sync_version_seq')`),
 }, (t) => ({
   updatedIdx: index('world_states_updated_idx').on(t.updatedAt),
 }));
@@ -290,4 +298,5 @@ export const playerProfiles = pgTable('player_profiles', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deleted: boolean('deleted').notNull().default(false),
   ownerId: uuid('owner_id'),
+  syncVersion: bigint('sync_version', { mode: 'bigint' }).notNull().default(sql`nextval('public.player_profiles_sync_version_seq')`),
 });

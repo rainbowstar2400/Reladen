@@ -6,9 +6,10 @@ import { bulkUpsert, since } from '@/lib/db-local';
 import { SyncPayload, syncPayloadSchema } from '@/types';
 import { normalizePulledRow } from '@/lib/sync/pull-normalizer';
 import { applyPushAck } from '@/lib/sync/push-ack';
-export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
 import { makeOutboxKey, listPendingByTable, markSent, markFailed } from '@/lib/sync/outbox';
 import { useSettings } from '@/lib/use-settings';
+
+export type SyncPhase = 'offline' | 'online' | 'syncing' | 'error';
 
 const TABLES: SyncPayload['table'][] = [
   'presets',
@@ -28,19 +29,17 @@ const TABLE_GROUPS: SyncPayload['table'][][] = [
   ['nicknames', 'events', 'consult_answers'],
 ];
 
-type SyncCursor = { updated_at: string; id: string } | null;
+type SyncCursor = string | null;
+type PulledAtMap = Record<SyncPayload['table'], string | null>;
+type CursorMap = Record<SyncPayload['table'], SyncCursor>;
 
-function createInitialTableCursors(): Record<SyncPayload['table'], SyncCursor> {
-  return Object.fromEntries(TABLES.map((table) => [table, null])) as Record<
-    SyncPayload['table'],
-    SyncCursor
-  >;
+function createInitialTableState<T>(initial: T): Record<SyncPayload['table'], T> {
+  return Object.fromEntries(TABLES.map((table) => [table, initial])) as Record<SyncPayload['table'], T>;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (id?: string | null) => !!id && UUID_REGEX.test(id);
 
-// ヘルパー
 async function getAccessToken(): Promise<string | null> {
   const sb = supabaseClient;
   if (!sb) return null;
@@ -49,11 +48,12 @@ async function getAccessToken(): Promise<string | null> {
   return data?.session?.access_token ?? null;
 }
 
-// --- API 呼び出し ---
+type FetchDiffBody = Pick<SyncPayload, 'changes' | 'since' | 'sinceCursor' | 'sinceVersion'>;
+
 async function fetchDiff(
   table: SyncPayload['table'],
-  body: Pick<SyncPayload, 'changes' | 'since' | 'sinceCursor'>,
-) {
+  body: FetchDiffBody,
+): Promise<SyncPayload> {
   const token = await getAccessToken();
 
   if (!token) {
@@ -70,10 +70,17 @@ async function fetchDiff(
     headers,
     body: JSON.stringify({ ...body, table }),
   });
+  if (res.status === 409) {
+    const text = await res.text().catch(() => '');
+    const err = new Error(`sync ${table} blocked (409): ${text || res.statusText}`);
+    (err as Error & { nonRetryable?: boolean }).nonRetryable = true;
+    throw err;
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`sync ${table} failed (${res.status}): ${text || res.statusText}`);
   }
+
   const json = await res.json();
   return syncPayloadSchema.parse(json);
 }
@@ -86,46 +93,43 @@ type SyncResult =
 function useSyncInternal() {
   const [phase, setPhase] = useState<SyncPhase>('offline');
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
-  const [tableCursors, setTableCursors] = useState<Record<SyncPayload['table'], SyncCursor>>(
-    () => createInitialTableCursors(),
-  );
+  const [tableCursors, setTableCursors] = useState<CursorMap>(() => createInitialTableState<SyncCursor>(null));
+  const [lastPulledAt, setLastPulledAt] = useState<PulledAtMap>(() => createInitialTableState<string | null>(null));
   const [error, setError] = useState<string | null>(null);
+
   const tableCursorsRef = useRef(tableCursors);
   useEffect(() => {
     tableCursorsRef.current = tableCursors;
   }, [tableCursors]);
 
-  // 設定からsyncEnabledを取得（refで保持してcallback内から参照）
+  const lastPulledAtRef = useRef(lastPulledAt);
+  useEffect(() => {
+    lastPulledAtRef.current = lastPulledAt;
+  }, [lastPulledAt]);
+
   const { s: settings } = useSettings();
   const syncEnabledRef = useRef(settings.syncEnabled);
-  useEffect(() => { syncEnabledRef.current = settings.syncEnabled; }, [settings.syncEnabled]);
+  useEffect(() => {
+    syncEnabledRef.current = settings.syncEnabled;
+  }, [settings.syncEnabled]);
 
-  // リトライ回数（指数バックオフ用）
   const retryCountRef = useRef(0);
-
-  // 多重実行ガード & 連発防止
   const syncingRef = useRef(false);
   const lastRunRef = useRef(0);
   const MIN_INTERVAL_MS = 4000;
-
-  // Realtimeイベントのデバウンス
   const debounceTimerRef = useRef<number | null>(null);
 
   const syncAll = useCallback(async (): Promise<SyncResult> => {
-    // 同期がOFFならスキップ
     if (!syncEnabledRef.current) {
       setPhase('online');
       return { ok: true };
     }
 
-    // すでに実行中ならスキップ
     if (syncingRef.current) return { ok: true };
 
-    // スロットル：直前から一定時間経っていなければスキップ
     const now = Date.now();
     if (now - lastRunRef.current < MIN_INTERVAL_MS) return { ok: true };
 
-    // オフラインは実行しない
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setPhase('offline');
       return { ok: false, reason: 'offline' };
@@ -135,16 +139,17 @@ function useSyncInternal() {
     lastRunRef.current = now;
     setPhase('syncing');
     setError(null);
+    const cycleStartedAt = new Date().toISOString();
 
     try {
       const syncOneTable = async (
         table: SyncPayload['table'],
         cursor: SyncCursor,
-      ): Promise<{ maxCursor: SyncCursor }> => {
-        const localChanges = await since(table, cursor?.updated_at ?? null);
+        pulledAt: string | null,
+      ): Promise<{ maxSyncVersion: SyncCursor; pulledAt: string }> => {
+        const localChanges = await since(table, pulledAt ?? null);
         const isWorldStateTable = table === 'world_states';
 
-        // outbox の pending を取得し、localChanges と LWW でマージ
         const pending = await listPendingByTable(table);
         const mergedMap = new Map<
           string,
@@ -160,6 +165,7 @@ function useSyncInternal() {
             deleted: (it as any).deleted,
           });
         }
+
         for (const ob of pending) {
           if (isWorldStateTable && !isUuid(ob.id)) {
             await markSent([makeOutboxKey(table, ob.id)]);
@@ -183,7 +189,7 @@ function useSyncInternal() {
             updated_at: item.updated_at,
             deleted: item.deleted,
           })),
-          sinceCursor: cursor ?? undefined,
+          sinceVersion: cursor ?? undefined,
         });
 
         const cloudChanges = payload.changes.map((c) =>
@@ -199,33 +205,57 @@ function useSyncInternal() {
           markFailedFn: markFailed,
         });
 
-        return { maxCursor: payload.maxCursor ?? null };
+        return {
+          maxSyncVersion: payload.maxSyncVersion ?? null,
+          pulledAt: cycleStartedAt,
+        };
       };
 
       const currentFailures = new Set<SyncPayload['table']>();
-      const newCursors: Record<SyncPayload['table'], SyncCursor> = {
-        ...tableCursorsRef.current,
-      };
+      const rejectReasons = new Map<SyncPayload['table'], unknown>();
+      const newCursors: CursorMap = { ...tableCursorsRef.current };
+      const newPulledAt: PulledAtMap = { ...lastPulledAtRef.current };
 
       for (const group of TABLE_GROUPS) {
         const results = await Promise.allSettled(
-          group.map((table) => syncOneTable(table, tableCursorsRef.current[table])),
+          group.map((table) =>
+            syncOneTable(
+              table,
+              tableCursorsRef.current[table],
+              lastPulledAtRef.current[table],
+            ),
+          ),
         );
 
         results.forEach((result, index) => {
           const table = group[index];
           if (result.status === 'rejected') {
             currentFailures.add(table);
+            rejectReasons.set(table, result.reason);
             console.error(`Sync failed for ${table}:`, result.reason);
             return;
           }
-          if (result.value.maxCursor) {
-            newCursors[table] = result.value.maxCursor;
+
+          newPulledAt[table] = result.value.pulledAt;
+          if (result.value.maxSyncVersion !== null) {
+            newCursors[table] = result.value.maxSyncVersion;
+          } else if (newCursors[table] === null) {
+            newCursors[table] = '0';
           }
         });
       }
 
+      const hasNonRetryable = [...rejectReasons.values()].some(
+        (reason) => (reason as { nonRetryable?: boolean } | undefined)?.nonRetryable === true,
+      );
+      if (hasNonRetryable) {
+        const err = new Error('Sync blocked: migration mismatch detected. Apply migration 0021.');
+        (err as Error & { nonRetryable?: boolean }).nonRetryable = true;
+        throw err;
+      }
+
       setTableCursors(newCursors);
+      setLastPulledAt(newPulledAt);
 
       if (currentFailures.size === TABLES.length) {
         throw new Error('All tables failed to sync');
@@ -233,64 +263,67 @@ function useSyncInternal() {
 
       setLastSyncedAt(new Date().toISOString());
       setPhase('online');
-      // 同期成功時にリトライカウントをリセット
-      retryCountRef.current = 0; return { ok: true };
+      retryCountRef.current = 0;
+      return { ok: true };
     } catch (err: any) {
-      const isAuthError = (err?.message === 'Auth session missing!');
+      if (err?.nonRetryable === true) {
+        console.error('Sync non-retryable error:', err);
+        setError(err?.message ?? 'unknown');
+        setPhase('error');
+        retryCountRef.current = 0;
+        return { ok: false, reason: 'error', message: err?.message ?? 'unknown' };
+      }
+
+      const isAuthError = err?.message === 'Auth session missing!';
 
       if (isAuthError) {
-        // 1. 認証エラーの場合 (リトライ待ち)
         console.warn('Sync delayed: auth session not yet available. Retrying...');
         setError(null);
-        setPhase('syncing'); // 'error' にせず 'syncing' を維持
+        setPhase('syncing');
 
         const MAX_RETRIES = 5;
-        // useRef の値 (retryCountRef.current) を使って判定
         if (retryCountRef.current < MAX_RETRIES) {
           const base = 1000;
-          const backoff = base * Math.pow(2, retryCountRef.current); // .current を参照
+          const backoff = base * Math.pow(2, retryCountRef.current);
           const jitter = Math.floor(Math.random() * 250);
           const delay = Math.min(60000, backoff + jitter);
 
-          retryCountRef.current += 1; // カウントを増やす
-
-          window.setTimeout(() => { void syncAll(); }, delay);
+          retryCountRef.current += 1;
+          window.setTimeout(() => {
+            void syncAll();
+          }, delay);
         } else {
-          // リトライ上限に達した場合
           setError('Auth session timed out.');
           setPhase('error');
-          retryCountRef.current = 0; // カウントをリセット
+          retryCountRef.current = 0;
         }
 
         return { ok: true };
-
-      } else {
-        // 2. 認証以外の「本当のエラー」の場合
-        console.error('Sync error:', err);
-        setError(err?.message ?? 'unknown');
-        setPhase('error');
-
-        // (本当のエラーでもリトライを試みるロジック)
-        const MAX_RETRIES = 5;
-        if (retryCountRef.current < MAX_RETRIES) {
-          const base = 1000;
-          const backoff = base * Math.pow(2, retryCountRef.current); // .current を参照
-          const jitter = Math.floor(Math.random() * 250);
-          const delay = Math.min(60000, backoff + jitter);
-
-          retryCountRef.current += 1; // カウントを増やす
-
-          window.setTimeout(() => { void syncAll(); }, delay);
-        } else {
-          retryCountRef.current = 0; // カウントをリセット
-        }
-
-        return { ok: false, reason: 'error', message: err?.message };
       }
+
+      console.error('Sync error:', err);
+      setError(err?.message ?? 'unknown');
+      setPhase('error');
+
+      const MAX_RETRIES = 5;
+      if (retryCountRef.current < MAX_RETRIES) {
+        const base = 1000;
+        const backoff = base * Math.pow(2, retryCountRef.current);
+        const jitter = Math.floor(Math.random() * 250);
+        const delay = Math.min(60000, backoff + jitter);
+
+        retryCountRef.current += 1;
+        window.setTimeout(() => {
+          void syncAll();
+        }, delay);
+      } else {
+        retryCountRef.current = 0;
+      }
+
+      return { ok: false, reason: 'error', message: err?.message };
     } finally {
       syncingRef.current = false;
     }
-
   }, []);
 
   const syncAllRef = useRef(syncAll);
@@ -304,11 +337,10 @@ function useSyncInternal() {
     }, 1000);
   }, []);
 
-  // online/offline での同期（重複登録・多重実行を避ける）
   useEffect(() => {
     const onOnline = () => {
       setPhase('online');
-      requestDebouncedSync(); // (念のためデバウンス)
+      requestDebouncedSync();
     };
     const onOffline = () => setPhase('offline');
 
@@ -324,7 +356,6 @@ function useSyncInternal() {
     };
   }, [requestDebouncedSync]);
 
-  // Supabase Realtime 変更 → デバウンスして同期
   useEffect(() => {
     const client = supabaseClient;
     if (!client) return;
@@ -333,9 +364,9 @@ function useSyncInternal() {
       client
         .channel(`public:${table}`)
         .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
-          requestDebouncedSync(); // ← 直接 sync せずデバウンス
+          requestDebouncedSync();
         })
-        .subscribe()
+        .subscribe(),
     );
 
     return () => {
@@ -343,27 +374,32 @@ function useSyncInternal() {
         window.clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
-      channels.forEach((ch) => { void client.removeChannel(ch); });
+      channels.forEach((ch) => {
+        void client.removeChannel(ch);
+      });
     };
   }, [requestDebouncedSync]);
 
-  // 追加: 外部からの明示同期リクエスト（window.dispatchEvent(new Event('reladen:request-sync'))）
   useEffect(() => {
-    const onRequest = () => { requestDebouncedSync(); }; // (デバウンス)
+    const onRequest = () => {
+      requestDebouncedSync();
+    };
     window.addEventListener('reladen:request-sync', onRequest);
     return () => window.removeEventListener('reladen:request-sync', onRequest);
   }, [requestDebouncedSync]);
 
-  // Auth 状態変化で同期をトリガ
   useEffect(() => {
     const sb = supabaseClient;
     if (!sb) return;
 
     const { data: sub } = sb.auth.onAuthStateChange((event) => {
-      // 'INITIAL_SESSION' (初回ロード時) は無視し、
-      // 実際にサインイン/アウトした時だけ同期する
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        requestDebouncedSync(); // サインイン完了後に Authorization 付きで再同期
+      if (
+        event === 'SIGNED_IN' ||
+        event === 'SIGNED_OUT' ||
+        event === 'TOKEN_REFRESHED' ||
+        event === 'USER_UPDATED'
+      ) {
+        requestDebouncedSync();
       }
     });
 
@@ -379,7 +415,7 @@ function useSyncInternal() {
       sync: syncAll,
       isOnline: phase === 'online',
     }),
-    [phase, error, lastSyncedAt, tableCursors, syncAll]
+    [phase, error, lastSyncedAt, tableCursors, syncAll],
   );
 }
 

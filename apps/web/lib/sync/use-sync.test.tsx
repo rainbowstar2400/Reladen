@@ -4,16 +4,16 @@ import { act, cleanup, render, renderHook, waitFor } from '@testing-library/reac
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const TABLE_COUNT = 9;
-const TABLE_CURSOR_ID_BY_TABLE: Record<string, string> = {
-  presets: '10000000-0000-4000-8000-000000000001',
-  residents: '10000000-0000-4000-8000-000000000002',
-  relations: '10000000-0000-4000-8000-000000000003',
-  feelings: '10000000-0000-4000-8000-000000000004',
-  nicknames: '10000000-0000-4000-8000-000000000005',
-  events: '10000000-0000-4000-8000-000000000006',
-  consult_answers: '10000000-0000-4000-8000-000000000007',
-  world_states: '10000000-0000-4000-8000-000000000008',
-  player_profiles: '10000000-0000-4000-8000-000000000009',
+const TABLE_SYNC_VERSION_BY_TABLE: Record<string, string> = {
+  presets: '1001',
+  residents: '1002',
+  relations: '1003',
+  feelings: '1004',
+  nicknames: '1005',
+  events: '1006',
+  consult_answers: '1007',
+  world_states: '1008',
+  player_profiles: '1009',
 };
 
 const mocks = vi.hoisted(() => ({
@@ -95,10 +95,7 @@ function makeSyncResponse(input: RequestInfo | URL): Response {
       table,
       changes: [],
       pushResult: { consumedIndexes: [], rejected: [] },
-      maxCursor: {
-        updated_at: '2026-03-20T00:00:00.000Z',
-        id: TABLE_CURSOR_ID_BY_TABLE[table] ?? '10000000-0000-4000-8000-000000000000',
-      },
+      maxSyncVersion: TABLE_SYNC_VERSION_BY_TABLE[table] ?? '1000',
     }),
     {
       status: 200,
@@ -248,6 +245,7 @@ describe('useSync', () => {
     const firstBody = requestBodyAt(0);
     expect(firstBody).not.toHaveProperty('since');
     expect(firstBody).not.toHaveProperty('sinceCursor');
+    expect(firstBody).not.toHaveProperty('sinceVersion');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4100);
@@ -264,10 +262,8 @@ describe('useSync', () => {
     expect(fetchMock).toHaveBeenCalledTimes(TABLE_COUNT * 2);
     const secondBody = requestBodyAt(TABLE_COUNT);
     expect(secondBody).not.toHaveProperty('since');
-    expect(secondBody.sinceCursor).toEqual({
-      updated_at: '2026-03-20T00:00:00.000Z',
-      id: TABLE_CURSOR_ID_BY_TABLE.player_profiles,
-    });
+    expect(secondBody).not.toHaveProperty('sinceCursor');
+    expect(secondBody.sinceVersion).toBe(TABLE_SYNC_VERSION_BY_TABLE.player_profiles);
   });
 
   it('初回 syncAll は since 未指定で送信し lastSyncedAt を更新する', async () => {
@@ -282,6 +278,7 @@ describe('useSync', () => {
     const firstBody = requestBodyAt(0);
     expect(firstBody).not.toHaveProperty('since');
     expect(firstBody).not.toHaveProperty('sinceCursor');
+    expect(firstBody).not.toHaveProperty('sinceVersion');
     expect(result.current.lastSyncedAt).toEqual(expect.any(String));
   });
 
@@ -355,11 +352,47 @@ describe('useSync', () => {
 
     expect(result.current.phase).toBe('online');
     expect(result.current.tableCursors.presets).toBeNull();
-    expect(result.current.tableCursors.player_profiles).toEqual({
-      updated_at: '2026-03-20T00:00:00.000Z',
-      id: TABLE_CURSOR_ID_BY_TABLE.player_profiles,
-    });
+    expect(result.current.tableCursors.player_profiles).toBe(TABLE_SYNC_VERSION_BY_TABLE.player_profiles);
     expect(result.current.lastSyncedAt).toEqual(expect.any(String));
+    errorSpy.mockRestore();
+  });
+
+  it('1テーブルが 409 を返した場合は非再試行で error に遷移する', async () => {
+    vi.useFakeTimers();
+    const blockedTable = 'presets';
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const table = tableFromInput(input);
+      if (table === blockedTable) {
+        return Promise.resolve(
+          new Response('migration required', {
+            status: 409,
+            headers: { 'Content-Type': 'text/plain' },
+          }),
+        );
+      }
+      return Promise.resolve(makeSyncResponse(input));
+    });
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSync(), { wrapper });
+
+    await act(async () => {
+      const syncResult = await result.current.sync();
+      expect(syncResult).toEqual({
+        ok: false,
+        reason: 'error',
+        message: expect.stringContaining('migration mismatch'),
+      });
+    });
+
+    expect(result.current.phase).toBe('error');
+    const callCountAfterSync = fetchMock.mock.calls.length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120000);
+      await flushMicrotasks();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(callCountAfterSync);
     errorSpy.mockRestore();
   });
 

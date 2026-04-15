@@ -56,18 +56,56 @@ type PushRejectedRow = {
   id?: string;
 };
 
-type SyncCursor = {
+type LegacySyncCursor = {
   updated_at: string;
   id: string;
 };
 
+type SyncVersionCursor = bigint;
+
 const SYNC_PULL_PAGE_SIZE = 500;
 
-function buildCursorFilter(cursor: SyncCursor): string {
+function buildCursorFilter(cursor: LegacySyncCursor): string {
   return `updated_at.gt.${cursor.updated_at},and(updated_at.eq.${cursor.updated_at},id.gt.${cursor.id})`;
 }
 
-function computeMaxCursor(rows: any[]): SyncCursor | null {
+function parseSyncVersion(value: unknown): SyncVersionCursor | null {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value < 0) return null;
+    return BigInt(Math.trunc(value));
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value)) {
+    try {
+      return BigInt(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function formatSyncVersion(value: SyncVersionCursor | null): string | null {
+  if (value === null) return null;
+  return value.toString();
+}
+
+function computeMaxSyncVersion(rows: any[]): SyncVersionCursor | null {
+  if (!rows.length) return null;
+  let max: SyncVersionCursor | null = null;
+
+  for (const row of rows) {
+    const parsed = parseSyncVersion(row?.sync_version);
+    if (parsed === null) continue;
+    if (max === null || parsed > max) {
+      max = parsed;
+    }
+  }
+
+  return max;
+}
+
+function computeMaxCursor(rows: any[]): LegacySyncCursor | null {
   if (!rows.length) return null;
   let max = rows[0] as { updated_at?: string; id?: string };
 
@@ -92,7 +130,7 @@ function computeMaxCursor(rows: any[]): SyncCursor | null {
 async function pullRowsByKeyset(
   sb: ReturnType<typeof createAuthedClient>,
   table: AllowedTable,
-  startCursor: SyncCursor | null,
+  startCursor: LegacySyncCursor | null,
 ): Promise<any[]> {
   const rows: any[] = [];
   let cursor = startCursor;
@@ -119,6 +157,36 @@ async function pullRowsByKeyset(
     const last = page[page.length - 1] as { updated_at?: unknown; id?: unknown };
     if (typeof last?.updated_at !== 'string' || typeof last?.id !== 'string') break;
     cursor = { updated_at: last.updated_at, id: last.id };
+  }
+
+  return rows;
+}
+
+async function pullRowsBySyncVersion(
+  sb: ReturnType<typeof createAuthedClient>,
+  table: AllowedTable,
+  afterVersion: SyncVersionCursor | null,
+): Promise<any[]> {
+  const rows: any[] = [];
+  let cursor = afterVersion ?? -1n;
+
+  while (true) {
+    const { data, error } = await sb
+      .from(table)
+      .select('*')
+      .gt('sync_version', cursor.toString())
+      .order('sync_version', { ascending: true })
+      .limit(SYNC_PULL_PAGE_SIZE);
+    if (error) throw asHttpError('select failed', error);
+
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < SYNC_PULL_PAGE_SIZE) break;
+
+    const last = page[page.length - 1] as { sync_version?: unknown };
+    const lastVersion = parseSyncVersion(last?.sync_version);
+    if (lastVersion === null) break;
+    cursor = lastVersion;
   }
 
   return rows;
@@ -371,6 +439,36 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
       return jsonWithHeaders({ message: 'auth error: ' + (authError?.message ?? 'no user') }, 401, requestId);
     }
 
+    const sinceVersion = parseSyncVersion(parsed.data.sinceVersion ?? null);
+    const sinceCursor = parsed.data.sinceCursor ?? null;
+    const sinceLegacy = (parsed.data.since && new Date(parsed.data.since).toISOString()) || null;
+
+    if (sinceVersion === null && !sinceCursor && !sinceLegacy) {
+      const { data: nullSyncRows, error: nullSyncError } = await sb
+        .from(table)
+        .select('id')
+        .is('sync_version', null)
+        .limit(1);
+      if (nullSyncError) throw asHttpError('select failed', nullSyncError);
+
+      if ((nullSyncRows ?? []).length > 0) {
+        console.error(JSON.stringify({
+          lvl: 'error',
+          at: 'sync.pull.null_sync_version',
+          requestId,
+          table,
+          message: 'sync_version IS NULL rows detected. Apply migration 0021_backfill_sync_version_triggers_indexes.sql.',
+        }));
+        return jsonWithHeaders(
+          {
+            message: `${table} has rows without sync_version. Apply migration 0021_backfill_sync_version_triggers_indexes.sql.`,
+          },
+          409,
+          requestId,
+        );
+      }
+    }
+
     // --- push (upsert) ---
     // push ロジックを汎用化
     const incoming = parsed.data.changes ?? [];
@@ -488,18 +586,19 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
     }
 
     // --- pull (select) ---
-    const sinceCursor = parsed.data.sinceCursor ?? null;
-    const sinceLegacy = (parsed.data.since && new Date(parsed.data.since).toISOString()) || null;
     let cloud: any[] = [];
-    if (sinceCursor) {
+    if (sinceVersion !== null) {
+      cloud = await pullRowsBySyncVersion(sb, table as AllowedTable, sinceVersion);
+    } else if (sinceCursor) {
       cloud = await pullRowsByKeyset(sb, table as AllowedTable, sinceCursor);
     } else if (sinceLegacy) {
       const { data, error } = await sb.from(table).select('*').gte('updated_at', sinceLegacy);
       if (error) throw asHttpError('select failed', error);
       cloud = data ?? [];
     } else {
-      cloud = await pullRowsByKeyset(sb, table as AllowedTable, null);
+      cloud = await pullRowsBySyncVersion(sb, table as AllowedTable, null);
     }
+    const maxSyncVersion = formatSyncVersion(computeMaxSyncVersion(cloud));
     const maxCursor = computeMaxCursor(cloud);
 
     const pushResult = {
@@ -517,6 +616,7 @@ export async function POST(req: NextRequest, { params }: { params: { table: stri
         deleted: !!row.deleted,
       })),
       pushResult,
+      maxSyncVersion,
       maxCursor,
     });
 

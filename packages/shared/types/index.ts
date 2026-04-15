@@ -198,6 +198,7 @@ export const syncPayloadSchema = z.object({
     deleted: z.boolean().optional(),
   })),
   since: z.string().datetime().optional(),
+  sinceVersion: z.string().regex(/^\d+$/).nullable().optional(),
   sinceCursor: z
     .object({
       updated_at: z.string().datetime(),
@@ -213,6 +214,7 @@ export const syncPayloadSchema = z.object({
       id: z.string().optional(),
     })).default([]),
   }).optional(),
+  maxSyncVersion: z.string().regex(/^\d+$/).nullable().optional(),
   maxCursor: z
     .object({
       updated_at: z.string().datetime(),
