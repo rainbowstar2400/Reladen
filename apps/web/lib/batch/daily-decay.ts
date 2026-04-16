@@ -1,7 +1,7 @@
 // apps/web/lib/batch/daily-decay.ts
 // 日次バッチ: 好感度自然減少 (A-6) + 印象時間回帰 (B-1) + awkward時間回復 (B-4)
 
-import { listKV as listAny, putKV as putAny } from "@/lib/db/kv-server";
+import { listActiveKV as listActiveAny, putKV as putAny } from "@/lib/db/kv-server";
 import { newId } from "@/lib/newId";
 
 // ---------------------------------------------------------------------------
@@ -147,25 +147,23 @@ export async function runDailyDecay(): Promise<{
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
 
-  // 全 feelings / relations を取得
-  const feelings = (await listAny("feelings")) as unknown as FeelingRow[] | null;
-  const relations = (await listAny("relations")) as unknown as RelationRow[] | null;
+  // active な feelings / relations を取得
+  const feelings = (await listActiveAny("feelings")) as unknown as FeelingRow[];
+  const relations = (await listActiveAny("relations")) as unknown as RelationRow[];
 
-  if (!Array.isArray(feelings) || feelings.length === 0) {
+  if (feelings.length === 0) {
     return { processed: 0, updated: 0, transitioned: 0 };
   }
 
   // ペアの関係タイプを引くヘルパー
   const relationMap = new Map<string, string>();
-  if (Array.isArray(relations)) {
-    for (const rel of relations) {
-      if (!rel || rel.deleted || !rel.type) continue;
-      const aId = rel.a_id ?? (rel as any).aId;
-      const bId = rel.b_id ?? (rel as any).bId;
-      if (aId && bId) {
-        relationMap.set(`${aId}:${bId}`, rel.type);
-        relationMap.set(`${bId}:${aId}`, rel.type);
-      }
+  for (const rel of relations) {
+    if (!rel || !rel.type) continue;
+    const aId = rel.a_id ?? (rel as any).aId;
+    const bId = rel.b_id ?? (rel as any).bId;
+    if (aId && bId) {
+      relationMap.set(`${aId}:${bId}`, rel.type);
+      relationMap.set(`${bId}:${aId}`, rel.type);
     }
   }
 
@@ -174,7 +172,6 @@ export async function runDailyDecay(): Promise<{
   let transitioned = 0;
 
   for (const feeling of feelings) {
-    if (feeling.deleted) continue;
     processed++;
 
     const lastContact = feeling.last_contacted_at ?? feeling.updated_at;
@@ -241,39 +238,37 @@ export async function runDailyDecay(): Promise<{
   }
 
   // none → acquaintance 遷移（日次バッチで確率遷移）
-  if (Array.isArray(relations)) {
-    for (const rel of relations) {
-      if (!rel || rel.deleted) continue;
-      if (rel.type !== 'none') continue;
+  for (const rel of relations) {
+    if (!rel) continue;
+    if (rel.type !== 'none') continue;
 
-      // 5%の確率で遷移
-      if (Math.random() < 0.05) {
-        await putAny("relations", {
-          ...rel,
-          type: 'acquaintance',
-          updated_at: nowIso,
-        });
+    // 5%の確率で遷移
+    if (Math.random() < 0.05) {
+      await putAny("relations", {
+        ...rel,
+        type: 'acquaintance',
+        updated_at: nowIso,
+      });
 
-        const aId = rel.a_id ?? (rel as any).aId;
-        const bId = rel.b_id ?? (rel as any).bId;
+      const aId = rel.a_id ?? (rel as any).aId;
+      const bId = rel.b_id ?? (rel as any).bId;
 
-        // system イベント記録
-        await putAny("events", {
-          id: newId(),
-          kind: "system",
-          updated_at: nowIso,
-          deleted: false,
-          payload: {
-            type: "relation_transition",
-            subType: "became_acquaintance",
-            participants: [aId, bId],
-            from: "none",
-            to: "acquaintance",
-          },
-        } as any);
+      // system イベント記録
+      await putAny("events", {
+        id: newId(),
+        kind: "system",
+        updated_at: nowIso,
+        deleted: false,
+        payload: {
+          type: "relation_transition",
+          subType: "became_acquaintance",
+          participants: [aId, bId],
+          from: "none",
+          to: "acquaintance",
+        },
+      } as any);
 
-        transitioned++;
-      }
+      transitioned++;
     }
   }
 

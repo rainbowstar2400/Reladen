@@ -19,6 +19,8 @@ const isoDate = z.string().refine(
   { message: 'invalid ISO datetime' }
 );
 
+const syncVersionString = z.string().regex(/^\d+$/, { message: 'invalid sync version' });
+
 export const syncChangeSchema = z.object({
   data: z.record(z.any()).and(
     z.object({
@@ -34,6 +36,11 @@ export const syncChangeSchema = z.object({
 export const syncRequestSchema = z.object({
   table: z.enum(allowedTables),
   since: isoDate.optional(),
+  sinceVersion: syncVersionString.nullable().optional(),
+  sinceCursor: z.object({
+    updated_at: z.string().datetime(),
+    id: z.string().uuid(),
+  }).nullable().optional(),
   changes: z.array(syncChangeSchema).default([]),
 });
 
@@ -54,5 +61,10 @@ export const syncResponseSchema = z.object({
   table: z.enum(allowedTables),
   changes: z.array(syncChangeSchema),
   pushResult: syncPushResultSchema.optional(),
+  maxSyncVersion: syncVersionString.nullable().optional(),
+  maxCursor: z.object({
+    updated_at: z.string().datetime(),
+    id: z.string().uuid(),
+  }).nullable().optional(),
 });
 export type TSyncResponse = z.infer<typeof syncResponseSchema>;

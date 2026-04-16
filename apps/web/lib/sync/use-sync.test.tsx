@@ -4,6 +4,17 @@ import { act, cleanup, render, renderHook, waitFor } from '@testing-library/reac
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const TABLE_COUNT = 9;
+const TABLE_SYNC_VERSION_BY_TABLE: Record<string, string> = {
+  presets: '1001',
+  residents: '1002',
+  relations: '1003',
+  feelings: '1004',
+  nicknames: '1005',
+  events: '1006',
+  consult_answers: '1007',
+  world_states: '1008',
+  player_profiles: '1009',
+};
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -84,6 +95,7 @@ function makeSyncResponse(input: RequestInfo | URL): Response {
       table,
       changes: [],
       pushResult: { consumedIndexes: [], rejected: [] },
+      maxSyncVersion: TABLE_SYNC_VERSION_BY_TABLE[table] ?? '1000',
     }),
     {
       status: 200,
@@ -232,6 +244,8 @@ describe('useSync', () => {
     expect(fetchMock).toHaveBeenCalledTimes(TABLE_COUNT);
     const firstBody = requestBodyAt(0);
     expect(firstBody).not.toHaveProperty('since');
+    expect(firstBody).not.toHaveProperty('sinceCursor');
+    expect(firstBody).not.toHaveProperty('sinceVersion');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4100);
@@ -247,12 +261,15 @@ describe('useSync', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(TABLE_COUNT * 2);
     const secondBody = requestBodyAt(TABLE_COUNT);
-    expect(secondBody.since).toEqual(expect.any(String));
+    expect(secondBody).not.toHaveProperty('since');
+    expect(secondBody).not.toHaveProperty('sinceCursor');
+    expect(secondBody.sinceVersion).toBe(TABLE_SYNC_VERSION_BY_TABLE.player_profiles);
   });
 
-  it('lastSyncedAt=null の初回 syncAll は since 未指定で送信される', async () => {
+  it('初回 syncAll は since 未指定で送信し lastSyncedAt を更新する', async () => {
     const { result } = renderHook(() => useSync(), { wrapper });
 
+    expect(result.current.lastSyncedAt).toBeNull();
     await act(async () => {
       await result.current.sync();
     });
@@ -260,6 +277,9 @@ describe('useSync', () => {
     expect(fetchMock).toHaveBeenCalled();
     const firstBody = requestBodyAt(0);
     expect(firstBody).not.toHaveProperty('since');
+    expect(firstBody).not.toHaveProperty('sinceCursor');
+    expect(firstBody).not.toHaveProperty('sinceVersion');
+    expect(result.current.lastSyncedAt).toEqual(expect.any(String));
   });
 
   it('offline -> online -> syncing -> online/error の phase 遷移が正しい', async () => {
@@ -305,10 +325,94 @@ describe('useSync', () => {
     fetchMock.mockRejectedValueOnce(new Error('network down'));
     await act(async () => {
       const syncResult = await result.current.sync();
-      expect(syncResult).toEqual({ ok: false, reason: 'error', message: 'network down' });
+      expect(syncResult).toEqual({ ok: true });
     });
-    expect(result.current.phase).toBe('error');
+    expect(result.current.phase).toBe('online');
 
+    errorSpy.mockRestore();
+  });
+
+  it('1テーブルのみ失敗しても他テーブル同期が成功すれば online を維持する', async () => {
+    const failedTable = 'presets';
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const table = tableFromInput(input);
+      if (table === failedTable) {
+        return Promise.reject(new Error('partial failure'));
+      }
+      return Promise.resolve(makeSyncResponse(input));
+    });
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSync(), { wrapper });
+
+    await act(async () => {
+      const syncResult = await result.current.sync();
+      expect(syncResult).toEqual({ ok: true });
+    });
+
+    expect(result.current.phase).toBe('online');
+    expect(result.current.tableCursors.presets).toBeNull();
+    expect(result.current.tableCursors.player_profiles).toBe(TABLE_SYNC_VERSION_BY_TABLE.player_profiles);
+    expect(result.current.lastSyncedAt).toEqual(expect.any(String));
+    errorSpy.mockRestore();
+  });
+
+  it('1テーブルが 409 を返した場合は非再試行で error に遷移する', async () => {
+    vi.useFakeTimers();
+    const blockedTable = 'presets';
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const table = tableFromInput(input);
+      if (table === blockedTable) {
+        return Promise.resolve(
+          new Response('migration required', {
+            status: 409,
+            headers: { 'Content-Type': 'text/plain' },
+          }),
+        );
+      }
+      return Promise.resolve(makeSyncResponse(input));
+    });
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { result } = renderHook(() => useSync(), { wrapper });
+
+    await act(async () => {
+      const syncResult = await result.current.sync();
+      expect(syncResult).toEqual({
+        ok: false,
+        reason: 'error',
+        message: expect.stringContaining('migration mismatch'),
+      });
+    });
+
+    expect(result.current.phase).toBe('error');
+    const callCountAfterSync = fetchMock.mock.calls.length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120000);
+      await flushMicrotasks();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(callCountAfterSync);
+    errorSpy.mockRestore();
+  });
+
+  it('全テーブル失敗時は error になる', async () => {
+    fetchMock.mockRejectedValue(new Error('all tables failed'));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useSync(), { wrapper });
+
+    await act(async () => {
+      const syncResult = await result.current.sync();
+      expect(syncResult).toEqual({
+        ok: false,
+        reason: 'error',
+        message: 'All tables failed to sync',
+      });
+    });
+
+    expect(result.current.phase).toBe('error');
+    expect(result.current.lastSyncedAt).toBeNull();
     errorSpy.mockRestore();
   });
 });

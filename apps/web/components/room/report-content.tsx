@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,12 +17,26 @@ import { remoteFetchRecentEvents } from '@/lib/sync/remote-events';
 import { fetchEventById } from '@/lib/data/notifications';
 import { filterReportTargetEvents, resolveConsultSelectedChoiceId } from '@/lib/reports/report-visibility';
 import { useDeskTransition } from '@/components/room/room-transition-context';
-import { LogDetailPanelContent, LogDetail } from '@/components/logs/log-detail-panel';
-import { ConsultDetailPanelContent, ConsultDetail } from '@/components/consults/consult-detail-panel';
+import type { LogDetail } from '@/components/logs/log-detail-panel';
+import type { ConsultDetail } from '@/components/consults/consult-detail-panel';
 import { motion, AnimatePresence } from 'framer-motion';
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage';
 import { useSync } from '@/lib/sync/use-sync';
 import { useQueryClient } from '@tanstack/react-query';
+
+const LogDetailPanelContent = dynamic(
+  () => import('@/components/logs/log-detail-panel').then((m) => m.LogDetailPanelContent),
+  {
+    loading: () => <div className="p-4 text-sm text-muted-foreground">読み込み中…</div>,
+  },
+);
+
+const ConsultDetailPanelContent = dynamic(
+  () => import('@/components/consults/consult-detail-panel').then((m) => m.ConsultDetailPanelContent),
+  {
+    loading: () => <div className="p-4 text-sm text-muted-foreground">読み込み中…</div>,
+  },
+);
 
 type ChangeKind = '好感度' | '印象' | '関係' | '信頼度';
 type ChangeKindFilter = ChangeKind | '';

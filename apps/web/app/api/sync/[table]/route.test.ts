@@ -6,9 +6,12 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   upsert: vi.fn(),
   insert: vi.fn(),
-  select: vi.fn(),
   in: vi.fn(),
+  gt: vi.fn(),
+  is: vi.fn(),
   gte: vi.fn(),
+  or: vi.fn(),
+  limit: vi.fn(),
 }));
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -28,13 +31,25 @@ function makeRequest(table: string, body: Record<string, unknown>) {
   });
 }
 
-function makeGenericTableFromMock() {
+function makeSyncTableFromMock() {
+  const queryBuilder = {
+    gt: mocks.gt,
+    is: mocks.is,
+    gte: mocks.gte,
+    or: mocks.or,
+    order: (_column: string, _opts: unknown) => queryBuilder,
+    limit: mocks.limit,
+  };
+  mocks.gt.mockImplementation((_column: string, _value: string) => queryBuilder);
+  mocks.is.mockImplementation((_column: string, _value: null) => queryBuilder);
+  mocks.or.mockImplementation((_query: string) => queryBuilder);
+
   return {
     upsert: mocks.upsert,
     insert: mocks.insert,
     select: (columns?: string) => {
       if (columns === 'id,updated_at') return { in: mocks.in };
-      return { gte: mocks.gte };
+      return queryBuilder;
     },
   };
 }
@@ -55,7 +70,7 @@ describe('POST /api/sync/[table]', () => {
       from: mocks.from,
     });
     mocks.in.mockResolvedValue({ data: [], error: null });
-    mocks.select.mockResolvedValue({ data: [], error: null });
+    mocks.limit.mockResolvedValue({ data: [], error: null });
 
     if (!POST) {
       ({ POST } = await import('@/app/api/sync/[table]/route'));
@@ -69,27 +84,24 @@ describe('POST /api/sync/[table]', () => {
         category: 'speech',
         label: '初回同期',
         updated_at: '2026-03-20T00:00:00.000Z',
+        sync_version: '11',
         deleted: false,
       },
     ];
-    mocks.select.mockResolvedValue({ data: cloudRows, error: null });
-    mocks.from.mockImplementation((_table: string) => ({
-      upsert: mocks.upsert,
-      insert: mocks.insert,
-      select: (columns?: string) => {
-        if (columns === 'id,updated_at') return { in: mocks.in };
-        if (columns === '*') return mocks.select(columns);
-        return { gte: mocks.gte };
-      },
-    }));
+    mocks.limit
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: cloudRows, error: null });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('presets', { changes: [] });
     const res = await POST(req as any, { params: { table: 'presets' } } as any);
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(mocks.select).toHaveBeenCalledWith('*');
+    expect(mocks.limit).toHaveBeenCalledTimes(2);
+    expect(mocks.gt).toHaveBeenCalledWith('sync_version', '-1');
     expect(data.changes).toHaveLength(1);
+    expect(data.maxSyncVersion).toBe('11');
     expect(data.changes[0].data.id).toBe('50505050-5050-4505-8505-505050505050');
   });
 
@@ -101,11 +113,12 @@ describe('POST /api/sync/[table]', () => {
         category: 'speech',
         label: '差分同期',
         updated_at: '2026-03-21T00:00:00.000Z',
+        sync_version: '12',
         deleted: false,
       },
     ];
     mocks.gte.mockResolvedValue({ data: cloudRows, error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('presets', { changes: [], since });
     const res = await POST(req as any, { params: { table: 'presets' } } as any);
@@ -114,17 +127,203 @@ describe('POST /api/sync/[table]', () => {
     expect(res.status).toBe(200);
     expect(mocks.gte).toHaveBeenCalledWith('updated_at', since);
     expect(data.changes).toHaveLength(1);
+    expect(data.maxSyncVersion).toBe('12');
     expect(data.changes[0].data.id).toBe('60606060-6060-4606-8606-606060606060');
+  });
+
+  it('sinceVersion 指定時は sync_version 差分を取得し maxSyncVersion を返す', async () => {
+    const cloudRows = [
+      {
+        id: '70707070-7070-4707-8707-707070707070',
+        category: 'speech',
+        label: '差分1',
+        updated_at: '2026-03-22T00:00:00.000Z',
+        sync_version: '21',
+        deleted: false,
+      },
+      {
+        id: '80808080-8080-4808-8808-808080808080',
+        category: 'speech',
+        label: '差分2',
+        updated_at: '2026-03-22T00:00:00.000Z',
+        sync_version: '22',
+        deleted: false,
+      },
+    ];
+    mocks.limit.mockResolvedValue({ data: cloudRows, error: null });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
+
+    const req = makeRequest('presets', {
+      changes: [],
+      sinceVersion: '20',
+    });
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(mocks.gt).toHaveBeenCalledWith('sync_version', '20');
+    expect(data.changes).toHaveLength(2);
+    expect(data.maxSyncVersion).toBe('22');
+  });
+
+  it('初回同期はキーセットページネーションで全件取得する', async () => {
+    const firstPage = Array.from({ length: 500 }, (_, index) => ({
+      id: `aaaaaaaa-aaaa-4aaa-8aaa-${index.toString(16).padStart(12, '0')}`,
+      category: 'speech',
+      label: `初回-${index}`,
+      updated_at: '2026-03-22T00:00:00.000Z',
+      sync_version: String(index + 1),
+      deleted: false,
+    }));
+    const secondPage = [
+      {
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-ffffffffffff',
+        category: 'speech',
+        label: '初回-500',
+        updated_at: '2026-03-23T00:00:00.000Z',
+        sync_version: '501',
+        deleted: false,
+      },
+    ];
+    mocks.limit
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: firstPage, error: null })
+      .mockResolvedValueOnce({ data: secondPage, error: null });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
+
+    const req = makeRequest('presets', { changes: [] });
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.changes).toHaveLength(501);
+    expect(data.maxSyncVersion).toBe('501');
+    expect(mocks.limit).toHaveBeenCalledTimes(3);
+  });
+
+  it('初回同期で sync_version が NULL の行がある場合は 409 を返す', async () => {
+    mocks.limit.mockResolvedValue({
+      data: [{ id: '50505050-5050-4505-8505-505050505050' }],
+      error: null,
+    });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
+
+    const req = makeRequest('presets', { changes: [] });
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(mocks.is).toHaveBeenCalledWith('sync_version', null);
+    expect(data.message).toContain('migration 0021_backfill_sync_version_triggers_indexes.sql');
+  });
+
+  it('初回同期（changes あり）で sync_version が NULL の行がある場合は push 前に 409 を返す', async () => {
+    mocks.limit.mockResolvedValue({
+      data: [{ id: '50505050-5050-4505-8505-505050505050' }],
+      error: null,
+    });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
+
+    const req = makeRequest('presets', {
+      changes: [
+        {
+          data: {
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            category: 'speech',
+            label: 'push-before-check',
+            updated_at: '2026-03-20T00:00:00.000Z',
+            deleted: false,
+          },
+          updated_at: '2026-03-20T00:00:00.000Z',
+          deleted: false,
+        },
+      ],
+    });
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(mocks.is).toHaveBeenCalledWith('sync_version', null);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(data.message).toContain('migration 0021_backfill_sync_version_triggers_indexes.sql');
+  });
+
+  it('sinceVersion 同値境界でも次ページを取りこぼさず取得できる', async () => {
+    const timestamp = '2026-03-22T00:00:00.000Z';
+    const firstPage = Array.from({ length: 500 }, (_, index) => ({
+      id: `bbbbbbbb-bbbb-4bbb-8bbb-${(index + 1).toString(16).padStart(12, '0')}`,
+      category: 'speech',
+      label: `差分-${index}`,
+      updated_at: timestamp,
+      sync_version: String(index + 1001),
+      deleted: false,
+    }));
+    const secondPage = [
+      {
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-ffffffffffff',
+        category: 'speech',
+        label: '差分-500',
+        updated_at: timestamp,
+        sync_version: '1501',
+        deleted: false,
+      },
+    ];
+    mocks.limit
+      .mockResolvedValueOnce({ data: firstPage, error: null })
+      .mockResolvedValueOnce({ data: secondPage, error: null });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
+
+    const req = makeRequest('presets', {
+      changes: [],
+      sinceVersion: '1000',
+    });
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.changes).toHaveLength(501);
+    expect(data.maxSyncVersion).toBe('1501');
+    expect(mocks.limit).toHaveBeenCalledTimes(2);
+    expect(mocks.gt).toHaveBeenCalled();
+  });
+
+  it('旧クライアント互換: sinceCursor 指定時はキーセット条件で取得する', async () => {
+    const cloudRows = [
+      {
+        id: '90909090-9090-4909-8909-909090909090',
+        category: 'speech',
+        label: '旧互換',
+        updated_at: '2026-03-24T00:00:00.000Z',
+        sync_version: '2500',
+        deleted: false,
+      },
+    ];
+    mocks.limit.mockResolvedValue({ data: cloudRows, error: null });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
+
+    const req = makeRequest('presets', {
+      changes: [],
+      sinceCursor: {
+        updated_at: '2026-03-23T00:00:00.000Z',
+        id: '60606060-6060-4606-8606-606060606060',
+      },
+    });
+    const res = await POST(req as any, { params: { table: 'presets' } } as any);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(mocks.or).toHaveBeenCalled();
+    expect(data.maxCursor).toEqual({
+      updated_at: '2026-03-24T00:00:00.000Z',
+      id: '90909090-9090-4909-8909-909090909090',
+    });
+    expect(data.maxSyncVersion).toBe('2500');
   });
 
   it('consult_answers を初回 insert できる（owner_id を注入する）', async () => {
     mocks.insert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((table: string) => {
-      if (table === 'consult_answers') {
-        return { insert: mocks.insert, select: mocks.select };
-      }
-      return { upsert: mocks.upsert, select: mocks.select };
-    });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('consult_answers', {
       changes: [
@@ -164,10 +363,7 @@ describe('POST /api/sync/[table]', () => {
         message: 'duplicate key value violates unique constraint "consult_answers_pkey"',
       },
     });
-    mocks.from.mockImplementation((table: string) => {
-      if (table === 'consult_answers') return { insert: mocks.insert, select: mocks.select };
-      return { upsert: mocks.upsert, select: mocks.select };
-    });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('consult_answers', {
       changes: [
@@ -195,10 +391,7 @@ describe('POST /api/sync/[table]', () => {
 
   it('camelCase 入力を受理し、snake_case 列へ正規化して insert する', async () => {
     mocks.insert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((table: string) => {
-      if (table === 'consult_answers') return { insert: mocks.insert, select: mocks.select };
-      return { upsert: mocks.upsert, select: mocks.select };
-    });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('consult_answers', {
       changes: [
@@ -231,10 +424,7 @@ describe('POST /api/sync/[table]', () => {
         message: 'new row violates row-level security policy (USING expression) for table "consult_answers"',
       },
     });
-    mocks.from.mockImplementation((table: string) => {
-      if (table === 'consult_answers') return { insert: mocks.insert };
-      return { upsert: mocks.upsert, select: mocks.select };
-    });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('consult_answers', {
       changes: [
@@ -266,10 +456,7 @@ describe('POST /api/sync/[table]', () => {
         message: 'invalid input syntax for type uuid: "not-a-uuid"',
       },
     });
-    mocks.from.mockImplementation((table: string) => {
-      if (table === 'consult_answers') return { insert: mocks.insert };
-      return { upsert: mocks.upsert, select: mocks.select };
-    });
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('consult_answers', {
       changes: [
@@ -301,7 +488,7 @@ describe('POST /api/sync/[table]', () => {
         message: 'new row violates row-level security policy (USING expression) for table "presets"',
       },
     });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('presets', {
       changes: [
@@ -333,7 +520,7 @@ describe('POST /api/sync/[table]', () => {
       error: null,
     });
     mocks.upsert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('presets', {
       changes: [
@@ -365,7 +552,7 @@ describe('POST /api/sync/[table]', () => {
       error: null,
     });
     mocks.upsert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('presets', {
       changes: [
@@ -395,7 +582,7 @@ describe('POST /api/sync/[table]', () => {
       error: null,
     });
     mocks.upsert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('presets', {
       changes: [
@@ -424,7 +611,7 @@ describe('POST /api/sync/[table]', () => {
       error: null,
     });
     mocks.upsert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('presets', {
       changes: [
@@ -450,7 +637,7 @@ describe('POST /api/sync/[table]', () => {
   it('10件中1件の invalid updated_at は rejected し、他は処理を継続する', async () => {
     mocks.in.mockResolvedValue({ data: [], error: null });
     mocks.upsert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const changes = Array.from({ length: 10 }, (_, index) => ({
       data: {
@@ -484,7 +671,7 @@ describe('POST /api/sync/[table]', () => {
   it('全件 invalid updated_at の場合は 200 + rejected のみを返す', async () => {
     mocks.in.mockResolvedValue({ data: [], error: null });
     mocks.upsert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('presets', {
       changes: [
@@ -535,7 +722,7 @@ describe('POST /api/sync/[table]', () => {
 
   it('同期許可列: residents.nicknameTendency を nickname_tendency として upsert する', async () => {
     mocks.upsert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('residents', {
       changes: [
@@ -561,7 +748,7 @@ describe('POST /api/sync/[table]', () => {
 
   it('同期許可列: relations.familySubType を family_sub_type として upsert する', async () => {
     mocks.upsert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('relations', {
       changes: [
@@ -589,7 +776,7 @@ describe('POST /api/sync/[table]', () => {
 
   it('同期許可列: feelings の拡張列を snake_case として upsert する', async () => {
     mocks.upsert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('feelings', {
       changes: [
@@ -626,7 +813,7 @@ describe('POST /api/sync/[table]', () => {
 
   it('同期許可列: nicknames.locked を upsert する', async () => {
     mocks.upsert.mockResolvedValue({ error: null });
-    mocks.from.mockImplementation((_table: string) => makeGenericTableFromMock());
+    mocks.from.mockImplementation((_table: string) => makeSyncTableFromMock());
 
     const req = makeRequest('nicknames', {
       changes: [

@@ -19,21 +19,24 @@ function isAuthError(e: any): boolean {
   );
 }
 
-type Table =
+type SoftDeleteTable =
   | "events"
-  | "topic_threads"
-  | "notifications"
   | "consult_answers"
   | "feelings"
   | "residents"
   | "presets"
   | "relations"
   | "world_states"
+  | "nicknames"
+  | "player_profiles"
+  | "topic_threads"
   | "shared_snippets"
   | "recent_events"
-  | "offscreen_knowledge"
-  | "nicknames"
-  | "player_profiles";
+  | "offscreen_knowledge";
+
+type NonDeleteTable = "notifications";
+
+type Table = SoftDeleteTable | NonDeleteTable;
 
 type OwnerColumnConfig =
   | { type: "fixed"; column: string }
@@ -125,6 +128,102 @@ export async function putKV(table: Table, rec: any) {
 export async function listKV<T = any>(table: Table): Promise<T[]> {
   const sb = sbServer();
   const { data, error } = await sb.from(table as any).select("*");
+  if (error) {
+    if (isAuthError(error)) {
+      throw new KvUnauthenticatedError();
+    }
+    throw error;
+  }
+  return (data as T[]) ?? [];
+}
+
+export async function getKV<T = any>(table: SoftDeleteTable, id: string): Promise<T | null> {
+  const sb = sbServer();
+  const { data, error } = await sb
+    .from(table as any)
+    .select("*")
+    .eq("id", id)
+    .eq("deleted", false)
+    .maybeSingle();
+  if (error) {
+    if (isAuthError(error)) {
+      throw new KvUnauthenticatedError();
+    }
+    throw error;
+  }
+  return (data as T) ?? null;
+}
+
+export async function getRawKV<T = any>(table: Table, id: string): Promise<T | null> {
+  const sb = sbServer();
+  const { data, error } = await sb
+    .from(table as any)
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    if (isAuthError(error)) {
+      throw new KvUnauthenticatedError();
+    }
+    throw error;
+  }
+  return (data as T) ?? null;
+}
+
+type ListActiveFilter = {
+  column: string;
+  op: "eq" | "gt" | "lt" | "gte" | "lte";
+  value: any;
+};
+
+type ListActiveOptions = {
+  limit?: number;
+  orderBy?: {
+    column: string;
+    ascending?: boolean;
+  };
+};
+
+export async function listActiveKV<T = any>(
+  table: SoftDeleteTable,
+  filters?: ListActiveFilter[],
+  options?: ListActiveOptions,
+): Promise<T[]> {
+  const sb = sbServer();
+  let query = sb.from(table as any).select("*").eq("deleted", false);
+
+  if (filters) {
+    for (const f of filters) {
+      switch (f.op) {
+        case "eq":
+          query = query.eq(f.column, f.value);
+          break;
+        case "gt":
+          query = query.gt(f.column, f.value);
+          break;
+        case "lt":
+          query = query.lt(f.column, f.value);
+          break;
+        case "gte":
+          query = query.gte(f.column, f.value);
+          break;
+        case "lte":
+          query = query.lte(f.column, f.value);
+          break;
+      }
+    }
+  }
+
+  if (options?.orderBy) {
+    query = query.order(options.orderBy.column, {
+      ascending: options.orderBy.ascending ?? true,
+    });
+  }
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+
+  const { data, error } = await query;
   if (error) {
     if (isAuthError(error)) {
       throw new KvUnauthenticatedError();

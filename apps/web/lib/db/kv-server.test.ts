@@ -4,6 +4,9 @@ const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   from: vi.fn(),
   upsert: vi.fn(),
+  select: vi.fn(),
+  eq: vi.fn(),
+  maybeSingle: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -15,7 +18,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { KvUnauthenticatedError, putKV } from "@/lib/db/kv-server";
+import { KvUnauthenticatedError, getKV, getRawKV, putKV } from "@/lib/db/kv-server";
 
 describe("putKV", () => {
   beforeEach(() => {
@@ -28,8 +31,17 @@ describe("putKV", () => {
       error: null,
     });
     mocks.upsert.mockResolvedValue({ error: null });
+    mocks.eq.mockImplementation(() => ({
+      eq: mocks.eq,
+      maybeSingle: mocks.maybeSingle,
+    }));
+    mocks.select.mockImplementation(() => ({
+      eq: mocks.eq,
+      maybeSingle: mocks.maybeSingle,
+    }));
     mocks.from.mockReturnValue({
       upsert: mocks.upsert,
+      select: mocks.select,
     });
   });
 
@@ -67,5 +79,48 @@ describe("putKV", () => {
       }),
     ).rejects.toBeInstanceOf(KvUnauthenticatedError);
     expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("getKV / getRawKV", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.eq.mockImplementation(() => ({
+      eq: mocks.eq,
+      maybeSingle: mocks.maybeSingle,
+    }));
+    mocks.select.mockImplementation(() => ({
+      eq: mocks.eq,
+      maybeSingle: mocks.maybeSingle,
+    }));
+    mocks.from.mockReturnValue({
+      select: mocks.select,
+    });
+  });
+
+  it("getKV は deleted=false 条件付きで取得する", async () => {
+    mocks.maybeSingle.mockResolvedValue({
+      data: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", deleted: false },
+      error: null,
+    });
+
+    const result = await getKV("residents", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+
+    expect(result).toEqual({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", deleted: false });
+    expect(mocks.eq).toHaveBeenNthCalledWith(1, "id", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(mocks.eq).toHaveBeenNthCalledWith(2, "deleted", false);
+  });
+
+  it("getRawKV は deleted 条件なしで取得する", async () => {
+    mocks.maybeSingle.mockResolvedValue({
+      data: { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", deleted: true },
+      error: null,
+    });
+
+    const result = await getRawKV("events", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+
+    expect(result).toEqual({ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", deleted: true });
+    expect(mocks.eq).toHaveBeenCalledTimes(1);
+    expect(mocks.eq).toHaveBeenCalledWith("id", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
   });
 });

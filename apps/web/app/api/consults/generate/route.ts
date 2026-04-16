@@ -3,10 +3,16 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { putKV as putAny, listKV as listAny } from "@/lib/db/kv-server";
+import {
+  putKV as putAny,
+  getKV as getAny,
+  getRawKV as getRawAny,
+  listActiveKV as listActiveAny,
+} from "@/lib/db/kv-server";
 import { KvUnauthenticatedError } from "@/lib/db/kv-server";
 import { newId } from "@/lib/newId";
 import { generateConsultTheme } from "@/lib/gpt/call-gpt-for-consult";
+import { sbServer } from "@/lib/supabase/server";
 import {
   getTrustBand,
   pickCategoryAndSeed,
@@ -50,10 +56,10 @@ export async function POST(req: Request) {
     let triggerPayload: z.infer<typeof relationTriggerEventPayloadSchema> | null = null;
 
     if (triggerId) {
-      const events = (await listAny("events")) as any[] | null;
-      triggerEvent = events?.find(
-        (e) => e.id === triggerId && e.kind === "relation_trigger" && !e.deleted,
-      );
+      triggerEvent = await getRawAny<any>("events", triggerId);
+      if (triggerEvent && (triggerEvent.kind !== "relation_trigger" || triggerEvent.deleted)) {
+        triggerEvent = null;
+      }
       if (triggerEvent) {
         const payloadParsed = relationTriggerEventPayloadSchema.safeParse(triggerEvent.payload ?? {});
         if (!payloadParsed.success) {
@@ -73,12 +79,13 @@ export async function POST(req: Request) {
     }
 
     // プレイヤー名を取得
-    const playerProfiles = (await listAny("player_profiles")) as any[] | null;
-    const playerName: string | undefined = playerProfiles?.find((p) => !p.deleted)?.player_name;
+    const [playerProfiles, resident] = await Promise.all([
+      listActiveAny<any>("player_profiles"),
+      getAny<any>("residents", consultResidentId),
+    ]);
+    const playerName: string | undefined = playerProfiles.find((p) => p.player_name)?.player_name;
 
     // 住人情報を取得
-    const residents = (await listAny("residents")) as any[] | null;
-    const resident = residents?.find((r) => r.id === consultResidentId && !r.deleted);
     if (!resident) {
       return NextResponse.json({ error: "resident_not_found" }, { status: 404 });
     }
@@ -102,8 +109,7 @@ export async function POST(req: Request) {
       // 口調プリセット解決
       let speechSummary: string | null = null;
       if (resident.speechPreset) {
-        const presets = (await listAny("presets")) as any[] | null;
-        const preset = presets?.find((p) => p.id === resident.speechPreset && !p.deleted);
+        const preset = await getAny<any>("presets", resident.speechPreset);
         speechSummary = preset?.label ?? null;
       }
 
@@ -135,25 +141,25 @@ export async function POST(req: Request) {
       // 口調プリセット解決
       let speechSummary: string | null = null;
       if (resident.speechPreset) {
-        const presets = (await listAny("presets")) as any[] | null;
-        const preset = presets?.find((p) => p.id === resident.speechPreset && !p.deleted);
+        const preset = await getAny<any>("presets", resident.speechPreset);
         speechSummary = preset?.label ?? null;
       }
 
       // 直近の会話から要約取得
-      const events = (await listAny("events")) as any[] | null;
-      const recentConvos = (events ?? [])
-        .filter(
-          (e) =>
-            e.kind === "conversation" &&
-            !e.deleted &&
-            Array.isArray(e.payload?.participants) &&
-            e.payload.participants.includes(residentId),
-        )
-        .sort((a, b) => new Date(b.updated_at ?? 0).getTime() - new Date(a.updated_at ?? 0).getTime())
-        .slice(0, 2);
+      const sb = sbServer();
+      const { data: recentConvos, error: recentConvosError } = await sb
+        .from("events")
+        .select("*")
+        .eq("kind", "conversation")
+        .eq("deleted", false)
+        .contains("payload", { participants: [consultResidentId] })
+        .order("updated_at", { ascending: false })
+        .limit(2);
+      if (recentConvosError) {
+        throw recentConvosError;
+      }
 
-      const recentSummaries = recentConvos.map((e) => {
+      const recentSummaries = (recentConvos ?? []).map((e: any) => {
         const lines = Array.isArray(e.payload?.lines) ? e.payload.lines : [];
         const first = lines[0];
         return first?.text ? `${first.speaker ?? "?"}: ${first.text.slice(0, 40)}` : e.payload?.topic ?? "会話があった";

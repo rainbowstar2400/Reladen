@@ -1,9 +1,9 @@
 'use client';
 
-import { Noto_Sans_JP } from 'next/font/google';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { fetchEventById, useMarkNotificationRead, useNotifications } from '@/lib/data/notifications';
 import type { NotificationRecord } from '@repo/shared/types/conversation';
 import type { EventLogStrict } from '@repo/shared/types/conversation';
@@ -15,8 +15,8 @@ import { useFeelings } from '@/lib/data/feelings';
 import { GlassPanel } from '@/components/ui-demo/glass-panel';
 import { PanelHeader } from '@/components/ui-demo/panel-header';
 import { useDeskTransition } from '@/components/room/room-transition-context';
-import { LogDetailPanelContent, type LogDetail } from '@/components/logs/log-detail-panel';
-import { ConsultDetailPanelContent, type ConsultDetail } from '@/components/consults/consult-detail-panel';
+import type { LogDetail } from '@/components/logs/log-detail-panel';
+import type { ConsultDetail } from '@/components/consults/consult-detail-panel';
 import { loadConsultAnswer, saveConsultAnswer } from '@/lib/client/consult-storage';
 import { useSync } from '@/lib/sync/use-sync';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -29,12 +29,21 @@ import {
 } from '@/lib/peek/peek-cache';
 import { usePlayerProfile } from '@/lib/data/player-profile';
 import { useAuth } from '@/lib/auth/use-auth';
+import { fontJp } from '@/styles/fonts';
 
-const notoSans = Noto_Sans_JP({
-  weight: ['300', '400', '500', '600'],
-  subsets: ['latin'],
-  display: 'swap',
-});
+const LogDetailPanelContent = dynamic(
+  () => import('@/components/logs/log-detail-panel').then((m) => m.LogDetailPanelContent),
+  {
+    loading: () => <div className="p-4 text-sm text-muted-foreground">読み込み中…</div>,
+  },
+);
+
+const ConsultDetailPanelContent = dynamic(
+  () => import('@/components/consults/consult-detail-panel').then((m) => m.ConsultDetailPanelContent),
+  {
+    loading: () => <div className="p-4 text-sm text-muted-foreground">読み込み中…</div>,
+  },
+);
 
 const WEATHER_LABELS: Record<WeatherKind, string> = {
   sunny: '晴れ',
@@ -682,7 +691,7 @@ export function HomeContent() {
 
   return (
     <div
-      className={`relative z-10 flex min-h-screen flex-col gap-[clamp(24px,2.5vw,56px)] px-[clamp(32px,7.5vw,144px)] py-[clamp(16px,1.25vw,32px)] pb-[clamp(18px,1.5vw,36px)] ${notoSans.className}`}
+      className={`relative z-10 flex min-h-screen flex-col gap-[clamp(24px,2.5vw,56px)] px-[clamp(32px,7.5vw,144px)] py-[clamp(16px,1.25vw,32px)] pb-[clamp(18px,1.5vw,36px)] ${fontJp.className}`}
     >
       <header className="flex justify-center">
         <GlassPanel

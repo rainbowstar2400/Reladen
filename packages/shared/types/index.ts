@@ -198,6 +198,14 @@ export const syncPayloadSchema = z.object({
     deleted: z.boolean().optional(),
   })),
   since: z.string().datetime().optional(),
+  sinceVersion: z.string().regex(/^\d+$/).nullable().optional(),
+  sinceCursor: z
+    .object({
+      updated_at: z.string().datetime(),
+      id: z.string().uuid(),
+    })
+    .nullable()
+    .optional(),
   pushResult: z.object({
     consumedIndexes: z.array(z.number().int().nonnegative()).default([]),
     rejected: z.array(z.object({
@@ -206,6 +214,14 @@ export const syncPayloadSchema = z.object({
       id: z.string().optional(),
     })).default([]),
   }).optional(),
+  maxSyncVersion: z.string().regex(/^\d+$/).nullable().optional(),
+  maxCursor: z
+    .object({
+      updated_at: z.string().datetime(),
+      id: z.string().uuid(),
+    })
+    .nullable()
+    .optional(),
 });
 
 export type Resident = z.infer<typeof residentSchema>;

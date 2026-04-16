@@ -2,7 +2,6 @@
 
 import { useCallback } from 'react';
 import { CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ResidentForm } from '@/components/forms/resident-form';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { DeskPanel } from '@/components/room/desk-panel';
@@ -10,6 +9,14 @@ import { OfficePanelShell } from '@/components/room/office-panel-shell';
 import { usePlayerProfile, useUpsertPlayerProfile } from '@/lib/data/player-profile';
 import { useResidents } from '@/lib/data/residents';
 import { triggerConversationNow } from '@/lib/scheduler/conversation-scheduler';
+import dynamic from 'next/dynamic';
+
+const ResidentForm = dynamic(
+  () => import('@/components/forms/resident-form').then((m) => m.ResidentForm),
+  {
+    loading: () => <div className="h-96 animate-pulse rounded-md bg-muted/40" />,
+  },
+);
 
 export default function NewResidentPage() {
   const router = useRouter();
